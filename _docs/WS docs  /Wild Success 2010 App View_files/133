@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Wild Success</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="csrf-param" content="authenticity_token" />
+<meta name="csrf-token" content="bd2FDvpIMRVNSpUfdf1J0E8pC1v92tuYibJe7Syk4inTXRrKpclMspJiDMRXMFgmXmwr2ErRF-u0xMO9_fukAA" />
+    
+
+    <link rel="stylesheet" href="/assets/application-d4e9d0ec99adece3a0d2b7d0081b0241e56461cae9930389a440eceff77431e3.css" data-turbo-track="reload" />
+    <script src="/assets/application-a34ea81cfb768584d104cde2056ad6f366c0ea91056fe09c8fb2c66e6d7ad24a.js" data-turbo-track="reload"></script>
+    <script type="importmap" data-turbo-track="reload">{
+  "imports": {
+    "application": "/assets/application-a34ea81cfb768584d104cde2056ad6f366c0ea91056fe09c8fb2c66e6d7ad24a.js",
+    "@hotwired/turbo-rails": "/assets/turbo.min-38d030897e3554a265d3a3b6bdf4fb7509b08197ba2b6e3761683c07e776c1bc.js",
+    "@hotwired/stimulus": "/assets/stimulus.min-dd364f16ec9504dfb72672295637a1c8838773b01c0b441bd41008124c407894.js",
+    "@hotwired/stimulus-loading": "/assets/stimulus-loading-3576ce92b149ad5d6959438c6f291e2426c86df3b874c525b30faad51b0d96b3.js",
+    "sortablejs": "https://ga.jspm.io/npm:sortablejs@1.15.0/modular/sortable.esm.js",
+    "controllers/application": "/assets/controllers/application-368d98631bccbf2349e0d4f8269afb3fe9625118341966de054759d96ea86c7e.js",
+    "controllers/hello_controller": "/assets/controllers/hello_controller-549135e8e7c683a538c3d6d517339ba470fcfb79d62f738a0a089ba41851a554.js",
+    "controllers": "/assets/controllers/index-861d1cf704032e490298e7c316a1660ee685c3cd8f4270b64ed24dff1938cd40.js",
+    "controllers/sortable_controller": "/assets/controllers/sortable_controller-a70ab6b6c9d885f69e89e26f0bc96ab049554d2256662b3573b5573872d63b13.js"
+  }
+}</script>
+<link rel="modulepreload" href="/assets/application-a34ea81cfb768584d104cde2056ad6f366c0ea91056fe09c8fb2c66e6d7ad24a.js">
+<link rel="modulepreload" href="/assets/turbo.min-38d030897e3554a265d3a3b6bdf4fb7509b08197ba2b6e3761683c07e776c1bc.js">
+<link rel="modulepreload" href="/assets/stimulus.min-dd364f16ec9504dfb72672295637a1c8838773b01c0b441bd41008124c407894.js">
+<link rel="modulepreload" href="/assets/stimulus-loading-3576ce92b149ad5d6959438c6f291e2426c86df3b874c525b30faad51b0d96b3.js">
+<link rel="modulepreload" href="https://ga.jspm.io/npm:sortablejs@1.15.0/modular/sortable.esm.js">
+<link rel="modulepreload" href="/assets/controllers/application-368d98631bccbf2349e0d4f8269afb3fe9625118341966de054759d96ea86c7e.js">
+<link rel="modulepreload" href="/assets/controllers/hello_controller-549135e8e7c683a538c3d6d517339ba470fcfb79d62f738a0a089ba41851a554.js">
+<link rel="modulepreload" href="/assets/controllers/index-861d1cf704032e490298e7c316a1660ee685c3cd8f4270b64ed24dff1938cd40.js">
+<link rel="modulepreload" href="/assets/controllers/sortable_controller-a70ab6b6c9d885f69e89e26f0bc96ab049554d2256662b3573b5573872d63b13.js">
+<script type="module">import "application"</script>
+  </head>
+  <body>
+    <img width="400" height="50" src="/assets/plan_wild_success_logo-7a94d9899dbc66c2680f02c1aaf317729c98ec9a4bc745b6ddb1991360e0dafa.png" />
+    <img height="50" src="/assets/beta_testing-c0cbc4eae970c096011b27b83064ae159a6a02e0eca9589fd818dbb7f434663c.png" />
+
+    <div id="user_nav">
+        Signed in as Nathan Otto. Not you?
+        <form class="button_to" method="post" action="/users/sign_out"><input type="hidden" name="_method" value="delete" autocomplete="off" /><button class="link-button" type="submit">Sign out</button><input type="hidden" name="authenticity_token" value="bRD9k78fDcHTCXtiE0p4RN-x5Z_f6NlrvzhMvV7dM1eAdIGL9fK1QD3YK40bew4zjGzxRgjGk5ZEwg933uHeUw" autocomplete="off" /></form>&nbsp;&nbsp;
+        <a href="/home/index">Home &amp; Tutorial</a>&nbsp;&nbsp;
+        <a href="/users/edit.2">Account</a>&nbsp;&nbsp;
+        <a href="mailto:wildsuccessfeedback@nathanotto.com?Subject=Got%20some%20comments%20for%20you">Feedback</a>
+    </div>
+
+    
+
+<p id="notice"></p>
+    <p><a href="/missions">My Missions</a></p>
+    <p>Participating in 6 missions. </p>
+<br><br>
+<iframe width="750" height="515" src="http://www.youtube.com/embed/WqHME_4cJuw" frameborder="2" allowfullscreen></iframe>
+
+
+
+
+
+  </body>
+</html>
