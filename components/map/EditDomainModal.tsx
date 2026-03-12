@@ -25,7 +25,7 @@ export default function EditDomainModal({ domain, activities, values, onSave, on
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
 
-  const domainActivities = activities.filter(a => a.life_domain_id === domain?.id)
+  const domainActivities = activities.filter(a => a.domain_links?.some(l => l.domain_id === domain?.id))
   const servedValueIds = new Set(domainActivities.flatMap(a => a.value_links?.map(l => l.value_id) ?? []))
   const servedValues = values.filter(v => servedValueIds.has(v.id))
 

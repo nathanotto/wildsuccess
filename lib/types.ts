@@ -54,7 +54,6 @@ export interface Activity {
   target_date: string | null
   status: 'active' | 'aspirational' | 'paused' | 'completed'
   is_preventive: boolean
-  life_domain_id: string | null
   big_outcome_id: string | null
   default_duration_minutes: number | null
   preferred_days: string[] | null
@@ -65,7 +64,7 @@ export interface Activity {
   created_at: string
   updated_at: string
   value_links?: ValueLink[]
-  life_domain_name?: string | null
+  domain_links?: DomainLink[]
   big_outcome_name?: string | null
 }
 
@@ -73,6 +72,12 @@ export interface ValueLink {
   id: string
   value_id: string
   contribution_strength: 'weak' | 'moderate' | 'strong'
+}
+
+export interface DomainLink {
+  id: string
+  domain_id: string
+  domain_name?: string | null
 }
 
 export interface ActivityLog {

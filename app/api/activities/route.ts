@@ -11,7 +11,7 @@ export async function GET() {
     .select(`
       *,
       activity_value_links(id, value_id, contribution_strength),
-      life_domains(name),
+      activity_domain_links(id, domain_id, life_domains(name)),
       big_outcomes(name)
     `)
     .order('sort_order')
@@ -20,7 +20,11 @@ export async function GET() {
   const result = activities?.map(a => ({
     ...a,
     value_links: a.activity_value_links,
-    life_domain_name: (a.life_domains as { name: string } | null)?.name ?? null,
+    domain_links: (a.activity_domain_links as Array<{ id: string; domain_id: string; life_domains: { name: string } | null }>)?.map(dl => ({
+      id: dl.id,
+      domain_id: dl.domain_id,
+      domain_name: dl.life_domains?.name ?? null,
+    })) ?? [],
     big_outcome_name: (a.big_outcomes as { name: string } | null)?.name ?? null,
   }))
 
@@ -33,7 +37,11 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { value_links, ...fields } = body
+  const { value_links, domain_links, ...fields } = body
+
+  if (!domain_links?.length) {
+    return NextResponse.json({ error: 'At least one Life Domain is required' }, { status: 400 })
+  }
 
   const { data: activity, error } = await supabase
     .from('activities')
@@ -50,6 +58,12 @@ export async function POST(request: Request) {
       }))
     )
   }
+
+  await supabase.from('activity_domain_links').insert(
+    domain_links.map((dl: { domain_id: string }) => ({
+      user_id: user.id, activity_id: activity.id, domain_id: dl.domain_id,
+    }))
+  )
 
   return NextResponse.json(activity, { status: 201 })
 }

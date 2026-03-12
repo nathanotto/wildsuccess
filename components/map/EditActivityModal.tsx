@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { Activity, UserValue, LifeDomain, BigOutcome, ValueLink } from '@/lib/types'
+import { Activity, UserValue, LifeDomain, BigOutcome, ValueLink, DomainLink } from '@/lib/types'
 
 interface Props {
   activity: Activity | null
@@ -25,7 +25,7 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
   const [targetDate, setTargetDate] = useState(activity?.target_date ?? '')
   const [status, setStatus] = useState(activity?.status ?? 'active')
   const [isPreventive, setIsPreventive] = useState(activity?.is_preventive ?? false)
-  const [lifeDomainId, setLifeDomainId] = useState(activity?.life_domain_id ?? '')
+  const [domainLinks, setDomainLinks] = useState<DomainLink[]>(activity?.domain_links ?? [])
   const [bigOutcomeId, setBigOutcomeId] = useState(activity?.big_outcome_id ?? '')
   const [valueLinks, setValueLinks] = useState<ValueLink[]>(activity?.value_links ?? [])
   const [showMore, setShowMore] = useState(false)
@@ -49,15 +49,24 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
     setValueLinks(prev => prev.map(l => l.value_id === valueId ? { ...l, contribution_strength: strength } : l))
   }
 
+  function toggleDomainLink(domainId: string, domainName: string) {
+    setDomainLinks(prev => {
+      if (prev.some(l => l.domain_id === domainId)) return prev.filter(l => l.domain_id !== domainId)
+      return [...prev, { id: '', domain_id: domainId, domain_name: domainName }]
+    })
+  }
+
   async function handleSave() {
     if (!name.trim()) { setError('Name is required'); return }
+    if (!domainLinks.length) { setError('At least one Life Domain is required'); return }
     setSaving(true)
     await onSave({
       name: name.trim(), description: description || null, activity_type: activityType,
       frequency: activityType === 'recurring' ? frequency : null,
       target_date: activityType === 'one_time' ? targetDate || null : null,
       status, is_preventive: isPreventive,
-      life_domain_id: lifeDomainId || null, big_outcome_id: bigOutcomeId || null,
+      big_outcome_id: bigOutcomeId || null,
+      domain_links: domainLinks.map(l => ({ domain_id: l.domain_id })),
       value_links: valueLinks.map(l => ({ value_id: l.value_id, contribution_strength: l.contribution_strength })),
       default_duration_minutes: defaultDuration ? parseInt(defaultDuration) : null,
       preferred_days: preferredDays ? preferredDays.split(',').map(s => s.trim()).filter(Boolean) : null,
@@ -129,21 +138,33 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-          <div>
-            <label style={labelStyle}>Life Domain</label>
-            <select style={selectStyle} value={lifeDomainId} onChange={e => setLifeDomainId(e.target.value)}>
-              <option value="">None</option>
-              {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Life Domains <span style={{ color: '#C4504A' }}>*</span></label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {domains.map(d => {
+              const linked = domainLinks.some(l => l.domain_id === d.id)
+              return (
+                <button key={d.id} type="button" onClick={() => toggleDomainLink(d.id, d.name)}
+                  style={{
+                    padding: '5px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+                    background: linked ? '#2D2A26' : '#F8F7F4',
+                    color: linked ? '#FFF' : '#2D2A26',
+                    border: `1px solid ${linked ? '#2D2A26' : '#E8E4DC'}`,
+                    fontWeight: linked ? 600 : 400,
+                  }}>
+                  {d.name}
+                </button>
+              )
+            })}
           </div>
-          <div>
-            <label style={labelStyle}>Big Outcome</label>
-            <select style={selectStyle} value={bigOutcomeId} onChange={e => setBigOutcomeId(e.target.value)}>
-              <option value="">None</option>
-              {outcomes.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-          </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Big Outcome</label>
+          <select style={selectStyle} value={bigOutcomeId} onChange={e => setBigOutcomeId(e.target.value)}>
+            <option value="">None</option>
+            {outcomes.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
         </div>
 
         <div style={{ marginBottom: 16 }}>

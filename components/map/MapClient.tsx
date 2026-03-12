@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile } from '@/lib/types'
 import WildSuccessMapSVG from './WildSuccessMapSVG'
+import LifeMapSVG from './LifeMapSVG'
 import NavBar from './NavBar'
 import TakeActionBox from './TakeActionBox'
 import EditValueModal from './EditValueModal'
@@ -36,6 +37,7 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<ModalState>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [mapMode, setMapMode] = useState<'values' | 'life'>('values')
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
@@ -89,25 +91,61 @@ export default function MapClient({ userId, userEmail }: Props) {
         onNewDomain={() => setModal({ type: 'newDomain' })}
       />
 
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '0 16px' }}>
-        <WildSuccessMapSVG
-          values={values}
-          activities={activities}
-          outcomes={outcomes}
-          overdueActivityIds={overdueActivityIds}
-          displayName={displayName}
-          onEditValue={(v) => setModal({ type: 'editValue', value: v })}
-          onEditActivity={(a) => setModal({ type: 'editActivity', activity: a })}
-          onEditOutcome={(o) => setModal({ type: 'editOutcome', outcome: o })}
-          onAddValue={() => setModal({ type: 'newValue' })}
-          onAddActivity={() => setModal({ type: 'newActivity' })}
-          onAddOutcome={() => setModal({ type: 'newOutcome' })}
-        />
+      {/* Map mode toggle */}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 16px 0' }}>
+        <div style={{ display: 'inline-flex', background: '#F0EDE6', borderRadius: 20, padding: 3, gap: 2 }}>
+          {(['values', 'life'] as const).map(mode => (
+            <button key={mode} onClick={() => setMapMode(mode)} style={{
+              padding: '5px 18px', borderRadius: 16, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'inherit', border: 'none',
+              background: mapMode === mode ? '#FFFFFF' : 'transparent',
+              color: mapMode === mode ? '#2D2A26' : '#8A8578',
+              boxShadow: mapMode === mode ? '0 1px 4px rgba(45,42,38,0.10)' : 'none',
+            }}>
+              {mode === 'values' ? 'Values Map' : 'Life Map'}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div style={{ borderTop: '1px solid #F0EDE6' }}>
-        <TakeActionBox values={values} activities={activities} overdueActivityIds={overdueActivityIds} />
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '0 16px' }}>
+        {mapMode === 'values' ? (
+          <WildSuccessMapSVG
+            values={values}
+            activities={activities}
+            outcomes={outcomes}
+            overdueActivityIds={overdueActivityIds}
+            displayName={displayName}
+            onEditValue={(v) => setModal({ type: 'editValue', value: v })}
+            onEditActivity={(a) => setModal({ type: 'editActivity', activity: a })}
+            onEditOutcome={(o) => setModal({ type: 'editOutcome', outcome: o })}
+            onAddValue={() => setModal({ type: 'newValue' })}
+            onAddActivity={() => setModal({ type: 'newActivity' })}
+            onAddOutcome={() => setModal({ type: 'newOutcome' })}
+          />
+        ) : (
+          <LifeMapSVG
+            values={values}
+            domains={domains}
+            activities={activities}
+            outcomes={outcomes}
+            overdueActivityIds={overdueActivityIds}
+            displayName={displayName}
+            onEditDomain={(d) => setModal({ type: 'editDomain', domain: d })}
+            onEditActivity={(a) => setModal({ type: 'editActivity', activity: a })}
+            onEditOutcome={(o) => setModal({ type: 'editOutcome', outcome: o })}
+            onAddActivity={() => setModal({ type: 'newActivity' })}
+            onAddDomain={() => setModal({ type: 'newDomain' })}
+            onAddOutcome={() => setModal({ type: 'newOutcome' })}
+          />
+        )}
       </div>
+
+      {mapMode === 'values' && (
+        <div style={{ borderTop: '1px solid #F0EDE6' }}>
+          <TakeActionBox values={values} activities={activities} overdueActivityIds={overdueActivityIds} />
+        </div>
+      )}
 
       {/* Modals */}
       {modal?.type === 'editValue' && (
