@@ -87,8 +87,8 @@ function computeActivityLayout(
     acts.forEach((a, i) => {
       const offset = (i - (acts.length - 1) / 2) * spread
       positions[a.id] = {
-        x: vPos.x + nx * branchDist + px * offset,
-        y: vPos.y + ny * branchDist + py * offset,
+        x: Math.max(24, Math.min(976, vPos.x + nx * branchDist + px * offset)),
+        y: Math.max(24, Math.min(556, vPos.y + ny * branchDist + py * offset)),
       }
     })
   })
