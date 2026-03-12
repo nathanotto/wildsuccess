@@ -78,12 +78,6 @@ export default function MapClient({ userId, userEmail }: Props) {
 
   return (
     <div style={{ fontFamily: "'Source Sans 3', sans-serif", background: '#FAFAF7', minHeight: '100vh', color: '#2D2A26' }}>
-      {/* min-width guard */}
-      <div style={{ display: 'none' }} className="small-screen-warning">
-        <div style={{ padding: 40, textAlign: 'center', color: '#8A8578', fontSize: 14 }}>
-          Wild Success Map works best on a larger screen.
-        </div>
-      </div>
 
       <NavBar
         displayName={displayName}
@@ -111,9 +105,9 @@ export default function MapClient({ userId, userEmail }: Props) {
         />
       </div>
 
-      <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, #E8E4DC, transparent)', margin: '0 80px' }} />
-
-      <TakeActionBox values={values} activities={activities} overdueActivityIds={overdueActivityIds} />
+      <div style={{ borderTop: '1px solid #F0EDE6' }}>
+        <TakeActionBox values={values} activities={activities} overdueActivityIds={overdueActivityIds} />
+      </div>
 
       {/* Modals */}
       {modal?.type === 'editValue' && (

@@ -17,7 +17,7 @@ interface Props {
 }
 
 const CX = 500
-const CY = 310
+const CY = 255
 
 function valueNodeColor(v: UserValue) {
   if (v.score < v.sufficiency_mark) return { fill: '#D4564E', stroke: '#B8443E', bg: '#D4564E18' }
@@ -39,16 +39,19 @@ function computeValueLayout(values: UserValue[]): Record<string, { x: number; y:
   const protect = values.filter(v => v.value_type === 'preventive')
   const expand = values.filter(v => v.value_type === 'promotional')
   const positions: Record<string, { x: number; y: number }> = {}
-  const radius = 180
+  const innerRadius = 185
+  const outerRadius = 245
 
   protect.forEach((v, i) => {
     const angle = (Math.PI * 0.72) + (protect.length > 1 ? (i / (protect.length - 1)) * (Math.PI * 0.56) : Math.PI * 0.28)
-    positions[v.id] = { x: CX + Math.cos(angle) * radius, y: CY + Math.sin(angle) * radius * 0.85 }
+    const r = i % 2 === 0 ? innerRadius : outerRadius
+    positions[v.id] = { x: CX + Math.cos(angle) * r, y: CY + Math.sin(angle) * r * 0.85 }
   })
 
   expand.forEach((v, i) => {
     const angle = (Math.PI * -0.28) + (expand.length > 1 ? (i / (expand.length - 1)) * (Math.PI * 0.56) : Math.PI * 0.28)
-    positions[v.id] = { x: CX + Math.cos(angle) * radius, y: CY + Math.sin(angle) * radius * 0.85 }
+    const r = i % 2 === 0 ? innerRadius : outerRadius
+    positions[v.id] = { x: CX + Math.cos(angle) * r, y: CY + Math.sin(angle) * r * 0.85 }
   })
 
   return positions
@@ -131,14 +134,14 @@ export default function WildSuccessMapSVG({
   // Big outcomes row layout
   const outcomeBoxW = 155
   const outcomeBoxH = 52
-  const outcomeY = 660
+  const outcomeY = 505
   const totalOutcomeW = outcomes.length * outcomeBoxW + (outcomes.length - 1) * 10
   const outcomeStartX = CX - totalOutcomeW / 2
 
   return (
     <svg
-      viewBox="0 0 1000 760"
-      style={{ width: '100%', maxWidth: 1500, height: 'auto' }}
+      viewBox="0 0 1000 580"
+      style={{ width: '100%', height: 'auto', maxWidth: 'min(1400px, calc((100vh - 160px) * 1.724))' }}
       onClick={() => { setSelectedValue(null); setSelectedActivity(null); setSelectedOutcome(null) }}
     >
       <defs>
@@ -153,8 +156,8 @@ export default function WildSuccessMapSVG({
       </defs>
 
       {/* PROTECT / EXPAND labels */}
-      <text x={CX - 200} y={50} textAnchor="middle" fontSize={10} fontWeight={700} fill="#9E6A46" letterSpacing="2" opacity={0.5}>PROTECT</text>
-      <text x={CX + 200} y={50} textAnchor="middle" fontSize={10} fontWeight={700} fill="#4B82AF" letterSpacing="2" opacity={0.5}>EXPAND</text>
+      <text x={CX - 310} y={38} textAnchor="middle" fontSize={10} fontWeight={700} fill="#9E6A46" letterSpacing="2" opacity={0.5}>PROTECT</text>
+      <text x={CX + 310} y={38} textAnchor="middle" fontSize={10} fontWeight={700} fill="#4B82AF" letterSpacing="2" opacity={0.5}>EXPAND</text>
 
       {/* Lines: center → values */}
       {values.map(v => {
@@ -252,7 +255,7 @@ export default function WildSuccessMapSVG({
         const vp = valueLayout[v.id]
         if (!vp) return null
         const vc = valueNodeColor(v)
-        const r = 22 + (v.score / 10) * 16
+        const r = 26 + (v.score / 10) * 18
         const isSel = selectedValue?.id === v.id
         const isHl = hlValues.includes(v.id)
         const below = v.score < v.sufficiency_mark
@@ -341,7 +344,7 @@ export default function WildSuccessMapSVG({
       {/* BIG OUTCOMES ROW */}
       {outcomes.length > 0 && (
         <>
-          <text x={CX} y={outcomeY - 18} textAnchor="middle" fontSize={10} fontWeight={700} fill="#2D2A26" letterSpacing="2" opacity={0.4}>BIG OUTCOMES</text>
+          <text x={CX} y={outcomeY - 14} textAnchor="middle" fontSize={10} fontWeight={700} fill="#2D2A26" letterSpacing="2" opacity={0.4}>BIG OUTCOMES</text>
           {outcomes.map((o, idx) => {
             const ox = outcomeStartX + idx * (outcomeBoxW + 10)
             const isSel = selectedOutcome?.id === o.id
@@ -379,14 +382,14 @@ export default function WildSuccessMapSVG({
 
       {/* Add buttons */}
       <g onClick={(e) => { e.stopPropagation(); onAddActivity() }} style={{ cursor: 'pointer' }}>
-        <circle cx={980} cy={50} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
-        <text x={980} y={54} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
-        <text x={980} y={73} textAnchor="middle" fontSize={7} fill="#8A8578">activity</text>
+        <circle cx={CX + 310} cy={58} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
+        <text x={CX + 310} y={62} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
+        <text x={CX + 310} y={80} textAnchor="middle" fontSize={7} fill="#8A8578">activity</text>
       </g>
       <g onClick={(e) => { e.stopPropagation(); onAddOutcome() }} style={{ cursor: 'pointer' }}>
-        <circle cx={980} cy={700} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
-        <text x={980} y={704} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
-        <text x={980} y={723} textAnchor="middle" fontSize={7} fill="#8A8578">outcome</text>
+        <circle cx={CX + 310} cy={98} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
+        <text x={CX + 310} y={102} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
+        <text x={CX + 310} y={120} textAnchor="middle" fontSize={7} fill="#8A8578">outcome</text>
       </g>
     </svg>
   )

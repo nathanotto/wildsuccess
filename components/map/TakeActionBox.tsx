@@ -23,7 +23,7 @@ export default function TakeActionBox({ values, activities, overdueActivityIds }
   })
 
   return (
-    <div style={{ padding: '14px 28px 36px', maxWidth: 800, margin: '0 auto' }}>
+    <div style={{ padding: '10px 24px 14px', maxWidth: 1200, margin: '0 auto' }}>
       {suggestions.length > 0 && (
         <div style={{
           border: '1.5px solid #E8E4DC', borderRadius: 16, background: '#FFFFFF',
