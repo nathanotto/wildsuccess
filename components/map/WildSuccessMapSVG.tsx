@@ -138,7 +138,7 @@ export default function WildSuccessMapSVG({
   return (
     <svg
       viewBox="0 0 1000 760"
-      style={{ width: '100%', maxWidth: 1000, height: 'auto' }}
+      style={{ width: '100%', maxWidth: 1500, height: 'auto' }}
       onClick={() => { setSelectedValue(null); setSelectedActivity(null); setSelectedOutcome(null) }}
     >
       <defs>
@@ -379,8 +379,14 @@ export default function WildSuccessMapSVG({
 
       {/* Add buttons */}
       <g onClick={(e) => { e.stopPropagation(); onAddActivity() }} style={{ cursor: 'pointer' }}>
-        <circle cx={980} cy={60} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
-        <text x={980} y={64} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
+        <circle cx={980} cy={50} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
+        <text x={980} y={54} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
+        <text x={980} y={73} textAnchor="middle" fontSize={7} fill="#8A8578">activity</text>
+      </g>
+      <g onClick={(e) => { e.stopPropagation(); onAddOutcome() }} style={{ cursor: 'pointer' }}>
+        <circle cx={980} cy={700} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
+        <text x={980} y={704} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
+        <text x={980} y={723} textAnchor="middle" fontSize={7} fill="#8A8578">outcome</text>
       </g>
     </svg>
   )
