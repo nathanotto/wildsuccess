@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET() {
   const supabase = await createClient()
@@ -7,28 +7,30 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data, error } = await supabase
-    .from('user_profiles')
+    .from('time_template_blocks')
     .select('*')
-    .eq('id', user.id)
-    .single()
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .order('day_of_week')
+    .order('sort_order')
+    .order('start_time')
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data ?? [])
 }
 
-export async function PATCH(request: Request) {
+export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await request.json()
-  const { full_name, preferred_name, display_name, intake_status, intake_progress } = body
-
+  const body = await req.json()
   const { data, error } = await supabase
-    .from('user_profiles')
-    .update({ full_name, preferred_name, display_name, intake_status, intake_progress })
-    .eq('id', user.id)
+    .from('time_template_blocks')
+    .insert({ ...body, user_id: user.id })
     .select()
     .single()
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data, { status: 201 })
 }

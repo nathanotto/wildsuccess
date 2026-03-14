@@ -13,7 +13,7 @@ export async function GET() {
   const [{ data: values }, { data: links }, { data: logs }, { data: activities }] = await Promise.all([
     supabase.from('user_values').select('id'),
     supabase.from('activity_value_links').select('id, value_id, activity_id, contribution_strength'),
-    supabase.from('activity_log').select('activity_id, performed_at').order('performed_at', { ascending: false }),
+    supabase.from('action_log').select('activity_id, event_date').eq('event_type', 'completed').order('event_date', { ascending: false }),
     supabase.from('activities').select('id, activity_type, frequency, status, is_preventive'),
   ])
 
@@ -23,7 +23,7 @@ export async function GET() {
   // Most recent log per activity
   const lastLog: Record<string, Date> = {}
   logs?.forEach(l => {
-    if (!lastLog[l.activity_id]) lastLog[l.activity_id] = new Date(l.performed_at)
+    if (!lastLog[l.activity_id]) lastLog[l.activity_id] = new Date(l.event_date)
   })
 
   const now = new Date()

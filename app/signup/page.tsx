@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function SignupPage() {
+  const [fullName, setFullName] = useState('')
+  const [preferredName, setPreferredName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,10 +18,22 @@ export default function SignupPage() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const { error } = await supabase.auth.signUp({ email, password })
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          preferred_name: preferredName || fullName.split(' ')[0],
+        },
+      },
+    })
     if (error) { setError(error.message); setLoading(false) }
     else router.push('/map')
   }
+
+  const inputStyle = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #E8E4DC', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const }
+  const labelStyle = { fontSize: 12, fontWeight: 600, color: '#2D2A26', display: 'block', marginBottom: 6 }
 
   return (
     <div style={{
@@ -31,17 +45,32 @@ export default function SignupPage() {
         <div style={{ fontSize: 13, color: '#8A8578', marginBottom: 28 }}>Create your account</div>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#2D2A26', display: 'block', marginBottom: 6 }}>Email</label>
+            <label style={labelStyle}>Full Name</label>
+            <input
+              type="text" value={fullName} onChange={e => setFullName(e.target.value)} required
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Preferred Name <span style={{ fontWeight: 400, color: '#8A8578' }}>(optional)</span></label>
+            <input
+              type="text" value={preferredName} onChange={e => setPreferredName(e.target.value)}
+              placeholder={fullName.split(' ')[0] || ''}
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Email</label>
             <input
               type="email" value={email} onChange={e => setEmail(e.target.value)} required
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #E8E4DC', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              style={inputStyle}
             />
           </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#2D2A26', display: 'block', marginBottom: 6 }}>Password</label>
+            <label style={labelStyle}>Password</label>
             <input
               type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #E8E4DC', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+              style={inputStyle}
             />
           </div>
           {error && <div style={{ fontSize: 12, color: '#C4504A', marginBottom: 14 }}>{error}</div>}

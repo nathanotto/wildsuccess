@@ -8,6 +8,8 @@ interface Props {
   displayName: string
   userInitial: string
   overdueCount: number
+  hopperCount: number
+  onOrganize: () => void
   onNewValue: () => void
   onNewActivity: () => void
   onNewOutcome: () => void
@@ -23,7 +25,7 @@ const ACTION_MODES = [
   { name: 'Spending', description: 'Review spending against your Financial Sufficiency threshold and budget commitments.' },
 ]
 
-export default function NavBar({ displayName, userInitial, overdueCount, onNewValue, onNewActivity, onNewOutcome, onNewDomain }: Props) {
+export default function NavBar({ displayName, userInitial, overdueCount, hopperCount, onOrganize, onNewValue, onNewActivity, onNewOutcome, onNewDomain }: Props) {
   const [comingSoon, setComingSoon] = useState<{ name: string; description: string } | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showAISidebar, setShowAISidebar] = useState(false)
@@ -44,14 +46,24 @@ export default function NavBar({ displayName, userInitial, overdueCount, onNewVa
         <div style={{ fontSize: 14, fontWeight: 700, color: '#C4725A', marginRight: 10 }}>Wild Success</div>
         {ACTION_MODES.map(m => (
           <button key={m.name}
-            onClick={() => setComingSoon(m)}
+            onClick={() => m.name === 'Organize' ? onOrganize() : setComingSoon(m)}
             style={{
               padding: '3px 9px', borderRadius: 5, border: '1px solid #F0EDE6',
               fontSize: 10, fontWeight: 600, color: '#2D2A26', cursor: 'pointer', background: 'transparent',
+              position: 'relative',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F8F7F4'; (e.currentTarget as HTMLElement).style.borderColor = '#C4725A40' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.borderColor = '#F0EDE6' }}
-          >{m.name}</button>
+          >
+            {m.name}
+            {m.name === 'Organize' && hopperCount > 0 && (
+              <span style={{
+                position: 'absolute', top: -4, right: -4, minWidth: 14, height: 14, borderRadius: 7,
+                background: '#C4725A', color: 'white', fontSize: 8, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
+              }}>{hopperCount}</span>
+            )}
+          </button>
         ))}
         {overdueCount > 0 && (
           <span style={{ fontSize: 10, color: '#C4504A', fontWeight: 700, marginLeft: 4 }}>{overdueCount} overdue</span>
@@ -60,6 +72,10 @@ export default function NavBar({ displayName, userInitial, overdueCount, onNewVa
         <button onClick={() => setShowAISidebar(true)}
           style={{ fontSize: 10, color: '#8A8578', cursor: 'pointer', marginRight: 6, background: 'none', border: 'none' }}>
           AI Help
+        </button>
+        <button onClick={handleLogout}
+          style={{ fontSize: 10, color: '#8A8578', cursor: 'pointer', marginRight: 6, background: 'none', border: 'none' }}>
+          Log out
         </button>
         <div style={{ position: 'relative' }}>
           <div

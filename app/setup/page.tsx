@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import MapClient from '@/components/map/MapClient'
+import SetupClient from '@/components/setup/SetupClient'
 
-export default async function MapPage() {
+export default async function SetupPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -13,9 +13,10 @@ export default async function MapPage() {
     .eq('id', user.id)
     .single()
 
-  if (!profile || profile.intake_status === 'not_started') {
-    redirect('/setup')
+  // If already past setup, go to map
+  if (profile?.intake_status === 'in_progress' || profile?.intake_status === 'complete') {
+    redirect('/map')
   }
 
-  return <MapClient userId={user.id} userEmail={user.email ?? ''} />
+  return <SetupClient />
 }

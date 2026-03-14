@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile } from '@/lib/types'
+import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile, IntakeQuestion } from '@/lib/types'
 import WildSuccessMapSVG from './WildSuccessMapSVG'
 import LifeMapSVG from './LifeMapSVG'
 import NavBar from './NavBar'
@@ -10,6 +10,10 @@ import EditActivityModal from './EditActivityModal'
 import EditBigOutcomeModal from './EditBigOutcomeModal'
 import EditDomainModal from './EditDomainModal'
 import Toast from './Toast'
+import SeedQuestionsModal from './SeedQuestionsModal'
+import QuickCapture from './QuickCapture'
+import ContextualNudge from './ContextualNudge'
+import OrganizeModal from '@/components/organize/OrganizeModal'
 
 interface Props {
   userId: string
@@ -38,6 +42,14 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [modal, setModal] = useState<ModalState>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [mapMode, setMapMode] = useState<'values' | 'life'>('values')
+  const [organizeOpen, setOrganizeOpen] = useState(false)
+  const [hopperCount, setHopperCount] = useState(0)
+
+  // Intake state
+  const [seedQuestions, setSeedQuestions] = useState<IntakeQuestion[]>([])
+  const [allQuestions, setAllQuestions] = useState<IntakeQuestion[]>([])
+  const [answeredIds, setAnsweredIds] = useState<Set<string>>(new Set())
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false)
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
@@ -45,16 +57,17 @@ export default function MapClient({ userId, userEmail }: Props) {
   }, [])
 
   const fetchAll = useCallback(async () => {
-    const [vRes, dRes, oRes, aRes, pRes, hRes] = await Promise.all([
+    const [vRes, dRes, oRes, aRes, pRes, hRes, hopperRes] = await Promise.all([
       fetch('/api/values'),
       fetch('/api/life-domains'),
       fetch('/api/big-outcomes'),
       fetch('/api/activities'),
       fetch('/api/profile'),
       fetch('/api/map/heat'),
+      fetch('/api/hopper?status=pending'),
     ])
-    const [v, d, o, a, p, h] = await Promise.all([
-      vRes.json(), dRes.json(), oRes.json(), aRes.json(), pRes.json(), hRes.json(),
+    const [v, d, o, a, p, h, hopper] = await Promise.all([
+      vRes.json(), dRes.json(), oRes.json(), aRes.json(), pRes.json(), hRes.json(), hopperRes.json(),
     ])
     if (Array.isArray(v)) setValues(v)
     if (Array.isArray(d)) setDomains(d)
@@ -62,13 +75,80 @@ export default function MapClient({ userId, userEmail }: Props) {
     if (Array.isArray(a)) setActivities(a)
     if (p && !p.error) setProfile(p)
     if (h && h.overdueActivityIds) setOverdueActivityIds(h.overdueActivityIds)
+    if (Array.isArray(hopper)) setHopperCount(hopper.length)
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  const fetchIntake = useCallback(async () => {
+    const [qRes, rRes] = await Promise.all([
+      fetch('/api/intake/questions'),
+      fetch('/api/intake/responses'),
+    ])
+    const [questions, responses] = await Promise.all([qRes.json(), rRes.json()])
 
-  const displayName = profile?.display_name || userEmail.split('@')[0] || 'You'
+    if (Array.isArray(questions)) {
+      setSeedQuestions(questions.filter((q: IntakeQuestion) => q.is_seed_question))
+      setAllQuestions(questions)
+    }
+    if (Array.isArray(responses)) {
+      setAnsweredIds(new Set(responses.map((r: { question_id: string }) => r.question_id)))
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchAll()
+    fetchIntake()
+  }, [fetchAll, fetchIntake])
+
+  // Show welcome modal for in_progress users who haven't seen it yet
+  useEffect(() => {
+    if (!profile || loading) return
+    if (
+      profile.intake_status === 'in_progress' &&
+      !profile.intake_progress?.welcome_shown &&
+      seedQuestions.length > 0
+    ) {
+      setShowWelcomeModal(true)
+    }
+  }, [profile, loading, seedQuestions])
+
+  async function handleWelcomeClose() {
+    setShowWelcomeModal(false)
+    // Mark welcome as shown
+    await fetch('/api/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        intake_progress: {
+          ...(profile?.intake_progress ?? {}),
+          welcome_shown: true,
+        },
+      }),
+    })
+  }
+
+  async function handleAnswer(questionId: string, responseValue: unknown) {
+    const res = await fetch('/api/intake/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question_id: questionId, response: responseValue }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setAnsweredIds(prev => new Set([...prev, questionId]))
+      const count = data.activities?.length ?? 0
+      if (count > 0) {
+        showToast(`Generated ${count} activit${count === 1 ? 'y' : 'ies'}`)
+        await fetchAll()
+      }
+    } else {
+      showToast('Failed to save answer', 'error')
+    }
+  }
+
+  const displayName = profile?.preferred_name || profile?.display_name || userEmail.split('@')[0] || 'You'
   const userInitial = displayName[0].toUpperCase()
+  const anyModalOpen = modal !== null || showWelcomeModal
 
   if (loading) {
     return (
@@ -85,6 +165,8 @@ export default function MapClient({ userId, userEmail }: Props) {
         displayName={displayName}
         userInitial={userInitial}
         overdueCount={overdueActivityIds.length}
+        hopperCount={hopperCount}
+        onOrganize={() => setOrganizeOpen(true)}
         onNewValue={() => setModal({ type: 'newValue' })}
         onNewActivity={() => setModal({ type: 'newActivity' })}
         onNewOutcome={() => setModal({ type: 'newOutcome' })}
@@ -278,6 +360,44 @@ export default function MapClient({ userId, userEmail }: Props) {
           }}
           onDelete={null}
           onClose={() => setModal(null)}
+        />
+      )}
+
+      {/* Welcome / seed questions modal */}
+      {showWelcomeModal && seedQuestions.length > 0 && (
+        <SeedQuestionsModal
+          questions={seedQuestions}
+          answeredIds={answeredIds}
+          onAnswer={handleAnswer}
+          onClose={handleWelcomeClose}
+        />
+      )}
+
+      {/* Quick capture */}
+      {!anyModalOpen && (
+        <QuickCapture
+          onCaptured={() => {}}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Contextual nudge — only when no modals open and not in_progress welcome */}
+      {!anyModalOpen && allQuestions.length > 0 && (
+        <ContextualNudge
+          questions={allQuestions.filter(q => !q.is_seed_question)}
+          answeredIds={answeredIds}
+          onAnswer={async (qId, val) => {
+            await handleAnswer(qId, val)
+          }}
+        />
+      )}
+
+      {organizeOpen && (
+        <OrganizeModal
+          onClose={() => { setOrganizeOpen(false); fetchAll() }}
+          values={values}
+          domains={domains}
+          activities={activities}
         />
       )}
 
