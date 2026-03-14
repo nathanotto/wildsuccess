@@ -137,6 +137,9 @@ export interface TimeBlock {
   label: string
   start_time: string | null
   end_time: string | null
+  duration_minutes: number | null
+  focus_override_minutes: 25 | 50 | 75 | null
+  block_type_id: string | null
   context: string[]
   energy_level: 'A' | 'B' | 'C'
   is_hard: boolean
@@ -229,6 +232,9 @@ export interface HopperItem {
   activity_id: string | null
   status: 'pending' | 'activated' | 'dismissed' | 'ignored' | 'archived'
   proposed_date: string | null
+  priority_score: number
+  priority_tier: 'urgent' | 'normal' | 'suggested'
+  block_type_hint: string | null
   metadata: Record<string, unknown> | null
   created_at: string
   updated_at: string
@@ -318,6 +324,28 @@ export interface TimeTemplateBlock {
   energy_level: 'A' | 'B' | 'C'
   sort_order: number
   is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface BlockType {
+  id: string
+  user_id: string
+  name: string
+  color: string
+  default_duration_minutes: number
+  energy_level: 'A' | 'B' | 'C'
+  icon: string | null
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface FocusSettings {
+  id: string
+  user_id: string
+  default_focus_minutes: 25 | 50 | 75
   created_at: string
   updated_at: string
 }

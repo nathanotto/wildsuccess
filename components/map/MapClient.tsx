@@ -13,7 +13,7 @@ import Toast from './Toast'
 import SeedQuestionsModal from './SeedQuestionsModal'
 import QuickCapture from './QuickCapture'
 import ContextualNudge from './ContextualNudge'
-import OrganizeModal from '@/components/organize/OrganizeModal'
+import OrganizeWeekModal from '@/components/organize/OrganizeWeekModal'
 
 interface Props {
   userId: string
@@ -393,7 +393,7 @@ export default function MapClient({ userId, userEmail }: Props) {
       )}
 
       {organizeOpen && (
-        <OrganizeModal
+        <OrganizeWeekModal
           onClose={() => { setOrganizeOpen(false); fetchAll() }}
           values={values}
           domains={domains}

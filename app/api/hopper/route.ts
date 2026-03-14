@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     .from('hopper_items')
     .select('*, activity:activities(id, name, energy_level, flexibility, context)')
     .eq('user_id', user.id)
+    .order('priority_score', { ascending: false })
     .order('proposed_date', { ascending: true, nullsFirst: false })
     .order('created_at')
 
