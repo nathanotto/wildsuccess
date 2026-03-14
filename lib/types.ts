@@ -235,6 +235,10 @@ export interface HopperItem {
   priority_score: number
   priority_tier: 'urgent' | 'normal' | 'suggested'
   block_type_hint: string | null
+  enrichment_status: 'none' | 'pending' | 'enriched' | 'confirmed' | 'declined'
+  enrichment_data: Record<string, unknown> | null
+  enriched_at: string | null
+  confirmed_at: string | null
   metadata: Record<string, unknown> | null
   created_at: string
   updated_at: string

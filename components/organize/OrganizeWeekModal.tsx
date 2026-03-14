@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { UserValue, LifeDomain, Activity } from '@/lib/types'
+import EnrichmentCard from '@/components/capture/EnrichmentCard'
 
 // ── Design constants ──────────────────────────────────────────────────────────
 const HOUR_HEIGHT = 60
@@ -61,6 +62,8 @@ interface HopperItemLocal {
   duration_min: number
   duration_max: number
   values: string[]
+  enrichment_status?: 'none' | 'pending' | 'enriched' | 'confirmed' | 'declined'
+  enrichment_data?: Record<string, unknown> | null
   meta?: { requestedBy?: string }
 }
 
@@ -145,7 +148,7 @@ const SOURCE_ICONS: Record<string, string> = {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function OrganizeWeekModal({ onClose }: Props) {
+export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   // Core state
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()))
   const [blockTypes, setBlockTypes] = useState<BlockType[]>([])
@@ -185,8 +188,16 @@ export default function OrganizeWeekModal({ onClose }: Props) {
   const [draggingBlock, setDraggingBlock] = useState<{ block: TimeBlockLocal; date: string; isDuplicate: boolean } | null>(null)
   const [duplicateArmed, setDuplicateArmed] = useState<string | null>(null) // block id armed for duplication
 
+  // Hopper item persist-drag (right-click to keep item in hopper after placing)
+  const [hopperDuplicateArmed, setHopperDuplicateArmed] = useState<string | null>(null)
+
   // Capture
   const [captureInput, setCaptureInput] = useState('')
+  const [enrichmentCards, setEnrichmentCards] = useState<Record<string, Record<string, unknown>>>({}) // hopperItemId → enrichment_data
+  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set())
+
+  // Hopper item edit (double-click)
+  const [editingHopperId, setEditingHopperId] = useState<string | null>(null)
 
   // Block type editor state
   const [editingBlockTypes, setEditingBlockTypes] = useState<BlockType[]>([])
@@ -303,25 +314,39 @@ export default function OrganizeWeekModal({ onClose }: Props) {
         metadata?: Record<string, unknown> | null
         priority_tier?: string
         priority_score?: number
+        enrichment_status?: string
+        enrichment_data?: Record<string, unknown> | null
       }> = Array.isArray(hopperData) ? hopperData : []
 
       const hopperItems: HopperItemLocal[] = rawHopper
         .filter(h => h.status === 'pending' && !activatedHopperIds.has(h.id))
-        .map(h => ({
-          id: h.id,
-          name: h.raw_input,
-          source: h.source,
-          energy_level: (h.activity?.energy_level ?? 'B') as 'A' | 'B' | 'C',
-          emotional_weight: (h.activity?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
-          priority_tier: (h.priority_tier ?? 'normal') as 'urgent' | 'normal' | 'suggested',
-          priority_score: h.priority_score ?? 50,
-          block_type_hint: null,
-          duration_min: h.activity?.duration_range_min ?? 20,
-          duration_max: h.activity?.duration_range_max ?? 60,
-          values: [],
-          meta: h.metadata as { requestedBy?: string } | undefined,
-        }))
+        .map(h => {
+          const ed = h.enrichment_data as Record<string, unknown> | null
+          return {
+            id: h.id,
+            name: (ed?.suggested_name as string | null) ?? h.raw_input,
+            source: h.source,
+            energy_level: ((ed?.suggested_energy_level as string | null) ?? h.activity?.energy_level ?? 'B') as 'A' | 'B' | 'C',
+            emotional_weight: ((ed?.suggested_emotional_weight as string | null) ?? h.activity?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
+            priority_tier: (h.priority_tier ?? 'normal') as 'urgent' | 'normal' | 'suggested',
+            priority_score: h.priority_score ?? 50,
+            block_type_hint: null,
+            duration_min: (ed?.suggested_duration_min as number | null) ?? h.activity?.duration_range_min ?? 20,
+            duration_max: (ed?.suggested_duration_max as number | null) ?? h.activity?.duration_range_max ?? 60,
+            values: [],
+            enrichment_status: (h.enrichment_status ?? 'none') as HopperItemLocal['enrichment_status'],
+            enrichment_data: h.enrichment_data ?? null,
+            meta: h.metadata as { requestedBy?: string } | undefined,
+          }
+        })
       setHopper(hopperItems)
+
+      // Restore enrichment cards for items that are enriched but not yet confirmed
+      const cardsFromLoad: Record<string, Record<string, unknown>> = {}
+      rawHopper
+        .filter(h => h.enrichment_status === 'enriched' && h.enrichment_data)
+        .forEach(h => { cardsFromLoad[h.id] = h.enrichment_data! })
+      setEnrichmentCards(cardsFromLoad)
 
       // Map cal events
       const rawCal: Array<{
@@ -502,6 +527,8 @@ export default function OrganizeWeekModal({ onClose }: Props) {
   async function handleDropOnBlock(block: TimeBlockLocal, ds: string) {
     if (!draggingHopperItem) return
     const item = draggingHopperItem
+    const isPersist = hopperDuplicateArmed === item.id
+    setHopperDuplicateArmed(null)
 
     try {
       const res = await fetch('/api/schedule', {
@@ -514,7 +541,8 @@ export default function OrganizeWeekModal({ onClose }: Props) {
           flexibility: 'anytime_today',
           energy_level: item.energy_level,
           emotional_weight: item.emotional_weight,
-          hopper_item_id: item.id,
+          // When persisting, don't link to hopper item so it stays pending
+          hopper_item_id: isPersist ? null : item.id,
         }),
       })
       if (!res.ok) return
@@ -523,10 +551,19 @@ export default function OrganizeWeekModal({ onClose }: Props) {
       const schedItem: ScheduleItemLocal = {
         id: newSI.id,
         name: item.name,
-        hopper_item_id: item.id,
+        hopper_item_id: isPersist ? null : item.id,
         energy_level: item.energy_level,
         emotional_weight: item.emotional_weight,
         status: 'active',
+      }
+
+      const isFirst = block.items.length === 0
+      if (isFirst) {
+        fetch(`/api/time-blocks/${block.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: item.name }),
+        })
       }
 
       setDayBlocks(prev => {
@@ -534,11 +571,15 @@ export default function OrganizeWeekModal({ onClose }: Props) {
         return {
           ...prev,
           [ds]: dayList.map(b =>
-            b.id === block.id ? { ...b, items: [...b.items, schedItem] } : b
+            b.id === block.id
+              ? { ...b, label: isFirst ? item.name : b.label, items: [...b.items, schedItem] }
+              : b
           ),
         }
       })
-      setHopper(prev => prev.filter(h => h.id !== item.id))
+
+      // Only consume hopper item if not in persist mode
+      if (!isPersist) setHopper(prev => prev.filter(h => h.id !== item.id))
     } catch (err) {
       console.error('Drop on block error:', err)
     }
@@ -805,11 +846,91 @@ export default function OrganizeWeekModal({ onClose }: Props) {
         duration_min: 20,
         duration_max: 60,
         values: [],
+        enrichment_status: 'pending',
       }
       setHopper(prev => [...prev, hopperItem])
+
+      // Fire enrichment in background
+      setEnrichingIds(prev => new Set(prev).add(newItem.id))
+      fetch('/api/capture/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hopper_item_id: newItem.id }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data && !data.error) {
+            setEnrichmentCards(prev => ({ ...prev, [newItem.id]: data }))
+            setHopper(prev => prev.map(h =>
+              h.id === newItem.id
+                ? { ...h, enrichment_status: 'enriched', name: data.suggested_name ?? h.name }
+                : h
+            ))
+          } else {
+            setHopper(prev => prev.map(h =>
+              h.id === newItem.id ? { ...h, enrichment_status: 'none' } : h
+            ))
+          }
+        })
+        .catch(() => {
+          setHopper(prev => prev.map(h =>
+            h.id === newItem.id ? { ...h, enrichment_status: 'none' } : h
+          ))
+        })
+        .finally(() => setEnrichingIds(prev => { const s = new Set(prev); s.delete(newItem.id); return s }))
     } catch (err) {
       console.error('Quick capture error:', err)
     }
+  }
+
+  function buildEditEnrichment(item: HopperItemLocal): Record<string, unknown> {
+    if (item.enrichment_data) return item.enrichment_data
+    return {
+      match_type: 'new_template',
+      matched_activity_id: null,
+      matched_activity_name: null,
+      suggested_name: item.name,
+      suggested_description: null,
+      suggested_life_domain_id: null,
+      suggested_life_domain_name: null,
+      suggested_value_links: [],
+      suggested_big_outcome_id: null,
+      suggested_big_outcome_name: null,
+      suggested_energy_level: item.energy_level,
+      suggested_emotional_weight: item.emotional_weight,
+      suggested_context: [],
+      suggested_block_type_id: null,
+      suggested_block_type_name: null,
+      suggested_recurrence: null,
+      suggested_preferred_days: null,
+      suggested_preferred_time: null,
+      suggested_duration_min: item.duration_min || null,
+      suggested_duration_max: item.duration_max || null,
+      suggested_flexibility: 'anytime_this_week',
+      suggested_is_preventive: false,
+      confidence: 0,
+      reasoning: '',
+    }
+  }
+
+  async function handleEnrichmentConfirm(hopperItemId: string, data: Record<string, unknown>) {
+    setEnrichmentCards(prev => { const s = { ...prev }; delete s[hopperItemId]; return s })
+    await fetch('/api/capture/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hopper_item_id: hopperItemId, enrichment_data: data }),
+    })
+    setHopper(prev => prev.map(h => h.id === hopperItemId ? { ...h, enrichment_status: 'confirmed' } : h))
+  }
+
+  async function handleEnrichmentDecline(hopperItemId: string) {
+    setEnrichmentCards(prev => { const s = { ...prev }; delete s[hopperItemId]; return s })
+    await fetch('/api/capture/decline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hopper_item_id: hopperItemId }),
+    })
+    setHopper(prev => prev.map(h => h.id === hopperItemId ? { ...h, enrichment_status: 'declined' } : h))
   }
 
   // ── Start resize ────────────────────────────────────────────────────────────
@@ -1291,8 +1412,20 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                         item={item}
                         onDismiss={() => dismissHopperItem(item.id)}
                         onDragStart={() => setDraggingHopperItem(item)}
-                        onDragEnd={() => setDraggingHopperItem(null)}
+                        onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
+                        onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
+                        onDoubleClick={() => setEditingHopperId(item.id)}
+                        onEnrich={() => {
+                          setEnrichingIds(prev => new Set(prev).add(item.id))
+                          setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'pending' } : h))
+                          fetch('/api/capture/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hopper_item_id: item.id }) })
+                            .then(r => r.ok ? r.json() : null)
+                            .then(data => { if (data && !data.error) { setEnrichmentCards(prev => ({ ...prev, [item.id]: data })); setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'enriched', name: data.suggested_name ?? h.name } : h)) } else { setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'none' } : h)) } })
+                            .catch(() => setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'none' } : h)))
+                            .finally(() => setEnrichingIds(prev => { const s = new Set(prev); s.delete(item.id); return s }))
+                        }}
                         dragging={draggingHopperItem?.id === item.id}
+                        armed={hopperDuplicateArmed === item.id}
                       />
                     ))}
                   </div>
@@ -1312,8 +1445,20 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                         item={item}
                         onDismiss={() => dismissHopperItem(item.id)}
                         onDragStart={() => setDraggingHopperItem(item)}
-                        onDragEnd={() => setDraggingHopperItem(null)}
+                        onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
+                        onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
+                        onDoubleClick={() => setEditingHopperId(item.id)}
+                        onEnrich={() => {
+                          setEnrichingIds(prev => new Set(prev).add(item.id))
+                          setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'pending' } : h))
+                          fetch('/api/capture/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hopper_item_id: item.id }) })
+                            .then(r => r.ok ? r.json() : null)
+                            .then(data => { if (data && !data.error) { setEnrichmentCards(prev => ({ ...prev, [item.id]: data })); setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'enriched', name: data.suggested_name ?? h.name } : h)) } else { setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'none' } : h)) } })
+                            .catch(() => setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'none' } : h)))
+                            .finally(() => setEnrichingIds(prev => { const s = new Set(prev); s.delete(item.id); return s }))
+                        }}
                         dragging={draggingHopperItem?.id === item.id}
+                        armed={hopperDuplicateArmed === item.id}
                       />
                     ))}
                   </div>
@@ -1331,14 +1476,38 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                         item={item}
                         onDismiss={() => dismissHopperItem(item.id)}
                         onDragStart={() => setDraggingHopperItem(item)}
-                        onDragEnd={() => setDraggingHopperItem(null)}
+                        onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
+                        onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
+                        onDoubleClick={() => setEditingHopperId(item.id)}
                         dragging={draggingHopperItem?.id === item.id}
+                        armed={hopperDuplicateArmed === item.id}
                         muted
                       />
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* Enrichment cards */}
+              {Object.keys(enrichmentCards).length > 0 && (
+                <div style={{ padding: '8px 10px', borderTop: '1px solid #E8E4DC', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+                  {Object.entries(enrichmentCards).map(([hopperItemId, data]) => (
+                    <EnrichmentCard
+                      key={hopperItemId}
+                      hopperItemId={hopperItemId}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      enrichmentData={data as any}
+                      domains={(domains ?? []).map(d => ({ id: d.id, name: d.name }))}
+                      values={(values ?? []).map(v => ({ id: v.id, name: v.name }))}
+                      outcomes={[]}
+                      blockTypes={blockTypes.map(bt => ({ id: bt.id, name: bt.name }))}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      onConfirm={(id, ed) => handleEnrichmentConfirm(id, ed as any)}
+                      onDecline={handleEnrichmentDecline}
+                    />
+                  ))}
+                </div>
+              )}
 
               {/* Quick capture */}
               <div style={{ padding: '8px 10px', borderTop: '1px solid #E8E4DC', flexShrink: 0 }}>
@@ -1742,7 +1911,7 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                                   onClick={() => deleteBlock(block.id, ds)}
                                   style={{
                                     width: 12, height: 12, borderRadius: 3, border: 'none', background: 'transparent',
-                                    cursor: 'pointer', fontSize: 9, color: '#D0CBC3', display: 'flex', alignItems: 'center',
+                                    cursor: 'pointer', fontSize: 9, color: '#8A857D', display: 'flex', alignItems: 'center',
                                     justifyContent: 'center', padding: 0, lineHeight: 1, flexShrink: 0,
                                   }}
                                   title="Delete block"
@@ -1781,13 +1950,13 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                                 {item.status !== 'completed' && (
                                   <button
                                     onClick={() => markItemComplete(item, block, ds)}
-                                    style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #D0CBC3', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#D0CBC3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                                    style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #8A857D', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                                     title="Mark complete"
                                   >✓</button>
                                 )}
                                 <button
                                   onClick={() => returnToHopper(item, block, ds)}
-                                  style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #D0CBC3', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#D0CBC3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                                  style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #8A857D', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                                   title="Return to hopper"
                                 >←</button>
                               </div>
@@ -2160,6 +2329,47 @@ export default function OrganizeWeekModal({ onClose }: Props) {
           </div>
         </div>
       )}
+
+      {/* ── Hopper Item Edit Modal ───────────────────────────────────────────── */}
+      {editingHopperId && (() => {
+        const item = hopper.find(h => h.id === editingHopperId)
+        if (!item) return null
+        const enrichData = buildEditEnrichment(item)
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 1002,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(45,42,38,0.30)',
+            }}
+            onClick={e => { if (e.target === e.currentTarget) setEditingHopperId(null) }}
+          >
+            <div style={{ maxWidth: 400, width: '90vw', maxHeight: '90vh', overflowY: 'auto', borderRadius: 12 }}>
+              <EnrichmentCard
+                hopperItemId={item.id}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                enrichmentData={enrichData as any}
+                domains={(domains ?? []).map(d => ({ id: d.id, name: d.name }))}
+                values={(values ?? []).map(v => ({ id: v.id, name: v.name }))}
+                outcomes={[]}
+                blockTypes={blockTypes.map(bt => ({ id: bt.id, name: bt.name }))}
+                defaultExpanded
+                onConfirm={(id, ed) => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  handleEnrichmentConfirm(id, ed as any)
+                  setHopper(prev => prev.map(h => h.id === id ? { ...h, name: (ed as any).suggested_name ?? h.name } : h))
+                  setEditingHopperId(null)
+                }}
+                onDecline={() => setEditingHopperId(null)}
+              />
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -2178,11 +2388,15 @@ interface HopperItemCardProps {
   onDismiss: () => void
   onDragStart: () => void
   onDragEnd: () => void
+  onContextMenu: (e: React.MouseEvent) => void
+  onDoubleClick: () => void
+  onEnrich?: () => void
   dragging: boolean
+  armed?: boolean
   muted?: boolean
 }
 
-function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, dragging, muted }: HopperItemCardProps) {
+function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onEnrich, dragging, armed, muted }: HopperItemCardProps) {
   const borderColor: Record<string, string> = { urgent: '#C4725A40', normal: '#E8E4DC', suggested: '#F0EDE8' }
   const leftBorderColor: Record<string, string> = { urgent: '#C4725A', normal: '#D0CBC3', suggested: '#E8E4DC' }
   const bgColor: Record<string, string> = { urgent: '#FDF8F5', normal: '#FFFFFF', suggested: '#F9F7F4' }
@@ -2192,6 +2406,8 @@ function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, dragging, mut
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onContextMenu={onContextMenu}
+      onDoubleClick={onDoubleClick}
       style={{
         display: 'flex',
         alignItems: 'flex-start',
@@ -2199,14 +2415,21 @@ function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, dragging, mut
         padding: '6px 8px',
         marginBottom: 4,
         borderRadius: 8,
-        border: `1px solid ${borderColor[item.priority_tier]}`,
-        borderLeft: `3px solid ${leftBorderColor[item.priority_tier]}`,
-        background: bgColor[item.priority_tier],
+        border: armed ? '1.5px dashed #4B82AF' : `1px solid ${borderColor[item.priority_tier]}`,
+        borderLeft: armed ? '3px dashed #4B82AF' : `3px solid ${leftBorderColor[item.priority_tier]}`,
+        background: armed ? '#4B82AF08' : bgColor[item.priority_tier],
         cursor: 'grab',
         opacity: dragging ? 0.4 : muted ? 0.7 : 1,
         userSelect: 'none',
+        position: 'relative',
       }}
     >
+      {armed && (
+        <div style={{
+          position: 'absolute', top: 2, right: 2,
+          fontSize: 8, color: '#4B82AF', fontWeight: 700, lineHeight: 1,
+        }}>✦ drag to place</div>
+      )}
       {/* Energy dot */}
       <span style={{
         width: 7,
@@ -2226,11 +2449,23 @@ function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, dragging, mut
           lineHeight: 1.3,
           wordBreak: 'break-word',
         }}>
+          {item.enrichment_status === 'pending' && (
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#C4725A', marginRight: 5, animation: 'ws-pulse 1s infinite', verticalAlign: 'middle' }} />
+          )}
+          {item.enrichment_status === 'enriched' && (
+            <span style={{ fontSize: 8, color: '#BA7517', marginRight: 4 }}>✦</span>
+          )}
           {item.name}
           {item.emotional_weight === 'heavy' && (
             <span style={{ color: '#C4725A', marginLeft: 3, fontSize: 8 }}>◆</span>
           )}
         </div>
+        {item.enrichment_status === 'none' && onEnrich && (
+          <button
+            onClick={e => { e.stopPropagation(); onEnrich() }}
+            style={{ fontSize: 9, color: '#BA7517', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', marginTop: 2 }}
+          >✦ Enrich</button>
+        )}
         <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
           <span style={{
             fontSize: 8,
@@ -2281,4 +2516,12 @@ function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, dragging, mut
       >×</button>
     </div>
   )
+}
+
+// Inject pulse animation globally once
+if (typeof document !== 'undefined' && !document.getElementById('ws-pulse-style')) {
+  const style = document.createElement('style')
+  style.id = 'ws-pulse-style'
+  style.textContent = '@keyframes ws-pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }'
+  document.head.appendChild(style)
 }

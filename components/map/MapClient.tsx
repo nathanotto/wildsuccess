@@ -378,6 +378,10 @@ export default function MapClient({ userId, userEmail }: Props) {
         <QuickCapture
           onCaptured={() => {}}
           showToast={showToast}
+          domains={domains}
+          values={values}
+          outcomes={outcomes}
+          blockTypes={[]}
         />
       )}
 
