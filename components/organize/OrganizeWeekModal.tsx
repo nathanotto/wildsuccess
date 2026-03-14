@@ -4,8 +4,8 @@ import { UserValue, LifeDomain, Activity } from '@/lib/types'
 
 // ── Design constants ──────────────────────────────────────────────────────────
 const HOUR_HEIGHT = 60
-const GRID_START = 6
-const GRID_END = 22
+const GRID_START = 5
+const GRID_END = 21
 const GRID_HOURS = GRID_END - GRID_START
 const GRID_HEIGHT = GRID_HOURS * HOUR_HEIGHT
 
@@ -177,8 +177,13 @@ export default function OrganizeWeekModal({ onClose }: Props) {
     blockId: string
     date: string
     startY: number
+    initialStartMin: number
     initialEndMin: number
   } | null>(null)
+
+  // Block drag (move or duplicate)
+  const [draggingBlock, setDraggingBlock] = useState<{ block: TimeBlockLocal; date: string; isDuplicate: boolean } | null>(null)
+  const [duplicateArmed, setDuplicateArmed] = useState<string | null>(null) // block id armed for duplication
 
   // Capture
   const [captureInput, setCaptureInput] = useState('')
@@ -365,7 +370,7 @@ export default function OrganizeWeekModal({ onClose }: Props) {
       const dy = e.clientY - resizing.startY
       const rawDelta = Math.round((dy / HOUR_HEIGHT) * 60 / 15) * 15
       const newEndMin = Math.max(
-        resizing.initialEndMin + 15,
+        resizing.initialStartMin + 15,
         resizing.initialEndMin + rawDelta
       )
       const clampedEndMin = Math.min(GRID_END * 60, newEndMin)
@@ -390,7 +395,7 @@ export default function OrganizeWeekModal({ onClose }: Props) {
     const onUp = async (e: MouseEvent) => {
       const dy = e.clientY - resizing.startY
       const rawDelta = Math.round((dy / HOUR_HEIGHT) * 60 / 15) * 15
-      const newEndMin = Math.min(GRID_END * 60, Math.max(resizing.initialEndMin + 15, resizing.initialEndMin + rawDelta))
+      const newEndMin = Math.min(GRID_END * 60, Math.max(resizing.initialStartMin + 15, resizing.initialEndMin + rawDelta))
       const endTime = minutesToTime(newEndMin)
 
       // Get current block to compute duration
@@ -636,6 +641,144 @@ export default function OrganizeWeekModal({ onClose }: Props) {
     }
   }
 
+  // Move block to a new day/time, preserving duration and items
+  async function moveBlock(block: TimeBlockLocal, fromDate: string, toDate: string, newStartTime: string) {
+    const newEndTime = minutesToTime(timeToMinutes(newStartTime) + block.duration_minutes)
+    try {
+      await fetch(`/api/time-blocks/${block.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ block_date: toDate, start_time: newStartTime, end_time: newEndTime }),
+      })
+      setDayBlocks(prev => {
+        const fromList = (prev[fromDate] ?? []).filter(b => b.id !== block.id)
+        const moved: TimeBlockLocal = { ...block, block_date: toDate, start_time: newStartTime, end_time: newEndTime }
+        if (fromDate === toDate) {
+          return { ...prev, [fromDate]: [...fromList, moved] }
+        }
+        const toList = [...(prev[toDate] ?? []), moved]
+        return { ...prev, [fromDate]: fromList, [toDate]: toList }
+      })
+    } catch (err) {
+      console.error('Move block error:', err)
+    }
+  }
+
+  // Duplicate block (and its items) to a new day/time; original stays
+  async function duplicateBlock(block: TimeBlockLocal, toDate: string, newStartTime: string) {
+    const newEndTime = minutesToTime(timeToMinutes(newStartTime) + block.duration_minutes)
+    try {
+      const res = await fetch('/api/time-blocks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          block_date: toDate,
+          label: block.label,
+          start_time: newStartTime,
+          end_time: newEndTime,
+          duration_minutes: block.duration_minutes,
+          block_type_id: block.block_type_id,
+          is_hard: false,
+          sort_order: 0,
+          source: 'manual',
+          energy_level: block.block_type?.energy_level ?? 'B',
+        }),
+      })
+      if (!res.ok) return
+      const newBlock = await res.json()
+
+      // Duplicate each schedule item onto the new block (new IDs, no hopper link)
+      const newItems: ScheduleItemLocal[] = []
+      await Promise.all(block.items.map(async item => {
+        const siRes = await fetch('/api/schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: item.name,
+            scheduled_date: toDate,
+            time_block_id: newBlock.id,
+            flexibility: 'anytime_today',
+            energy_level: item.energy_level,
+            emotional_weight: item.emotional_weight,
+          }),
+        })
+        if (siRes.ok) {
+          const si = await siRes.json()
+          newItems.push({
+            id: si.id,
+            name: item.name,
+            hopper_item_id: null,
+            energy_level: item.energy_level,
+            emotional_weight: item.emotional_weight,
+            status: 'active',
+          })
+        }
+      }))
+
+      setDayBlocks(prev => ({
+        ...prev,
+        [toDate]: [...(prev[toDate] ?? []), {
+          id: newBlock.id,
+          block_date: toDate,
+          label: block.label,
+          start_time: newStartTime,
+          end_time: newEndTime,
+          duration_minutes: block.duration_minutes,
+          is_hard: false,
+          block_type_id: block.block_type_id,
+          block_type: block.block_type,
+          source: 'manual',
+          items: newItems,
+        }],
+      }))
+    } catch (err) {
+      console.error('Duplicate block error:', err)
+    }
+  }
+
+  // Delete block and return all its items to the hopper
+  async function deleteBlockWithItems(block: TimeBlockLocal, ds: string) {
+    try {
+      // Return each item to hopper first
+      await Promise.all(block.items.map(async item => {
+        await fetch(`/api/schedule/${item.id}`, { method: 'DELETE' })
+        if (item.hopper_item_id) {
+          await fetch(`/api/hopper/${item.hopper_item_id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'pending' }),
+          })
+        }
+      }))
+      await fetch(`/api/time-blocks/${block.id}`, { method: 'DELETE' })
+
+      setDayBlocks(prev => ({
+        ...prev,
+        [ds]: (prev[ds] ?? []).filter(b => b.id !== block.id),
+      }))
+
+      // Restore items in hopper state
+      const returning: HopperItemLocal[] = block.items
+        .filter(item => item.hopper_item_id)
+        .map(item => ({
+          id: item.hopper_item_id!,
+          name: item.name,
+          source: 'quick_capture' as const,
+          energy_level: item.energy_level,
+          emotional_weight: item.emotional_weight,
+          priority_tier: 'normal' as const,
+          priority_score: 50,
+          block_type_hint: null,
+          duration_min: 20,
+          duration_max: 60,
+          values: [],
+        }))
+      if (returning.length > 0) setHopper(prev => [...returning, ...prev])
+    } catch (err) {
+      console.error('Delete block with items error:', err)
+    }
+  }
+
   // ── Quick capture ───────────────────────────────────────────────────────────
   async function handleQuickCapture(e: React.FormEvent) {
     e.preventDefault()
@@ -677,6 +820,7 @@ export default function OrganizeWeekModal({ onClose }: Props) {
       blockId: block.id,
       date: ds,
       startY: e.clientY,
+      initialStartMin: timeToMinutes(block.start_time),
       initialEndMin: timeToMinutes(block.end_time),
     })
   }
@@ -1060,17 +1204,36 @@ export default function OrganizeWeekModal({ onClose }: Props) {
               )}
             </div>
           ) : (
-            <div style={{
-              width: 300,
-              borderRight: '1px solid #E8E4DC',
-              background: '#F7F5F0',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              flexShrink: 0,
-            }}>
+            <div
+              style={{
+                width: 300,
+                borderRight: '1px solid #E8E4DC',
+                background: draggingBlock ? '#FFF4EE' : '#F7F5F0',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                flexShrink: 0,
+                transition: 'background 0.15s',
+                outline: draggingBlock ? '2px dashed #C4725A50' : 'none',
+                outlineOffset: -2,
+              }}
+              onDragOver={draggingBlock ? e => e.preventDefault() : undefined}
+              onDrop={draggingBlock ? e => {
+                e.preventDefault()
+                const { block, date, isDuplicate } = draggingBlock
+                setDraggingBlock(null)
+                if (!isDuplicate) deleteBlockWithItems(block, date)
+                // duplicate dropped on hopper = cancel, original untouched
+              } : undefined}
+            >
               {/* Hopper header */}
               <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid #E8E4DC', flexShrink: 0 }}>
+                {draggingBlock && (
+                  <div style={{ marginBottom: 8, padding: '6px 8px', borderRadius: 6, background: '#C4725A15', border: '1px dashed #C4725A60', fontSize: 11, color: '#C4725A', textAlign: 'center' }}>
+                    Drop here to delete block
+                    {draggingBlock.block.items.length > 0 && ` · ${draggingBlock.block.items.length} item${draggingBlock.block.items.length > 1 ? 's' : ''} return to hopper`}
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{ fontWeight: 600, fontSize: 13, color: '#2D2A26' }}>Hopper</span>
                   <span style={{ fontSize: 11, background: '#E8E4DC', borderRadius: 10, padding: '1px 7px', color: '#5A5650', fontWeight: 600 }}>
@@ -1254,6 +1417,7 @@ export default function OrganizeWeekModal({ onClose }: Props) {
             <div
               ref={gridScrollRef}
               style={{ flex: 1, overflowY: 'auto', position: 'relative' }}
+              onClick={() => { if (duplicateArmed) setDuplicateArmed(null) }}
             >
               <div style={{ display: 'flex', height: GRID_HEIGHT, position: 'relative' }}>
 
@@ -1292,13 +1456,18 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                     return evDate === ds && !ev.is_all_day
                   })
 
-                  const showPlaceholder = draggingBlockTypeId && dragOverCol === ds && dragOverTime
-                  const placeholderBt = showPlaceholder
+                  const showPlaceholder = (draggingBlockTypeId || draggingBlock) && dragOverCol === ds && dragOverTime
+                  const placeholderBt = draggingBlockTypeId
                     ? blockTypes.find(bt => bt.id === draggingBlockTypeId)
                     : null
-                  const placeholderDuration = placeholderBt
-                    ? (placeholderBt.name === 'Focus' ? focusMinutes : placeholderBt.default_duration_minutes)
-                    : 60
+                  const placeholderColor = draggingBlock
+                    ? (draggingBlock.block.block_type?.color ?? '#4B82AF')
+                    : (placeholderBt?.color ?? '#4B82AF')
+                  const placeholderDuration = draggingBlock
+                    ? draggingBlock.block.duration_minutes
+                    : (placeholderBt
+                        ? (placeholderBt.name === 'Focus' ? focusMinutes : placeholderBt.default_duration_minutes)
+                        : 60)
 
                   return (
                     <div
@@ -1311,11 +1480,9 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                       }}
                       onDragOver={e => {
                         e.preventDefault()
-                        if (draggingBlockTypeId) {
+                        if (draggingBlockTypeId || draggingBlock) {
                           setDragOverCol(ds)
                           setDragOverTime(getTimeFromClientY(e.clientY))
-                        } else if (draggingHopperItem) {
-                          // handled at block level
                         }
                       }}
                       onDragLeave={() => {
@@ -1328,6 +1495,17 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                         e.preventDefault()
                         if (draggingBlockTypeId) {
                           handleDropOnColumn(ds, e.clientY)
+                        } else if (draggingBlock) {
+                          const snapTime = getTimeFromClientY(e.clientY)
+                          const { block, date: fromDate, isDuplicate } = draggingBlock
+                          setDraggingBlock(null)
+                          setDragOverCol(null)
+                          setDragOverTime(null)
+                          if (isDuplicate) {
+                            duplicateBlock(block, ds, snapTime)
+                          } else {
+                            moveBlock(block, fromDate, ds, snapTime)
+                          }
                         }
                       }}
                     >
@@ -1491,6 +1669,15 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                         return (
                           <div
                             key={block.id}
+                            draggable={!block.is_hard}
+                            onContextMenu={!block.is_hard ? e => { e.preventDefault(); setDuplicateArmed(prev => prev === block.id ? null : block.id) } : undefined}
+                            onDragStart={!block.is_hard ? e => {
+                              e.stopPropagation()
+                              const isDuplicate = duplicateArmed === block.id
+                              setDraggingBlock({ block, date: ds, isDuplicate })
+                              setDuplicateArmed(null)
+                            } : undefined}
+                            onDragEnd={() => { setDraggingBlock(null); setDuplicateArmed(null) }}
                             style={{
                               position: 'absolute',
                               top: blockTopPx(block.start_time),
@@ -1504,11 +1691,37 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                               border: `1.5px solid ${isOver ? blockColor : blockColor + '40'}`,
                               overflow: 'hidden',
                               zIndex: 1,
+                              opacity: (draggingBlock?.block.id === block.id && !draggingBlock.isDuplicate) ? 0.4 : 1,
+                              cursor: block.is_hard ? 'default' : 'grab',
+                              outline: duplicateArmed === block.id ? `2px dashed ${blockColor}` : 'none',
+                              outlineOffset: 2,
                             }}
-                            onDragOver={!block.is_hard ? e => { e.preventDefault(); setDragOverBlockId(block.id) } : undefined}
+                            onDragOver={!block.is_hard ? e => {
+                              e.preventDefault()
+                              if (draggingHopperItem) setDragOverBlockId(block.id)
+                            } : undefined}
                             onDragLeave={() => { if (dragOverBlockId === block.id) setDragOverBlockId(null) }}
-                            onDrop={!block.is_hard ? e => { e.preventDefault(); e.stopPropagation(); handleDropOnBlock(block, ds) } : undefined}
+                            onDrop={!block.is_hard ? e => {
+                              e.preventDefault()
+                              if (draggingHopperItem) {
+                                e.stopPropagation()
+                                handleDropOnBlock(block, ds)
+                              }
+                              // draggingBlock drops bubble up to the column
+                            } : undefined}
                           >
+                            {/* Duplicate-armed indicator */}
+                            {duplicateArmed === block.id && (
+                              <div style={{
+                                position: 'absolute', inset: 0, borderRadius: 8, zIndex: 2,
+                                background: blockColor + '10',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                pointerEvents: 'none',
+                              }}>
+                                <span style={{ fontSize: 10, color: blockColor, fontWeight: 700 }}>✦ Drag to duplicate</span>
+                              </div>
+                            )}
+
                             {/* Block header */}
                             <div style={{
                               display: 'flex',
@@ -1629,8 +1842,8 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                         )
                       })}
 
-                      {/* Drag-over placeholder from palette */}
-                      {showPlaceholder && dragOverTime && placeholderBt && (
+                      {/* Drag-over placeholder from palette or block move */}
+                      {showPlaceholder && dragOverTime && (
                         <div
                           style={{
                             position: 'absolute',
@@ -1639,8 +1852,8 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                             left: 2,
                             right: 2,
                             borderRadius: 8,
-                            background: placeholderBt.color + '20',
-                            border: `2px dashed ${placeholderBt.color}60`,
+                            background: placeholderColor + '20',
+                            border: `2px dashed ${placeholderColor}60`,
                             zIndex: 10,
                             pointerEvents: 'none',
                             display: 'flex',
@@ -1648,8 +1861,11 @@ export default function OrganizeWeekModal({ onClose }: Props) {
                             justifyContent: 'center',
                           }}
                         >
-                          <span style={{ fontSize: 9, color: placeholderBt.color, fontWeight: 600 }}>
-                            {placeholderBt.icon} {placeholderBt.name} {formatTime12(dragOverTime)}
+                          <span style={{ fontSize: 9, color: placeholderColor, fontWeight: 600 }}>
+                            {draggingBlock
+                              ? `${draggingBlock.block.block_type?.icon ?? ''} ${draggingBlock.block.label} ${formatTime12(dragOverTime)}`
+                              : `${placeholderBt?.icon ?? ''} ${placeholderBt?.name ?? ''} ${formatTime12(dragOverTime)}`
+                            }
                           </span>
                         </div>
                       )}
