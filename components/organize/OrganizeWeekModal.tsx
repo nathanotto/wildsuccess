@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
 import { UserValue, LifeDomain, Activity } from '@/lib/types'
 import EnrichmentCard from '@/components/capture/EnrichmentCard'
 
@@ -204,6 +204,10 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
   // Refs
   const gridScrollRef = useRef<HTMLDivElement>(null)
+  const dragRafRef = useRef<number | null>(null)     // RAF handle for throttled drag-over
+  const gridRectRef = useRef<DOMRect | null>(null)   // cached bounding rect during drag
+  const dayBlocksRef = useRef(dayBlocks)             // stable ref for resize effect
+  dayBlocksRef.current = dayBlocks                   // keep in sync without triggering effects
 
   // ── Data loading ────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -423,8 +427,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       const newEndMin = Math.min(GRID_END * 60, Math.max(resizing.initialStartMin + 15, resizing.initialEndMin + rawDelta))
       const endTime = minutesToTime(newEndMin)
 
-      // Get current block to compute duration
-      const allBlocks = Object.values(dayBlocks).flat()
+      // Get current block to compute duration (use ref to avoid effect re-subscription)
+      const allBlocks = Object.values(dayBlocksRef.current).flat()
       const block = allBlocks.find(b => b.id === resizing.blockId)
       if (block) {
         const startMin = timeToMinutes(block.start_time)
@@ -443,13 +447,14 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
-  }, [resizing, dayBlocks])
+  }, [resizing])
 
   // ── Time grid helpers ───────────────────────────────────────────────────────
   function getTimeFromClientY(clientY: number): string {
     const container = gridScrollRef.current
     if (!container) return '08:00'
-    const rect = container.getBoundingClientRect()
+    // Use cached rect during drag; re-read only if not cached
+    const rect = gridRectRef.current ?? container.getBoundingClientRect()
     const y = Math.max(0, clientY - rect.top + container.scrollTop)
     const rawMinutes = GRID_START * 60 + (y / HOUR_HEIGHT) * 60
     const snapped = Math.round(rawMinutes / 30) * 30
@@ -521,6 +526,97 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     setDragOverCol(null)
     setDragOverTime(null)
     setDraggingBlockTypeId(null)
+  }
+
+  // ── Hopper drop directly on column (creates new block) ─────────────────────
+  async function handleDropHopperOnColumn(ds: string, clientY: number) {
+    if (!draggingHopperItem) return
+    const item = draggingHopperItem
+    const isPersist = hopperDuplicateArmed === item.id
+    setHopperDuplicateArmed(null)
+
+    const snapTime = getTimeFromClientY(clientY)
+    const duration = item.duration_min > 0 ? item.duration_min : 60
+    const endTime = minutesToTime(timeToMinutes(snapTime) + duration)
+
+    // Find matching block type from hint
+    const hintBt = item.block_type_hint
+      ? blockTypes.find(bt => bt.name.toLowerCase() === item.block_type_hint!.toLowerCase())
+      : null
+
+    try {
+      const blockRes = await fetch('/api/time-blocks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          block_date: ds,
+          label: item.name,
+          start_time: snapTime,
+          end_time: endTime,
+          duration_minutes: duration,
+          block_type_id: hintBt?.id ?? null,
+          is_hard: false,
+          sort_order: 0,
+          source: 'manual',
+          energy_level: item.energy_level,
+        }),
+      })
+      if (!blockRes.ok) return
+      const newBlock = await blockRes.json()
+
+      const siRes = await fetch('/api/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: item.name,
+          scheduled_date: ds,
+          time_block_id: newBlock.id,
+          flexibility: 'anytime_today',
+          energy_level: item.energy_level,
+          emotional_weight: item.emotional_weight,
+          hopper_item_id: isPersist ? null : item.id,
+        }),
+      })
+      if (!siRes.ok) return
+      const newSI = await siRes.json()
+
+      const schedItem: ScheduleItemLocal = {
+        id: newSI.id,
+        name: item.name,
+        hopper_item_id: isPersist ? null : item.id,
+        energy_level: item.energy_level,
+        emotional_weight: item.emotional_weight,
+        status: 'active',
+      }
+
+      setDayBlocks(prev => {
+        const existing = prev[ds] ?? []
+        return {
+          ...prev,
+          [ds]: [...existing, {
+            id: newBlock.id,
+            block_date: ds,
+            label: item.name,
+            start_time: snapTime,
+            end_time: endTime,
+            duration_minutes: duration,
+            is_hard: false,
+            block_type_id: hintBt?.id ?? null,
+            block_type: hintBt ?? undefined,
+            source: 'manual',
+            items: [schedItem],
+          }],
+        }
+      })
+
+      if (!isPersist) setHopper(prev => prev.filter(h => h.id !== item.id))
+    } catch (err) {
+      console.error('Hopper drop on column error:', err)
+    }
+
+    setDraggingHopperItem(null)
+    setDragOverCol(null)
+    setDragOverTime(null)
   }
 
   // ── Hopper drop on block ────────────────────────────────────────────────────
@@ -933,6 +1029,23 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     setHopper(prev => prev.map(h => h.id === hopperItemId ? { ...h, enrichment_status: 'declined' } : h))
   }
 
+  const handleEnrichItem = useCallback((itemId: string) => {
+    setEnrichingIds(prev => new Set(prev).add(itemId))
+    setHopper(prev => prev.map(h => h.id === itemId ? { ...h, enrichment_status: 'pending' } : h))
+    fetch('/api/capture/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hopper_item_id: itemId }) })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && !data.error) {
+          setEnrichmentCards(prev => ({ ...prev, [itemId]: data }))
+          setHopper(prev => prev.map(h => h.id === itemId ? { ...h, enrichment_status: 'enriched', name: data.suggested_name ?? h.name } : h))
+        } else {
+          setHopper(prev => prev.map(h => h.id === itemId ? { ...h, enrichment_status: 'none' } : h))
+        }
+      })
+      .catch(() => setHopper(prev => prev.map(h => h.id === itemId ? { ...h, enrichment_status: 'none' } : h)))
+      .finally(() => setEnrichingIds(prev => { const s = new Set(prev); s.delete(itemId); return s }))
+  }, [])
+
   // ── Start resize ────────────────────────────────────────────────────────────
   function startResize(e: React.MouseEvent, block: TimeBlockLocal, ds: string) {
     e.preventDefault()
@@ -1026,10 +1139,13 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   }
 
   // ── Derived data ────────────────────────────────────────────────────────────
-  const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const weekDates = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
+    [weekStart]
+  )
   const today = todayStr()
 
-  const weekLabel = (() => {
+  const weekLabel = useMemo(() => {
     const start = weekStart
     const end = addDays(weekStart, 6)
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -1037,41 +1153,53 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       return `${months[start.getMonth()]} ${start.getDate()}–${end.getDate()}, ${start.getFullYear()}`
     }
     return `${months[start.getMonth()]} ${start.getDate()} – ${months[end.getMonth()]} ${end.getDate()}, ${start.getFullYear()}`
-  })()
+  }, [weekStart])
 
-  const allScheduledItems = Object.values(dayBlocks).flat().flatMap(b => b.items)
-  const completedItems = allScheduledItems.filter(i => i.status === 'completed')
-  const energyCounts = { A: 0, B: 0, C: 0 }
-  allScheduledItems.forEach(i => { energyCounts[i.energy_level]++ })
+  const allScheduledItems = useMemo(
+    () => Object.values(dayBlocks).flat().flatMap(b => b.items),
+    [dayBlocks]
+  )
+  const completedItems = useMemo(
+    () => allScheduledItems.filter(i => i.status === 'completed'),
+    [allScheduledItems]
+  )
+  const energyCounts = useMemo(() => {
+    const counts = { A: 0, B: 0, C: 0 }
+    allScheduledItems.forEach(i => { counts[i.energy_level]++ })
+    return counts
+  }, [allScheduledItems])
 
-  const dayItemCounts = weekDates.map(d => {
+  const dayItemCounts = useMemo(() => weekDates.map(d => {
     const ds = dateStr(d)
     const blocks = dayBlocks[ds] ?? []
     return blocks.reduce((s, b) => s + b.items.filter(i => i.status !== 'completed').length, 0)
-  })
-  const maxDayCount = Math.max(1, ...dayItemCounts)
+  }), [weekDates, dayBlocks])
+  const maxDayCount = useMemo(() => Math.max(1, ...dayItemCounts), [dayItemCounts])
 
-  const filteredHopper = hopper.filter(item => {
+  const filteredHopper = useMemo(() => hopper.filter(item => {
     if (hopperFilter === 'all') return true
     return item.energy_level === hopperFilter
-  })
+  }), [hopper, hopperFilter])
 
-  const urgentHopper = filteredHopper.filter(i => i.priority_tier === 'urgent')
-  const normalHopper = filteredHopper.filter(i => i.priority_tier === 'normal')
-  const suggestedHopper = filteredHopper.filter(i => i.priority_tier === 'suggested')
+  const urgentHopper = useMemo(() => filteredHopper.filter(i => i.priority_tier === 'urgent'), [filteredHopper])
+  const normalHopper = useMemo(() => filteredHopper.filter(i => i.priority_tier === 'normal'), [filteredHopper])
+  const suggestedHopper = useMemo(() => filteredHopper.filter(i => i.priority_tier === 'suggested'), [filteredHopper])
 
   // Completed items by day for Done tab
-  const completedByDay: Record<string, Array<{ item: ScheduleItemLocal; blockLabel: string }>> = {}
-  weekDates.forEach(d => {
-    const ds = dateStr(d)
-    const blocks = dayBlocks[ds] ?? []
-    blocks.forEach(block => {
-      block.items.filter(i => i.status === 'completed').forEach(item => {
-        if (!completedByDay[ds]) completedByDay[ds] = []
-        completedByDay[ds].push({ item, blockLabel: block.label })
+  const completedByDay = useMemo(() => {
+    const byDay: Record<string, Array<{ item: ScheduleItemLocal; blockLabel: string }>> = {}
+    weekDates.forEach(d => {
+      const ds = dateStr(d)
+      const blocks = dayBlocks[ds] ?? []
+      blocks.forEach(block => {
+        block.items.filter(i => i.status === 'completed').forEach(item => {
+          if (!byDay[ds]) byDay[ds] = []
+          byDay[ds].push({ item, blockLabel: block.label })
+        })
       })
     })
-  })
+    return byDay
+  }, [weekDates, dayBlocks])
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -1415,15 +1543,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
                         onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
                         onDoubleClick={() => setEditingHopperId(item.id)}
-                        onEnrich={() => {
-                          setEnrichingIds(prev => new Set(prev).add(item.id))
-                          setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'pending' } : h))
-                          fetch('/api/capture/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hopper_item_id: item.id }) })
-                            .then(r => r.ok ? r.json() : null)
-                            .then(data => { if (data && !data.error) { setEnrichmentCards(prev => ({ ...prev, [item.id]: data })); setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'enriched', name: data.suggested_name ?? h.name } : h)) } else { setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'none' } : h)) } })
-                            .catch(() => setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'none' } : h)))
-                            .finally(() => setEnrichingIds(prev => { const s = new Set(prev); s.delete(item.id); return s }))
-                        }}
+                        onEnrich={() => handleEnrichItem(item.id)}
                         dragging={draggingHopperItem?.id === item.id}
                         armed={hopperDuplicateArmed === item.id}
                       />
@@ -1448,15 +1568,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
                         onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
                         onDoubleClick={() => setEditingHopperId(item.id)}
-                        onEnrich={() => {
-                          setEnrichingIds(prev => new Set(prev).add(item.id))
-                          setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'pending' } : h))
-                          fetch('/api/capture/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hopper_item_id: item.id }) })
-                            .then(r => r.ok ? r.json() : null)
-                            .then(data => { if (data && !data.error) { setEnrichmentCards(prev => ({ ...prev, [item.id]: data })); setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'enriched', name: data.suggested_name ?? h.name } : h)) } else { setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'none' } : h)) } })
-                            .catch(() => setHopper(prev => prev.map(h => h.id === item.id ? { ...h, enrichment_status: 'none' } : h)))
-                            .finally(() => setEnrichingIds(prev => { const s = new Set(prev); s.delete(item.id); return s }))
-                        }}
+                        onEnrich={() => handleEnrichItem(item.id)}
                         dragging={draggingHopperItem?.id === item.id}
                         armed={hopperDuplicateArmed === item.id}
                       />
@@ -1625,18 +1737,22 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                     return evDate === ds && !ev.is_all_day
                   })
 
-                  const showPlaceholder = (draggingBlockTypeId || draggingBlock) && dragOverCol === ds && dragOverTime
+                  const showPlaceholder = (draggingBlockTypeId || draggingBlock || draggingHopperItem) && dragOverCol === ds && dragOverTime
                   const placeholderBt = draggingBlockTypeId
                     ? blockTypes.find(bt => bt.id === draggingBlockTypeId)
                     : null
                   const placeholderColor = draggingBlock
                     ? (draggingBlock.block.block_type?.color ?? '#4B82AF')
-                    : (placeholderBt?.color ?? '#4B82AF')
+                    : draggingHopperItem
+                      ? ({ A: '#C4725A', B: '#4B82AF', C: '#7A9E82' }[draggingHopperItem.energy_level] ?? '#4B82AF')
+                      : (placeholderBt?.color ?? '#4B82AF')
                   const placeholderDuration = draggingBlock
                     ? draggingBlock.block.duration_minutes
-                    : (placeholderBt
-                        ? (placeholderBt.name === 'Focus' ? focusMinutes : placeholderBt.default_duration_minutes)
-                        : 60)
+                    : draggingHopperItem
+                      ? (draggingHopperItem.duration_min > 0 ? draggingHopperItem.duration_min : 60)
+                      : (placeholderBt
+                          ? (placeholderBt.name === 'Focus' ? focusMinutes : placeholderBt.default_duration_minutes)
+                          : 60)
 
                   return (
                     <div
@@ -1649,19 +1765,30 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                       }}
                       onDragOver={e => {
                         e.preventDefault()
-                        if (draggingBlockTypeId || draggingBlock) {
-                          setDragOverCol(ds)
-                          setDragOverTime(getTimeFromClientY(e.clientY))
+                        if (draggingBlockTypeId || draggingBlock || draggingHopperItem) {
+                          const clientY = e.clientY
+                          if (dragRafRef.current !== null) return // already scheduled
+                          dragRafRef.current = requestAnimationFrame(() => {
+                            dragRafRef.current = null
+                            // Cache rect once per drag gesture
+                            if (!gridRectRef.current && gridScrollRef.current) {
+                              gridRectRef.current = gridScrollRef.current.getBoundingClientRect()
+                            }
+                            setDragOverCol(ds)
+                            setDragOverTime(getTimeFromClientY(clientY))
+                          })
                         }
                       }}
                       onDragLeave={() => {
                         if (dragOverCol === ds) {
                           setDragOverCol(null)
                           setDragOverTime(null)
+                          gridRectRef.current = null
                         }
                       }}
                       onDrop={e => {
                         e.preventDefault()
+                        gridRectRef.current = null
                         if (draggingBlockTypeId) {
                           handleDropOnColumn(ds, e.clientY)
                         } else if (draggingBlock) {
@@ -1675,6 +1802,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                           } else {
                             moveBlock(block, fromDate, ds, snapTime)
                           }
+                        } else if (draggingHopperItem) {
+                          handleDropHopperOnColumn(ds, e.clientY)
                         }
                       }}
                     >
@@ -2360,8 +2489,18 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                 defaultExpanded
                 onConfirm={(id, ed) => {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  handleEnrichmentConfirm(id, ed as any)
-                  setHopper(prev => prev.map(h => h.id === id ? { ...h, name: (ed as any).suggested_name ?? h.name } : h))
+                  const data = ed as any
+                  handleEnrichmentConfirm(id, data)
+                  setHopper(prev => prev.map(h => h.id === id ? {
+                    ...h,
+                    name: data.suggested_name ?? h.name,
+                    energy_level: data.suggested_energy_level ?? h.energy_level,
+                    emotional_weight: data.suggested_emotional_weight ?? h.emotional_weight,
+                    duration_min: data.suggested_duration_min ?? h.duration_min,
+                    duration_max: data.suggested_duration_max ?? h.duration_max,
+                    enrichment_data: data,
+                    enrichment_status: 'confirmed' as const,
+                  } : h))
                   setEditingHopperId(null)
                 }}
                 onDecline={() => setEditingHopperId(null)}
@@ -2396,7 +2535,7 @@ interface HopperItemCardProps {
   muted?: boolean
 }
 
-function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onEnrich, dragging, armed, muted }: HopperItemCardProps) {
+const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onEnrich, dragging, armed, muted }: HopperItemCardProps) {
   const borderColor: Record<string, string> = { urgent: '#C4725A40', normal: '#E8E4DC', suggested: '#F0EDE8' }
   const leftBorderColor: Record<string, string> = { urgent: '#C4725A', normal: '#D0CBC3', suggested: '#E8E4DC' }
   const bgColor: Record<string, string> = { urgent: '#FDF8F5', normal: '#FFFFFF', suggested: '#F9F7F4' }
@@ -2516,7 +2655,7 @@ function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, onContextMenu
       >×</button>
     </div>
   )
-}
+})
 
 // Inject pulse animation globally once
 if (typeof document !== 'undefined' && !document.getElementById('ws-pulse-style')) {

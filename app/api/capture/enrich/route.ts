@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
       supabase.from('big_outcomes').select('id, name, status').eq('user_id', user.id).in('status', ['aspirational', 'in_progress']),
       supabase.from('block_types').select('id, name, energy_level').eq('user_id', user.id).eq('is_active', true),
       supabase.from('hopper_items').select('raw_input, enrichment_data')
-        .eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
+        .eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
     ])
 
     const ctx = {
@@ -167,8 +167,8 @@ export async function POST(req: NextRequest) {
     }
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 512,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: buildUserMessage(hopperItem.raw_input, ctx) }],
     })
