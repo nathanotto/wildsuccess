@@ -61,14 +61,15 @@ export default function MapClient({ userId, userEmail }: Props) {
   }, [])
 
   const fetchAll = useCallback(async () => {
+    const NC = { cache: 'no-store' } as const
     const [vRes, dRes, oRes, aRes, pRes, hRes, hopperRes] = await Promise.all([
-      fetch('/api/values'),
-      fetch('/api/life-domains'),
-      fetch('/api/big-outcomes'),
-      fetch('/api/activities'),
-      fetch('/api/profile'),
-      fetch('/api/map/heat'),
-      fetch('/api/hopper?status=pending'),
+      fetch('/api/values', NC),
+      fetch('/api/life-domains', NC),
+      fetch('/api/big-outcomes', NC),
+      fetch('/api/activities', NC),
+      fetch('/api/profile', NC),
+      fetch('/api/map/heat', NC),
+      fetch('/api/hopper?status=pending', NC),
     ])
     const [v, d, o, a, p, h, hopper] = await Promise.all([
       vRes.json(), dRes.json(), oRes.json(), aRes.json(), pRes.json(), hRes.json(), hopperRes.json(),
