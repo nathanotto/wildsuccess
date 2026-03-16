@@ -15,6 +15,7 @@ interface Props {
   onAddActivity: () => void
   onAddOutcome: () => void
   onShowReference: () => void
+  onShowActivities: () => void
 }
 
 const CX = 500
@@ -99,7 +100,7 @@ function computeActivityLayout(
 
 export default function WildSuccessMapSVG({
   values, activities, outcomes, overdueActivityIds, displayName,
-  onEditValue, onEditActivity, onEditOutcome, onAddValue, onAddActivity, onAddOutcome, onShowReference,
+  onEditValue, onEditActivity, onEditOutcome, onAddValue, onAddActivity, onAddOutcome, onShowReference, onShowActivities,
 }: Props) {
   const [selectedValue, setSelectedValue] = useState<UserValue | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
@@ -164,6 +165,11 @@ export default function WildSuccessMapSVG({
         style={{ cursor: 'pointer', textDecoration: 'underline' }}
         onClick={onShowReference}
       >Reference</text>
+      <text
+        x={CX - 310} y={64} textAnchor="middle" fontSize={9} fill="#9E6A46" opacity={0.45}
+        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+        onClick={onShowActivities}
+      >Activities</text>
 
       {/* Lines: center → values */}
       {values.map(v => {

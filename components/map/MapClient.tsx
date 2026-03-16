@@ -15,6 +15,7 @@ import QuickCapture from './QuickCapture'
 import ContextualNudge from './ContextualNudge'
 import OrganizeWeekModal from '@/components/organize/OrganizeWeekModal'
 import WaterfallDiagram from './WaterfallDiagram'
+import ActivitiesEditor from './ActivitiesEditor'
 
 interface Props {
   userId: string
@@ -45,6 +46,7 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [mapMode, setMapMode] = useState<'values' | 'life'>('values')
   const [organizeOpen, setOrganizeOpen] = useState(false)
   const [referenceOpen, setReferenceOpen] = useState(false)
+  const [activitiesEditorOpen, setActivitiesEditorOpen] = useState(false)
   const [hopperCount, setHopperCount] = useState(0)
 
   // Intake state
@@ -207,6 +209,7 @@ export default function MapClient({ userId, userEmail }: Props) {
             onAddActivity={() => setModal({ type: 'newActivity' })}
             onAddOutcome={() => setModal({ type: 'newOutcome' })}
             onShowReference={() => setReferenceOpen(true)}
+            onShowActivities={() => setActivitiesEditorOpen(true)}
           />
         ) : (
           <LifeMapSVG
@@ -433,6 +436,31 @@ export default function MapClient({ userId, userEmail }: Props) {
             <WaterfallDiagram />
           </div>
         </div>
+      )}
+
+      {activitiesEditorOpen && (
+        <ActivitiesEditor
+          activities={activities}
+          values={values}
+          domains={domains}
+          outcomes={outcomes}
+          onSave={async (id, data) => {
+            const res = await fetch(`/api/activities/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+            if (res.ok) { await fetchAll(); showToast('Activity saved') }
+            else { const e = await res.json(); showToast(e.error, 'error') }
+          }}
+          onDelete={async (id) => {
+            const res = await fetch(`/api/activities/${id}`, { method: 'DELETE' })
+            if (res.ok) { await fetchAll(); showToast('Activity deleted') }
+            else { const e = await res.json(); showToast(e.error, 'error') }
+          }}
+          onCreate={async (data) => {
+            const res = await fetch('/api/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+            if (res.ok) { await fetchAll(); showToast('Activity created') }
+            else { const e = await res.json(); showToast(e.error, 'error') }
+          }}
+          onClose={() => setActivitiesEditorOpen(false)}
+        />
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} />}
