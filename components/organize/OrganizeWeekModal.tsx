@@ -214,13 +214,22 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      // Seed block types (idempotent) + compute hopper priorities
+      const rangeStartForPropose = dateStr(weekStart)
+
+      // Seed block types (idempotent) + generate proposals for this week
       await Promise.allSettled([
         fetch('/api/block-types/seed-defaults', { method: 'POST' }),
-        fetch('/api/hopper/compute-priorities', { method: 'POST' }),
+        fetch('/api/hopper/propose', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ week_start_date: rangeStartForPropose }),
+        }),
       ])
 
-      const rangeStart = dateStr(weekStart)
+      // After proposals are created, score them
+      await fetch('/api/hopper/compute-priorities', { method: 'POST' })
+
+      const rangeStart = rangeStartForPropose
       const rangeEnd = dateStr(addDays(weekStart, 6))
 
       const [
