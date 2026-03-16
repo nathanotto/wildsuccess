@@ -22,12 +22,12 @@ export async function POST() {
       activity:activities(
         id,
         emotional_weight,
-        energy_level,
+        time_type,
         flexibility,
         value_links:activity_value_links(
           value_id,
           contribution_strength,
-          value:values(score, sufficiency_mark)
+          value:user_values(score, sufficiency_mark, layer)
         )
       )
     `)
@@ -40,7 +40,7 @@ export async function POST() {
   // Fetch block types for hint assignment
   const { data: blockTypes } = await supabase
     .from('block_types')
-    .select('id, name, energy_level')
+    .select('id, name, time_type')
     .eq('user_id', user.id)
     .eq('is_active', true)
 
@@ -64,13 +64,15 @@ export async function POST() {
     }
 
     // Value urgency (30% weight) — items serving underperforming values get boost
+    const LAYER_MULT: Record<string, number> = { safety: 4, security: 3, freedom: 2, opportunity: 1 }
+
     const activity = item.activity as {
       emotional_weight?: string
-      energy_level?: string
+      time_type?: string
       flexibility?: string
       value_links?: Array<{
         contribution_strength: string
-        value?: { score: number; sufficiency_mark: number }
+        value?: { score: number; sufficiency_mark: number; layer: string }
       }>
     } | null
 
@@ -80,8 +82,9 @@ export async function POST() {
         if (!v) return acc
         const gap = v.sufficiency_mark - v.score
         if (gap > 0) {
-          const multiplier = vl.contribution_strength === 'strong' ? 3 : vl.contribution_strength === 'moderate' ? 2 : 1
-          return acc + (gap * multiplier)
+          const strengthMult = vl.contribution_strength === 'strong' ? 3 : vl.contribution_strength === 'moderate' ? 2 : 1
+          const layerMult = LAYER_MULT[v.layer] ?? 1
+          return acc + (gap * strengthMult * layerMult)
         }
         return acc
       }, 0)
@@ -97,11 +100,20 @@ export async function POST() {
     else if (item.source === 'template_proposal') score -= 5
 
     // Tier assignment
+    const hasCriticalValueGap = (activity?.value_links ?? []).some(vl => {
+      const v = vl.value
+      if (!v) return false
+      const layer = v.layer
+      if (layer !== 'safety' && layer !== 'security') return false
+      return v.sufficiency_mark > 0 && (v.score / v.sufficiency_mark) < 0.7
+    })
+
     let tier: 'urgent' | 'normal' | 'suggested' = 'normal'
     if (
       (item.proposed_date && item.proposed_date < today) ||
       (item.proposed_date && item.proposed_date <= threeDaysOut) ||
-      score >= 40
+      score >= 40 ||
+      hasCriticalValueGap
     ) {
       tier = 'urgent'
     } else if (
@@ -114,8 +126,8 @@ export async function POST() {
 
     // Block type hint based on energy level and context
     let blockTypeHint: string | null = null
-    if (activity?.energy_level === 'A') blockTypeHint = focusBlockId
-    else if (activity?.energy_level === 'C') blockTypeHint = outingBlockId
+    if (activity?.time_type === 'A') blockTypeHint = focusBlockId
+    else if (activity?.time_type === 'C') blockTypeHint = outingBlockId
     else if (item.source === 'outside_request') blockTypeHint = communicateBlockId
     else blockTypeHint = adminBlockId
 

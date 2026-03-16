@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { HopperItem, ScheduleItem, TimeBlock, UserValue, LifeDomain, Activity } from '@/lib/types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#7A9E82' }
-const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Easy' }
+const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Unwanted', D: 'Self-care', '0': 'Free' }
 const SL: Record<string, string> = { template_proposal: 'Suggested', outside_request: 'Request', quick_capture: 'Captured', planning_function: 'From Plan' }
 const SI: Record<string, string> = { template_proposal: '◈', outside_request: '↗', quick_capture: '✎', planning_function: '◎' }
 const WI: Record<string, string> = { light: '', normal: '', heavy: '◆' }
@@ -18,7 +18,7 @@ interface LocalItem {
   activityId?: string
   name: string
   source: string
-  energyLevel: 'A' | 'B' | 'C'
+  energyLevel: 'A' | 'B' | 'C' | 'D' | '0'
   emotionalWeight: 'light' | 'normal' | 'heavy'
   durationMin: number
   durationMax: number
@@ -36,7 +36,7 @@ interface LocalBlock {
   label: string
   start: string
   end: string
-  energyLevel: 'A' | 'B' | 'C'
+  energyLevel: 'A' | 'B' | 'C' | 'D' | '0'
   isHardBlock?: boolean
   items: LocalItem[]
 }
@@ -162,7 +162,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
         label: b.label,
         start: b.start_time ? formatTime(b.start_time) : '?',
         end: b.end_time ? formatTime(b.end_time) : '?',
-        energyLevel: b.energy_level,
+        energyLevel: b.time_type,
         isHardBlock: b.is_hard,
         items: [],
       })
@@ -178,7 +178,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
         activityId: s.activity_id ?? undefined,
         name: s.name,
         source: 'template_proposal',
-        energyLevel: s.energy_level as 'A' | 'B' | 'C',
+        energyLevel: s.time_type as 'A' | 'B' | 'C' | 'D' | '0',
         emotionalWeight: s.emotional_weight as 'light' | 'normal' | 'heavy',
         durationMin: 15,
         durationMax: 30,
@@ -206,7 +206,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
           activityId: h.activity_id ?? undefined,
           name: h.raw_input,
           source: h.source,
-          energyLevel: (act?.energy_level ?? 'B') as 'A' | 'B' | 'C',
+          energyLevel: (act?.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
           emotionalWeight: (act?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
           durationMin: act?.duration_range_min ?? 15,
           durationMax: act?.duration_range_max ?? 30,
@@ -219,7 +219,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
     // Build completed items
     const completedItems: CompletedItem[] = []
     if (Array.isArray(completedData)) {
-      completedData.forEach((log: { id: string; event_date: string; metadata?: { name?: string; energy_level?: string } }) => {
+      completedData.forEach((log: { id: string; event_date: string; metadata?: { name?: string; time_type?: string } }) => {
         const d = new Date(log.event_date + 'T12:00:00')
         const dayIdx = d.getDay() === 0 ? 6 : d.getDay() - 1
         completedItems.push({
@@ -227,7 +227,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
           name: log.metadata?.name ?? 'Item',
           dateStr: log.event_date,
           dayLabel: DAY_LABELS[dayIdx],
-          energyLevel: log.metadata?.energy_level ?? 'B',
+          energyLevel: log.metadata?.time_type ?? 'B',
           values: [],
         })
       })
@@ -299,7 +299,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
           scheduled_date: schedDate,
           time_block_id: targetBlock.dbId,
           flexibility: dragItem.flexibility,
-          energy_level: dragItem.energyLevel,
+          time_type: dragItem.energyLevel,
           emotional_weight: dragItem.emotionalWeight,
         }),
       })
@@ -376,8 +376,8 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
 
   // ── Week stats ────────────────────────────────────────────────────────────
   const allScheduled = Object.values(dayBlocks).flatMap(blocks => blocks.flatMap(b => b.items))
-  const weekEnergyCounts: Record<string, number> = { A: 0, B: 0, C: 0 }
-  allScheduled.forEach(i => { if (weekEnergyCounts[i.energyLevel] !== undefined) weekEnergyCounts[i.energyLevel]++ })
+  const weekEnergyCounts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, '0': 0 }
+  allScheduled.forEach(i => { weekEnergyCounts[i.energyLevel] = (weekEnergyCounts[i.energyLevel] ?? 0) + 1 })
   const weekValueCounts: Record<string, number> = {}
   ;[...allScheduled, ...completed].forEach(i => i.values?.forEach(v => { weekValueCounts[v] = (weekValueCounts[v] || 0) + 1 }))
   const dayItemCounts: Record<string, number> = {}
@@ -444,7 +444,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                 <span style={{ fontSize: 11, color: '#8A857D' }}>{hopper.length}</span>
               </div>
               <div style={{ display: 'flex', gap: 3 }}>
-                {['all', 'A', 'B', 'C'].map(f => (
+                {['all', 'A', 'B', 'C', 'D', '0'].map(f => (
                   <button key={f} onClick={() => setHopperFilter(f)} style={{
                     padding: '2px 8px', borderRadius: 5, border: '1px solid',
                     borderColor: hopperFilter === f ? (f === 'all' ? '#2D2A26' : EC[f]) : '#E8E4DC',
@@ -619,8 +619,8 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                 <>
                   {/* Energy */}
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#2D2A26', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Energy This Week</div>
-                    {['A', 'B', 'C'].map(level => (
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#2D2A26', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Time Balance</div>
+                    {['A', 'B', 'C', 'D', '0'].map(level => (
                       <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                         <span style={{ fontSize: 10, fontWeight: 700, color: EC[level], width: 44 }}>{EL[level]}</span>
                         <div style={{ flex: 1, height: 6, borderRadius: 3, background: '#F5F3EF' }}>

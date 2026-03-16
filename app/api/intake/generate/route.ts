@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       status: 'active',
       is_preventive: spec.is_preventive,
       context: spec.context,
-      energy_level: spec.energy_level,
+      time_type: spec.time_type,
       emotional_weight: spec.emotional_weight,
       flexibility: spec.flexibility,
       clusterable: spec.clusterable,

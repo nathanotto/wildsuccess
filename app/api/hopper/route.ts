@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('hopper_items')
-    .select('*, activity:activities(id, name, energy_level, flexibility, context)')
+    .select('*, activity:activities(id, name, time_type, flexibility, context)')
     .eq('user_id', user.id)
     .order('priority_score', { ascending: false })
     .order('proposed_date', { ascending: true, nullsFirst: false })
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { raw_input, source = 'quick_capture', activity_id, proposed_date, metadata } = body
+  const { raw_input, source = 'quick_capture', activity_id, proposed_date, metadata, bounding_type, time_type } = body
 
   if (!raw_input?.trim()) {
     return NextResponse.json({ error: 'raw_input is required' }, { status: 400 })
@@ -51,6 +51,8 @@ export async function POST(req: NextRequest) {
       activity_id: activity_id ?? null,
       proposed_date: proposed_date ?? null,
       metadata: metadata ?? null,
+      bounding_type: bounding_type ?? 'action',
+      time_type: time_type ?? 'B',
       status: 'pending',
     })
     .select()

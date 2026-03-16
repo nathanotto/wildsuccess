@@ -1,8 +1,8 @@
 'use client'
 import { useState } from 'react'
 
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#7A9E82' }
-const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Easy' }
+const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Unwanted', D: 'Self-care', '0': 'Free' }
 const WL: Record<string, string> = { light: 'Light', normal: 'Normal', heavy: 'Heavy' }
 const FL: Record<string, string> = {
   hard_scheduled: 'Hard scheduled', soft_scheduled: 'Soft scheduled',
@@ -20,7 +20,7 @@ interface EnrichmentData {
   suggested_value_links: Array<{ value_id: string; value_name: string; contribution_strength: string }>
   suggested_big_outcome_id: string | null
   suggested_big_outcome_name: string | null
-  suggested_energy_level: 'A' | 'B' | 'C'
+  suggested_time_type: 'A' | 'B' | 'C' | 'D' | '0'
   suggested_emotional_weight: 'light' | 'normal' | 'heavy'
   suggested_context: string[]
   suggested_block_type_id: string | null
@@ -153,8 +153,8 @@ export default function EnrichmentCard({
             </span>
           )}
           <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: EC[ed.suggested_energy_level], display: 'inline-block' }} />
-            {EL[ed.suggested_energy_level]}
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: EC[ed.suggested_time_type], display: 'inline-block' }} />
+            {EL[ed.suggested_time_type]}
           </span>
           {(ed.suggested_duration_min || ed.suggested_duration_max) && (
             <span style={{ fontSize: 11, color: '#8A857D' }}>
@@ -329,10 +329,10 @@ export default function EnrichmentCard({
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>Energy</label>
           <div style={{ display: 'flex', gap: 4 }}>
-            {(['A', 'B', 'C'] as const).map(e => (
-              <button key={e} onClick={() => update({ suggested_energy_level: e })}
-                style={chipStyle(ed.suggested_energy_level === e, EC[e])}>
-                {e}
+            {(['A', 'B', 'C', 'D', '0'] as const).map(e => (
+              <button key={e} onClick={() => update({ suggested_time_type: e })}
+                style={chipStyle(ed.suggested_time_type === e, EC[e])}>
+                {e} <span style={{ fontSize: 9 }}>{EL[e]}</span>
               </button>
             ))}
           </div>

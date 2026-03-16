@@ -36,9 +36,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       schedule_item_id: id,
       activity_id: data.activity_id ?? null,
       hopper_item_id: data.hopper_item_id ?? null,
+      task_suggestion_id: (data as Record<string, unknown>).task_suggestion_id ?? null,
       event_date: (data.scheduled_date ?? new Date().toISOString().split('T')[0]),
       note: data.completion_note ?? null,
     })
+
+    // On completion: update task_suggestion tracking
+    if (body.status === 'completed') {
+      const taskSuggestionId = (data as Record<string, unknown>).task_suggestion_id as string | null
+      if (taskSuggestionId) {
+        await supabase
+          .from('task_suggestions')
+          .update({ last_completed_at: new Date().toISOString(), consecutive_dismissals: 0 })
+          .eq('id', taskSuggestionId)
+          .eq('user_id', user.id)
+      }
+    }
   }
 
   return NextResponse.json(data)

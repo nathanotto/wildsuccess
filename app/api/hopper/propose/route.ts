@@ -7,10 +7,14 @@ const CADENCE_DAYS: Record<string, number> = {
   biweekly: 14,
   monthly: 30,
   quarterly: 90,
+  seasonal: 90,
   annual: 365,
 }
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+const MAX_PER_DAY = 15
+const MAX_PER_WEEK = 60
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -18,126 +22,320 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const targetDate: string = body.target_date ?? new Date().toISOString().split('T')[0]
-  const today = new Date(targetDate)
-  const todayDayName = DAY_NAMES[today.getDay()]
 
-  // Load all active recurring activities
-  const { data: activities, error: aErr } = await supabase
+  // Support single day or week range
+  let targetDates: string[]
+  if (body.week_start_date) {
+    const start = new Date(body.week_start_date)
+    targetDates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start)
+      d.setDate(d.getDate() + i)
+      return d.toISOString().split('T')[0]
+    })
+  } else {
+    targetDates = [body.target_date ?? new Date().toISOString().split('T')[0]]
+  }
+
+  const isWeek = targetDates.length > 1
+  const weekStart = targetDates[0]
+  const weekEnd = targetDates[targetDates.length - 1]
+
+  const since = new Date(weekStart)
+  since.setFullYear(since.getFullYear() - 1)
+  const sinceStr = since.toISOString().split('T')[0]
+
+  // --- Load task_suggestions (primary source) ---
+  const { data: taskSuggestions, error: tsErr } = await supabase
+    .from('task_suggestions')
+    .select(`
+      id, name, time_type, bounding_type, recurrence, frequency,
+      preferred_days, preferred_time, flexibility, emotional_weight,
+      duration_range_min, duration_range_max, context, sort_order,
+      last_completed_at, last_proposed_at, consecutive_dismissals,
+      activity_id, is_active, archived_at,
+      value_links:task_suggestion_value_links(
+        value_id,
+        contribution_strength,
+        value:user_values(score, sufficiency_mark, layer)
+      )
+    `)
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .is('archived_at', null)
+    .neq('recurrence', 'one_time')
+
+  if (tsErr) return NextResponse.json({ error: tsErr.message }, { status: 500 })
+
+  // --- Load Activities without child task_suggestions (fallback source) ---
+  const { data: activities } = await supabase
     .from('activities')
-    .select('*')
+    .select(`
+      id, name, frequency, time_type, flexibility, emotional_weight,
+      preferred_days, context, sort_order,
+      value_links:activity_value_links(
+        value_id,
+        contribution_strength,
+        value:user_values(score, sufficiency_mark, layer)
+      )
+    `)
     .eq('user_id', user.id)
     .eq('status', 'active')
     .eq('activity_type', 'recurring')
     .is('archived_at', null)
 
-  if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 })
-  if (!activities?.length) return NextResponse.json({ created: [] })
+  // Find activity IDs that already have task_suggestions
+  const activitiesWithSuggestions = new Set((taskSuggestions ?? []).map(ts => ts.activity_id).filter(Boolean))
+  const standaloneActivities = (activities ?? []).filter(a => !activitiesWithSuggestions.has(a.id))
 
-  // Fix 2: read completions from action_log (not schedule_items)
-  const since = new Date(targetDate)
-  since.setFullYear(since.getFullYear() - 1)
-
+  // --- Load completion history ---
   const { data: completionLogs } = await supabase
     .from('action_log')
-    .select('activity_id, event_date')
+    .select('activity_id, task_suggestion_id, event_date')
     .eq('user_id', user.id)
     .eq('event_type', 'completed')
-    .not('activity_id', 'is', null)
-    .gte('event_date', since.toISOString().split('T')[0])
+    .gte('event_date', sinceStr)
 
-  // Fix 3: load dismissed hopper items (within last year) to avoid re-proposing
-  const { data: dismissedItems } = await supabase
-    .from('hopper_items')
-    .select('activity_id, resolved_at')
-    .eq('user_id', user.id)
-    .eq('status', 'dismissed')
-    .not('activity_id', 'is', null)
-    .gte('resolved_at', since.toISOString())
-
-  // Build a map: activity_id -> most recent dismissal date
-  const lastDismissed: Record<string, Date> = {}
-  for (const d of dismissedItems ?? []) {
-    if (!d.activity_id || !d.resolved_at) continue
-    const dt = new Date(d.resolved_at)
-    if (!lastDismissed[d.activity_id] || dt > lastDismissed[d.activity_id]) {
-      lastDismissed[d.activity_id] = dt
+  // Build last-completion maps
+  const lastCompletedByActivity: Record<string, Date> = {}
+  const lastCompletedByTaskSuggestion: Record<string, Date> = {}
+  for (const log of completionLogs ?? []) {
+    if (log.activity_id) {
+      const dt = new Date(log.event_date)
+      if (!lastCompletedByActivity[log.activity_id] || dt > lastCompletedByActivity[log.activity_id]) {
+        lastCompletedByActivity[log.activity_id] = dt
+      }
+    }
+    if (log.task_suggestion_id) {
+      const dt = new Date(log.event_date)
+      if (!lastCompletedByTaskSuggestion[log.task_suggestion_id] || dt > lastCompletedByTaskSuggestion[log.task_suggestion_id]) {
+        lastCompletedByTaskSuggestion[log.task_suggestion_id] = dt
+      }
     }
   }
 
-  // Load existing pending hopper items (avoid duplicates)
+  // --- Load dismissed items ---
+  const { data: dismissedItems } = await supabase
+    .from('action_log')
+    .select('task_suggestion_id, activity_id, event_date')
+    .eq('user_id', user.id)
+    .eq('event_type', 'dismissed')
+    .gte('event_date', sinceStr)
+
+  const lastDismissedByTS: Record<string, Date> = {}
+  const lastDismissedByActivity: Record<string, Date> = {}
+  for (const d of dismissedItems ?? []) {
+    if (d.task_suggestion_id) {
+      const dt = new Date(d.event_date)
+      if (!lastDismissedByTS[d.task_suggestion_id] || dt > lastDismissedByTS[d.task_suggestion_id]) {
+        lastDismissedByTS[d.task_suggestion_id] = dt
+      }
+    }
+    if (d.activity_id && !d.task_suggestion_id) {
+      const dt = new Date(d.event_date)
+      if (!lastDismissedByActivity[d.activity_id] || dt > lastDismissedByActivity[d.activity_id]) {
+        lastDismissedByActivity[d.activity_id] = dt
+      }
+    }
+  }
+
+  // --- Load existing pending hopper items (avoid duplicates) ---
   const { data: existingHopper } = await supabase
     .from('hopper_items')
     .select('activity_id, proposed_date')
     .eq('user_id', user.id)
     .eq('status', 'pending')
 
-  const pendingSet = new Set(
+  const pendingByActivityDate = new Set(
     (existingHopper ?? [])
-      .filter(h => h.activity_id)
-      .map(h => h.activity_id as string)
+      .filter(h => h.activity_id && h.proposed_date)
+      .map(h => `${h.activity_id}:${h.proposed_date}`)
   )
 
-  // Build last-completion map: activity_id -> most recent completion date
-  const lastCompleted: Record<string, Date> = {}
-  for (const log of completionLogs ?? []) {
-    if (!log.activity_id) continue
-    const dt = new Date(log.event_date)
-    if (!lastCompleted[log.activity_id] || dt > lastCompleted[log.activity_id]) {
-      lastCompleted[log.activity_id] = dt
-    }
+  // --- Load existing active schedule_items this week (suppress if already scheduled) ---
+  const { data: scheduledItems } = await supabase
+    .from('schedule_items')
+    .select('activity_id')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .gte('scheduled_date', weekStart)
+    .lte('scheduled_date', weekEnd)
+
+  const scheduledActivityIds = new Set((scheduledItems ?? []).map(s => s.activity_id).filter(Boolean))
+
+  // --- Load block types for hint assignment ---
+  const { data: blockTypes } = await supabase
+    .from('block_types')
+    .select('id, name, time_type')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+
+  const blockTypeByTimeType: Record<string, string> = {}
+  for (const bt of blockTypes ?? []) {
+    if (!blockTypeByTimeType[bt.time_type]) blockTypeByTimeType[bt.time_type] = bt.id
   }
 
-  const created: unknown[] = []
+  // --- Compute waterfall priority score for a set of value_links ---
+  const LAYER_MULTIPLIER: Record<string, number> = { safety: 4, security: 3, freedom: 2, opportunity: 1 }
+  function computeValueUrgency(valueLinks: Array<Record<string, unknown>>): number {
+    if (!valueLinks?.length) return 0
+    return valueLinks.reduce((acc, vl) => {
+      // Supabase returns nested selects as arrays; handle both array and object
+      const rawVal = vl.value
+      const v = Array.isArray(rawVal) ? rawVal[0] : rawVal
+      if (!v) return acc
+      const gap = (v as { sufficiency_mark: number; score: number }).sufficiency_mark - (v as { score: number }).score
+      if (gap <= 0) return acc
+      const cs = vl.contribution_strength as string
+      const strengthMult = cs === 'strong' ? 3 : cs === 'moderate' ? 2 : 1
+      const layerMult = LAYER_MULTIPLIER[(v as { layer: string }).layer] ?? 1
+      return acc + (gap * strengthMult * layerMult)
+    }, 0)
+  }
 
-  for (const activity of activities) {
-    if (!activity.frequency) continue
-    const cadence = CADENCE_DAYS[activity.frequency]
-    if (!cadence) continue
-
-    // Already in hopper as pending — skip
-    if (pendingSet.has(activity.id)) continue
-
-    // Fix 4: preferred_days filter — if set, only propose on matching days
-    if (Array.isArray(activity.preferred_days) && activity.preferred_days.length > 0) {
-      const preferred = activity.preferred_days.map((d: string) => d.toLowerCase())
-      if (!preferred.includes(todayDayName)) continue
+  // --- isDue check ---
+  function isDue(cadenceDays: number, lastDone: Date | undefined, targetDay: Date, preferredDays: string[] | null): boolean {
+    if (preferredDays?.length) {
+      const targetDayName = DAY_NAMES[targetDay.getDay()]
+      if (!preferredDays.map(d => d.toLowerCase()).includes(targetDayName)) return false
     }
+    const daysSince = lastDone
+      ? Math.floor((targetDay.getTime() - lastDone.getTime()) / (1000 * 60 * 60 * 24))
+      : cadenceDays // never done = treat as due
+    return daysSince >= cadenceDays
+  }
 
-    // Is it due? Check last completion
-    const lastDone = lastCompleted[activity.id]
-    const daysSinceCompletion = lastDone
-      ? Math.floor((today.getTime() - lastDone.getTime()) / (1000 * 60 * 60 * 24))
-      : cadence // never done = treat as overdue
+  // --- Collect candidates for each target date ---
+  const totalCreated: unknown[] = []
+  let weekCreatedCount = 0
 
-    if (daysSinceCompletion < cadence) continue
+  for (const targetDate of targetDates) {
+    if (isWeek && weekCreatedCount >= MAX_PER_WEEK) break
 
-    // Fix 3: was it dismissed recently (within this cadence window)?
-    const dismissed = lastDismissed[activity.id]
-    if (dismissed) {
-      const daysSinceDismissal = Math.floor((today.getTime() - dismissed.getTime()) / (1000 * 60 * 60 * 24))
-      // If dismissed more recently than the last completion, skip for this cadence window
-      if (daysSinceDismissal < cadence) continue
-    }
+    const today = new Date(targetDate)
+    const candidates: Array<{
+      urgency: number
+      create: () => Promise<void>
+    }> = []
 
-    const { data: hopperItem, error: hErr } = await supabase
-      .from('hopper_items')
-      .insert({
-        user_id: user.id,
-        raw_input: activity.name,
-        source: 'template_proposal',
-        activity_id: activity.id,
-        status: 'pending',
-        proposed_date: targetDate,
+    // --- Task suggestions ---
+    for (const ts of taskSuggestions ?? []) {
+      if (!ts.recurrence || !CADENCE_DAYS[ts.recurrence]) continue
+      const cadence = CADENCE_DAYS[ts.recurrence]
+
+      // Already scheduled this week
+      if (ts.activity_id && scheduledActivityIds.has(ts.activity_id)) continue
+
+      // Dismissed today
+      const dismissed = lastDismissedByTS[ts.id]
+      if (dismissed && dismissed.toISOString().split('T')[0] === targetDate) continue
+
+      // Dismissed within cadence window
+      if (dismissed) {
+        const daysSinceDismissal = Math.floor((today.getTime() - dismissed.getTime()) / (1000 * 60 * 60 * 24))
+        if (daysSinceDismissal < cadence) continue
+      }
+
+      // Already pending for this date
+      if (ts.activity_id && pendingByActivityDate.has(`${ts.activity_id}:${targetDate}`)) continue
+
+      const lastDone = lastCompletedByTaskSuggestion[ts.id] ?? (ts.activity_id ? lastCompletedByActivity[ts.activity_id] : undefined)
+      if (!isDue(cadence, lastDone ? new Date(lastDone) : undefined, today, ts.preferred_days)) continue
+
+      const urgency = computeValueUrgency(ts.value_links ?? [])
+
+      candidates.push({
+        urgency,
+        create: async () => {
+          const blockTypeHint = blockTypeByTimeType[ts.time_type] ?? blockTypeByTimeType['B'] ?? null
+          const { data: hopperItem } = await supabase
+            .from('hopper_items')
+            .insert({
+              user_id: user.id,
+              raw_input: ts.name,
+              source: 'template_proposal',
+              activity_id: ts.activity_id ?? null,
+              status: 'pending',
+              proposed_date: targetDate,
+              time_type: ts.time_type ?? 'B',
+              bounding_type: (ts as Record<string, unknown>).bounding_type ?? 'action',
+              block_type_hint: blockTypeHint,
+            })
+            .select()
+            .single()
+
+          if (hopperItem) {
+            totalCreated.push(hopperItem)
+            if (ts.activity_id) pendingByActivityDate.add(`${ts.activity_id}:${targetDate}`)
+            // Update last_proposed_at
+            await supabase.from('task_suggestions')
+              .update({ last_proposed_at: new Date().toISOString() })
+              .eq('id', ts.id)
+          }
+        }
       })
-      .select()
-      .single()
+    }
 
-    if (!hErr && hopperItem) {
-      created.push(hopperItem)
-      pendingSet.add(activity.id)
+    // --- Standalone activities (no task_suggestions) ---
+    for (const activity of standaloneActivities) {
+      if (!activity.frequency || !CADENCE_DAYS[activity.frequency]) continue
+      const cadence = CADENCE_DAYS[activity.frequency]
+      const key = `${activity.id}:${targetDate}`
+
+      if (scheduledActivityIds.has(activity.id)) continue
+      if (pendingByActivityDate.has(key)) continue
+
+      const dismissed = lastDismissedByActivity[activity.id]
+      if (dismissed && dismissed.toISOString().split('T')[0] === targetDate) continue
+      if (dismissed) {
+        const daysSince = Math.floor((today.getTime() - dismissed.getTime()) / (1000 * 60 * 60 * 24))
+        if (daysSince < cadence) continue
+      }
+
+      const lastDone = lastCompletedByActivity[activity.id]
+      if (!isDue(cadence, lastDone ? new Date(lastDone) : undefined, today, activity.preferred_days)) continue
+
+      const urgency = computeValueUrgency(activity.value_links ?? [])
+
+      candidates.push({
+        urgency,
+        create: async () => {
+          const blockTypeHint = blockTypeByTimeType[activity.time_type] ?? blockTypeByTimeType['B'] ?? null
+          const { data: hopperItem } = await supabase
+            .from('hopper_items')
+            .insert({
+              user_id: user.id,
+              raw_input: activity.name,
+              source: 'template_proposal',
+              activity_id: activity.id,
+              status: 'pending',
+              proposed_date: targetDate,
+              time_type: activity.time_type ?? 'B',
+              bounding_type: 'action',
+              block_type_hint: blockTypeHint,
+            })
+            .select()
+            .single()
+
+          if (hopperItem) {
+            totalCreated.push(hopperItem)
+            pendingByActivityDate.add(key)
+          }
+        }
+      })
+    }
+
+    // Sort by urgency descending, apply per-day cap
+    candidates.sort((a, b) => b.urgency - a.urgency)
+    const daySlots = isWeek
+      ? Math.min(MAX_PER_DAY, MAX_PER_WEEK - weekCreatedCount)
+      : MAX_PER_DAY
+    const dayBatch = candidates.slice(0, daySlots)
+
+    for (const c of dayBatch) {
+      await c.create()
+      weekCreatedCount++
     }
   }
 
-  return NextResponse.json({ created })
+  return NextResponse.json({ created: totalCreated.length })
 }

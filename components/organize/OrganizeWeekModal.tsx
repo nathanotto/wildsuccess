@@ -10,8 +10,8 @@ const GRID_END = 21
 const GRID_HOURS = GRID_END - GRID_START
 const GRID_HEIGHT = GRID_HOURS * HOUR_HEIGHT
 
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#7A9E82' }
-const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Easy' }
+const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Unwanted', D: 'Self-care', '0': 'Free' }
 const TIER_COLORS: Record<string, string> = { urgent: '#C4725A', normal: '#2D2A26', suggested: '#B5B0A8' }
 
 // ── Local types ───────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ interface BlockType {
   name: string
   color: string
   default_duration_minutes: number
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   icon: string | null
   sort_order: number
   is_active: boolean
@@ -45,16 +45,17 @@ interface ScheduleItemLocal {
   id: string
   name: string
   hopper_item_id: string | null
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   emotional_weight: 'light' | 'normal' | 'heavy'
   status: 'active' | 'completed' | 'skipped'
+  committed_at?: string | null
 }
 
 interface HopperItemLocal {
   id: string
   name: string
   source: string
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   emotional_weight: 'light' | 'normal' | 'heavy'
   priority_tier: 'urgent' | 'normal' | 'suggested'
   priority_score: number
@@ -86,7 +87,7 @@ interface ClassifyState {
   event: CalEventLocal
   classification: 'info' | 'fixed_commitment' | 'flexible_commitment'
   displayLabel: string
-  energyLevel: 'A' | 'B' | 'C'
+  energyLevel: 'A' | 'B' | 'C' | 'D' | '0'
   applyToSeries: boolean
 }
 
@@ -259,9 +260,10 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         scheduled_date: string
         name: string
         hopper_item_id: string | null
-        energy_level: 'A' | 'B' | 'C'
+        time_type: 'A' | 'B' | 'C' | 'D' | '0'
         emotional_weight: 'light' | 'normal' | 'heavy'
         status: 'active' | 'completed' | 'skipped'
+        committed_at?: string | null
       }> = Array.isArray(siData) ? siData : []
 
       const newDayBlocks: Record<string, TimeBlockLocal[]> = {}
@@ -275,7 +277,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             id: si.id,
             name: si.name,
             hopper_item_id: si.hopper_item_id,
-            energy_level: si.energy_level,
+            time_type: si.time_type,
             emotional_weight: si.emotional_weight,
             status: si.status,
           }))
@@ -310,7 +312,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         source: string
         status: string
         activity?: {
-          energy_level?: 'A' | 'B' | 'C'
+          time_type?: 'A' | 'B' | 'C' | 'D' | '0'
           emotional_weight?: 'light' | 'normal' | 'heavy'
           duration_range_min?: number | null
           duration_range_max?: number | null
@@ -330,7 +332,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             id: h.id,
             name: (ed?.suggested_name as string | null) ?? h.raw_input,
             source: h.source,
-            energy_level: ((ed?.suggested_energy_level as string | null) ?? h.activity?.energy_level ?? 'B') as 'A' | 'B' | 'C',
+            time_type: ((ed?.suggested_time_type as string | null) ?? h.activity?.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
             emotional_weight: ((ed?.suggested_emotional_weight as string | null) ?? h.activity?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
             priority_tier: (h.priority_tier ?? 'normal') as 'urgent' | 'normal' | 'suggested',
             priority_score: h.priority_score ?? 50,
@@ -495,7 +497,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           is_hard: false,
           sort_order: 0,
           source: 'manual',
-          energy_level: blockType.energy_level,
+          time_type: blockType.time_type,
         }),
       })
       if (!res.ok) return
@@ -558,7 +560,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           is_hard: false,
           sort_order: 0,
           source: 'manual',
-          energy_level: item.energy_level,
+          time_type: item.time_type,
         }),
       })
       if (!blockRes.ok) return
@@ -572,7 +574,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           scheduled_date: ds,
           time_block_id: newBlock.id,
           flexibility: 'anytime_today',
-          energy_level: item.energy_level,
+          time_type: item.time_type,
           emotional_weight: item.emotional_weight,
           hopper_item_id: isPersist ? null : item.id,
         }),
@@ -584,7 +586,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         id: newSI.id,
         name: item.name,
         hopper_item_id: isPersist ? null : item.id,
-        energy_level: item.energy_level,
+        time_type: item.time_type,
         emotional_weight: item.emotional_weight,
         status: 'active',
       }
@@ -635,7 +637,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           scheduled_date: ds,
           time_block_id: block.id,
           flexibility: 'anytime_today',
-          energy_level: item.energy_level,
+          time_type: item.time_type,
           emotional_weight: item.emotional_weight,
           // When persisting, don't link to hopper item so it stays pending
           hopper_item_id: isPersist ? null : item.id,
@@ -648,7 +650,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         id: newSI.id,
         name: item.name,
         hopper_item_id: isPersist ? null : item.id,
-        energy_level: item.energy_level,
+        time_type: item.time_type,
         emotional_weight: item.emotional_weight,
         status: 'active',
       }
@@ -711,7 +713,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           id: item.hopper_item_id,
           name: item.name,
           source: 'quick_capture',
-          energy_level: item.energy_level,
+          time_type: item.time_type,
           emotional_weight: item.emotional_weight,
           priority_tier: 'normal',
           priority_score: 50,
@@ -818,7 +820,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           is_hard: false,
           sort_order: 0,
           source: 'manual',
-          energy_level: block.block_type?.energy_level ?? 'B',
+          time_type: block.block_type?.time_type ?? 'B',
         }),
       })
       if (!res.ok) return
@@ -835,7 +837,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             scheduled_date: toDate,
             time_block_id: newBlock.id,
             flexibility: 'anytime_today',
-            energy_level: item.energy_level,
+            time_type: item.time_type,
             emotional_weight: item.emotional_weight,
           }),
         })
@@ -845,7 +847,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             id: si.id,
             name: item.name,
             hopper_item_id: null,
-            energy_level: item.energy_level,
+            time_type: item.time_type,
             emotional_weight: item.emotional_weight,
             status: 'active',
           })
@@ -901,7 +903,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           id: item.hopper_item_id!,
           name: item.name,
           source: 'quick_capture' as const,
-          energy_level: item.energy_level,
+          time_type: item.time_type,
           emotional_weight: item.emotional_weight,
           priority_tier: 'normal' as const,
           priority_score: 50,
@@ -934,7 +936,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         id: newItem.id,
         name: text,
         source: 'quick_capture',
-        energy_level: 'B',
+        time_type: 'B',
         emotional_weight: 'normal',
         priority_tier: 'normal',
         priority_score: 50,
@@ -992,7 +994,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       suggested_value_links: [],
       suggested_big_outcome_id: null,
       suggested_big_outcome_name: null,
-      suggested_energy_level: item.energy_level,
+      suggested_time_type: item.time_type,
       suggested_emotional_weight: item.emotional_weight,
       suggested_context: [],
       suggested_block_type_id: null,
@@ -1078,7 +1080,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           match_type: matchType,
           classification,
           display_label: displayLabel || null,
-          energy_level: energyLevel,
+          time_type: energyLevel,
         }),
       })
 
@@ -1098,7 +1100,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             end_time: endT,
             is_hard: true,
             source: 'calendar_import',
-            energy_level: energyLevel,
+            time_type: energyLevel,
           }),
         })
       } else if (classification === 'flexible_commitment') {
@@ -1129,7 +1131,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           name: bt.name,
           color: bt.color,
           default_duration_minutes: bt.default_duration_minutes,
-          energy_level: bt.energy_level,
+          time_type: bt.time_type,
         }),
       })
       setBlockTypes(prev => prev.map(b => b.id === bt.id ? bt : b))
@@ -1164,8 +1166,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     [allScheduledItems]
   )
   const energyCounts = useMemo(() => {
-    const counts = { A: 0, B: 0, C: 0 }
-    allScheduledItems.forEach(i => { counts[i.energy_level]++ })
+    const counts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, '0': 0 }
+    allScheduledItems.forEach(i => { counts[i.time_type] = (counts[i.time_type] ?? 0) + 1 })
     return counts
   }, [allScheduledItems])
 
@@ -1178,7 +1180,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
   const filteredHopper = useMemo(() => hopper.filter(item => {
     if (hopperFilter === 'all') return true
-    return item.energy_level === hopperFilter
+    return item.time_type === hopperFilter
   }), [hopper, hopperFilter])
 
   const urgentHopper = useMemo(() => filteredHopper.filter(i => i.priority_tier === 'urgent'), [filteredHopper])
@@ -1323,10 +1325,10 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                 </span>
                 <span style={{
                   width: 12, height: 12, borderRadius: '50%',
-                  background: EC[bt.energy_level],
+                  background: EC[bt.time_type],
                   display: 'inline-block',
                   flexShrink: 0,
-                }} title={EL[bt.energy_level]} />
+                }} title={EL[bt.time_type]} />
               </div>
             ))}
             <div style={{ flex: 1 }} />
@@ -1405,9 +1407,9 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   />
                   <span style={{ fontSize: 10, color: '#8A857D' }}>min</span>
                   <select
-                    value={bt.energy_level}
+                    value={bt.time_type}
                     onChange={e => {
-                      const updated = { ...bt, energy_level: e.target.value as 'A' | 'B' | 'C' }
+                      const updated = { ...bt, time_type: e.target.value as 'A' | 'B' | 'C' | 'D' | '0' }
                       setEditingBlockTypes(prev => prev.map(b => b.id === bt.id ? updated : b))
                       saveBlockType(updated)
                     }}
@@ -1415,7 +1417,9 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   >
                     <option value="A">A Focus</option>
                     <option value="B">B Routine</option>
-                    <option value="C">C Easy</option>
+                    <option value="C">C Unwanted</option>
+                    <option value="D">D Self-care</option>
+                    <option value="0">0 Free</option>
                   </select>
                 </div>
               ))}
@@ -1495,8 +1499,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   >◀</button>
                 </div>
                 {/* Filter chips */}
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {['all', 'A', 'B', 'C'].map(f => (
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {['all', 'A', 'B', 'C', 'D', '0'].map(f => (
                     <button
                       key={f}
                       onClick={() => setHopperFilter(f)}
@@ -1744,7 +1748,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   const placeholderColor = draggingBlock
                     ? (draggingBlock.block.block_type?.color ?? '#4B82AF')
                     : draggingHopperItem
-                      ? ({ A: '#C4725A', B: '#4B82AF', C: '#7A9E82' }[draggingHopperItem.energy_level] ?? '#4B82AF')
+                      ? (EC[draggingHopperItem.time_type] ?? '#4B82AF')
                       : (placeholderBt?.color ?? '#4B82AF')
                   const placeholderDuration = draggingBlock
                     ? draggingBlock.block.duration_minutes
@@ -2059,9 +2063,14 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                                   gap: 4,
                                   borderBottom: '1px solid #F5F3EF',
                                   background: item.status === 'completed' ? '#5A9E6F08' : 'transparent',
+                                  borderLeft: item.status === 'completed'
+                                    ? '3px solid #5A9E6F'
+                                    : item.committed_at
+                                      ? `3px solid ${EC[item.time_type]}`
+                                      : `3px dashed ${EC[item.time_type]}80`,
                                 }}
                               >
-                                <span style={{ width: 5, height: 5, borderRadius: '50%', background: EC[item.energy_level], flexShrink: 0 }} />
+                                <span style={{ width: 5, height: 5, borderRadius: '50%', background: EC[item.time_type], flexShrink: 0 }} />
                                 <span style={{
                                   fontSize: 9,
                                   flex: 1,
@@ -2094,7 +2103,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                             {/* Drop placeholder */}
                             {isOver && draggingHopperItem && (
                               <div style={{ padding: '3px 6px', background: '#4B82AF08', borderBottom: '1px dashed #4B82AF30', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <span style={{ width: 5, height: 5, borderRadius: '50%', background: EC[draggingHopperItem.energy_level], flexShrink: 0 }} />
+                                <span style={{ width: 5, height: 5, borderRadius: '50%', background: EC[draggingHopperItem.time_type], flexShrink: 0 }} />
                                 <span style={{ fontSize: 9, color: '#4B82AF80', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {draggingHopperItem.name}
                                 </span>
@@ -2232,27 +2241,56 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
               <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
                 {rightTab === 'summary' ? (
                   <>
-                    {/* Energy this week */}
+                    {/* Time Balance */}
                     <div style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: '#5A5650', letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' }}>Energy This Week</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: '#5A5650', letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' }}>Time Balance</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        {(['A', 'B', 'C'] as const).map(level => (
+                        {(['A', 'B', 'C', 'D', '0'] as const).map(level => (
                           <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ width: 20, height: 20, borderRadius: '50%', background: EC[level], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#FFF', fontWeight: 700, flexShrink: 0 }}>
+                            <span style={{ width: 20, height: 20, borderRadius: '50%', background: EC[level], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: level === '0' ? '#5A5650' : '#FFF', fontWeight: 700, flexShrink: 0 }}>
                               {level}
                             </span>
+                            <span style={{ fontSize: 9, color: '#8A857D', minWidth: 48 }}>{EL[level]}</span>
                             <div style={{ flex: 1, height: 6, background: '#E8E4DC', borderRadius: 3, overflow: 'hidden' }}>
                               <div style={{
                                 height: '100%',
-                                width: `${allScheduledItems.length > 0 ? (energyCounts[level] / allScheduledItems.length) * 100 : 0}%`,
+                                width: `${allScheduledItems.length > 0 ? ((energyCounts[level] ?? 0) / allScheduledItems.length) * 100 : 0}%`,
                                 background: EC[level],
                                 borderRadius: 3,
                               }} />
                             </div>
-                            <span style={{ fontSize: 10, color: '#8A857D', minWidth: 16, textAlign: 'right' }}>{energyCounts[level]}</span>
+                            <span style={{ fontSize: 10, color: '#8A857D', minWidth: 16, textAlign: 'right' }}>{energyCounts[level] ?? 0}</span>
                           </div>
                         ))}
                       </div>
+                      {/* Warnings */}
+                      {allScheduledItems.length > 0 && (() => {
+                        const warnings: string[] = []
+                        if ((energyCounts['0'] ?? 0) === 0) warnings.push('No free time this week. Consider protecting some.')
+                        if ((energyCounts['D'] ?? 0) === 0) warnings.push('No self-care scheduled. This creates a leak in your Safety pool.')
+                        // Check if any day has 3+ C-type items
+                        const cByDay: Record<string, number> = {}
+                        Object.entries(dayBlocks).forEach(([ds, blocks]) => {
+                          blocks.forEach(b => b.items.forEach(item => {
+                            if (item.time_type === 'C') cByDay[ds] = (cByDay[ds] ?? 0) + 1
+                          }))
+                        })
+                        const heavyCDay = Object.entries(cByDay).find(([, count]) => count >= 3)
+                        if (heavyCDay) {
+                          const dayName = new Date(heavyCDay[0]).toLocaleDateString('en-US', { weekday: 'short' })
+                          warnings.push(`${dayName} has ${heavyCDay[1]} unwanted obligations clustered. Consider spreading them.`)
+                        }
+                        if (warnings.length === 0) return null
+                        return (
+                          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {warnings.map((w, i) => (
+                              <div key={i} style={{ fontSize: 9, color: '#9E6A46', background: '#FFF8F0', border: '1px solid #F5E4D0', borderRadius: 4, padding: '4px 6px', lineHeight: 1.4 }}>
+                                {w}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     {/* Items per day */}
@@ -2411,7 +2449,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Energy Level</div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {(['A', 'B', 'C'] as const).map(level => (
+                  {(['A', 'B', 'C', 'D', '0'] as const).map(level => (
                     <button
                       key={level}
                       onClick={() => setClassifying(s => s ? { ...s, energyLevel: level } : s)}
@@ -2494,7 +2532,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   setHopper(prev => prev.map(h => h.id === id ? {
                     ...h,
                     name: data.suggested_name ?? h.name,
-                    energy_level: data.suggested_energy_level ?? h.energy_level,
+                    time_type: data.suggested_time_type ?? h.time_type,
                     emotional_weight: data.suggested_emotional_weight ?? h.emotional_weight,
                     duration_min: data.suggested_duration_min ?? h.duration_min,
                     duration_max: data.suggested_duration_max ?? h.duration_max,
@@ -2574,7 +2612,7 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragSta
         width: 7,
         height: 7,
         borderRadius: '50%',
-        background: EC[item.energy_level],
+        background: EC[item.time_type],
         flexShrink: 0,
         marginTop: 3,
       }} />

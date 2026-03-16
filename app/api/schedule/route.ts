@@ -36,10 +36,10 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const {
-    activity_id, hopper_item_id, name, description,
+    activity_id, hopper_item_id, task_suggestion_id, name, description,
     scheduled_date, scheduled_time, scheduled_end_time,
-    flexibility = 'anytime_today', context = [], energy_level = 'B',
-    emotional_weight = 'normal',
+    flexibility = 'anytime_today', context = [], time_type = 'B',
+    emotional_weight = 'normal', bounding_type = 'action',
   } = body
 
   if (!name || !scheduled_date) {
@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
       user_id: user.id,
       activity_id: activity_id ?? null,
       hopper_item_id: hopper_item_id ?? null,
+      task_suggestion_id: task_suggestion_id ?? null,
       name,
       description: description ?? null,
       scheduled_date,
@@ -59,8 +60,9 @@ export async function POST(req: NextRequest) {
       scheduled_end_time: scheduled_end_time ?? null,
       flexibility,
       context,
-      energy_level,
+      time_type,
       emotional_weight,
+      bounding_type,
       status: 'active',
     })
     .select()

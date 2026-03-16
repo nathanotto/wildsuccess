@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
         frequency: freq !== 'one_time' ? freq : null,
         status: 'active',
         is_preventive: ed.suggested_is_preventive ?? false,
-        energy_level: ed.suggested_energy_level ?? 'B',
+        time_type: ed.suggested_time_type ?? 'B',
         emotional_weight: ed.suggested_emotional_weight ?? 'normal',
         context: ed.suggested_context ?? [],
         flexibility: ed.suggested_flexibility ?? 'anytime_this_week',

@@ -2,8 +2,8 @@
 import { useState, useEffect } from 'react'
 import { TimeTemplateBlock } from '@/lib/types'
 
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#7A9E82' }
-const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Easy' }
+const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Unwanted', D: 'Self-care', '0': 'Free' }
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 interface Props {
@@ -16,7 +16,7 @@ interface EditingBlock {
   label: string
   start_time: string
   end_time: string
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   sort_order: number
 }
 
@@ -55,7 +55,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
       label: '',
       start_time: '09:00',
       end_time: '10:00',
-      energy_level: 'B',
+      time_type: 'B',
       sort_order: dayBlocks.length,
     })
   }
@@ -67,7 +67,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
       label: b.label,
       start_time: b.start_time.slice(0, 5),
       end_time: b.end_time.slice(0, 5),
-      energy_level: b.energy_level,
+      time_type: b.time_type,
       sort_order: b.sort_order,
     })
   }
@@ -84,7 +84,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
           label: editing.label,
           start_time: editing.start_time,
           end_time: editing.end_time,
-          energy_level: editing.energy_level,
+          time_type: editing.time_type,
         }),
       })
       if (res.ok) {
@@ -100,7 +100,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
           label: editing.label,
           start_time: editing.start_time,
           end_time: editing.end_time,
-          energy_level: editing.energy_level,
+          time_type: editing.time_type,
           sort_order: editing.sort_order,
           context: [],
         }),
@@ -194,11 +194,11 @@ export default function TimeTemplateEditor({ onClose }: Props) {
                           >
                             {!isEditingThis ? (
                               <div style={{ padding: '7px 9px', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                                <div style={{ width: 3, height: 28, borderRadius: 2, background: EC[block.energy_level], flexShrink: 0, marginTop: 2 }} />
+                                <div style={{ width: 3, height: 28, borderRadius: 2, background: EC[block.time_type], flexShrink: 0, marginTop: 2 }} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 11, fontWeight: 600, color: '#2D2A26', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.label}</div>
                                   <div style={{ fontSize: 10, color: '#8A857D' }}>{formatBlockTime(block.start_time)} – {formatBlockTime(block.end_time)}</div>
-                                  <div style={{ fontSize: 9, color: EC[block.energy_level], fontWeight: 600, marginTop: 1 }}>{EL[block.energy_level]}</div>
+                                  <div style={{ fontSize: 9, color: EC[block.time_type], fontWeight: 600, marginTop: 1 }}>{EL[block.time_type]}</div>
                                 </div>
                               </div>
                             ) : (
@@ -223,9 +223,9 @@ export default function TimeTemplateEditor({ onClose }: Props) {
                                   </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: 3, marginBottom: 8 }}>
-                                  {['A', 'B', 'C'].map(e => (
-                                    <button key={e} onClick={() => setEditing(ed => ed ? { ...ed, energy_level: e as 'A' | 'B' | 'C' } : ed)}
-                                      style={{ flex: 1, padding: '3px 0', borderRadius: 5, border: '1.5px solid', borderColor: editing.energy_level === e ? EC[e] : '#E8E4DC', background: editing.energy_level === e ? EC[e] + '15' : 'transparent', color: editing.energy_level === e ? EC[e] : '#8A857D', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>{EL[e]}</button>
+                                  {['A', 'B', 'C', 'D', '0'].map(e => (
+                                    <button key={e} onClick={() => setEditing(ed => ed ? { ...ed, time_type: e as 'A' | 'B' | 'C' | 'D' | '0' } : ed)}
+                                      style={{ flex: 1, padding: '3px 0', borderRadius: 5, border: '1.5px solid', borderColor: editing.time_type === e ? EC[e] : '#E8E4DC', background: editing.time_type === e ? EC[e] + '15' : 'transparent', color: editing.time_type === e ? EC[e] : '#8A857D', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>{EL[e]}</button>
                                   ))}
                                 </div>
                                 <div style={{ display: 'flex', gap: 4 }}>
@@ -264,10 +264,10 @@ export default function TimeTemplateEditor({ onClose }: Props) {
                                 style={{ width: '100%', padding: '3px 5px', borderRadius: 5, border: '1px solid #E8E4DC', fontSize: 11, fontFamily: "'Source Sans 3', sans-serif", outline: 'none' }} />
                             </div>
                           </div>
-                          <div style={{ display: 'flex', gap: 3, marginBottom: 8 }}>
-                            {['A', 'B', 'C'].map(e => (
-                              <button key={e} onClick={() => setEditing(ed => ed ? { ...ed, energy_level: e as 'A' | 'B' | 'C' } : ed)}
-                                style={{ flex: 1, padding: '3px 0', borderRadius: 5, border: '1.5px solid', borderColor: editing.energy_level === e ? EC[e] : '#E8E4DC', background: editing.energy_level === e ? EC[e] + '15' : 'transparent', color: editing.energy_level === e ? EC[e] : '#8A857D', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>{EL[e]}</button>
+                          <div style={{ display: 'flex', gap: 3, marginBottom: 8, flexWrap: 'wrap' }}>
+                            {['A', 'B', 'C', 'D', '0'].map(e => (
+                              <button key={e} onClick={() => setEditing(ed => ed ? { ...ed, time_type: e as 'A' | 'B' | 'C' | 'D' | '0' } : ed)}
+                                style={{ flex: 1, padding: '3px 0', borderRadius: 5, border: '1.5px solid', borderColor: editing.time_type === e ? EC[e] : '#E8E4DC', background: editing.time_type === e ? EC[e] + '15' : 'transparent', color: editing.time_type === e ? EC[e] : '#8A857D', fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>{EL[e]}</button>
                             ))}
                           </div>
                           <div style={{ display: 'flex', gap: 4 }}>

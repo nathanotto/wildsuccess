@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { block_date, label, start_time, end_time, energy_level = 'B', is_hard = false, sort_order = 0, source = 'manual', context = [] } = body
+  const { block_date, label, start_time, end_time, time_type = 'B', is_hard = false, sort_order = 0, source = 'manual', context = [] } = body
 
   if (!block_date || !label) {
     return NextResponse.json({ error: 'block_date and label are required' }, { status: 400 })
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       label,
       start_time: start_time ?? null,
       end_time: end_time ?? null,
-      energy_level,
+      time_type,
       is_hard,
       sort_order,
       source,

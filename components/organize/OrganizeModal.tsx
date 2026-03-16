@@ -240,7 +240,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
         activityId: h.activity_id ?? undefined,
         name: h.raw_input,
         source: h.source,
-        energyLevel: (act?.energy_level ?? 'B') as 'A' | 'B' | 'C',
+        energyLevel: (act?.time_type ?? 'B') as 'A' | 'B' | 'C',
         emotionalWeight: (act?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
         durationMin: act?.duration_range_min ?? 15,
         durationMax: act?.duration_range_max ?? 30,
@@ -259,7 +259,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
         localId: b.id, dbId: b.id, label: b.label,
         start: b.start_time ? formatTime(b.start_time) : '?',
         end: b.end_time ? formatTime(b.end_time) : '?',
-        energyLevel: b.energy_level as 'A' | 'B' | 'C',
+        energyLevel: b.time_type as 'A' | 'B' | 'C',
         isHardBlock: b.is_hard, items: [],
       }))
     } else {
@@ -275,7 +275,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
         hopperItemId: s.hopper_item_id ?? undefined,
         activityId: s.activity_id ?? undefined,
         name: s.name, source: 'template_proposal',
-        energyLevel: s.energy_level as 'A' | 'B' | 'C',
+        energyLevel: s.time_type as 'A' | 'B' | 'C',
         emotionalWeight: s.emotional_weight as 'light' | 'normal' | 'heavy',
         durationMin: 15, durationMax: 30, flexibility: s.flexibility, values: [],
         isHard: s.flexibility === 'hard_scheduled',
@@ -326,7 +326,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     if (dragItem.fromSection === 'hopper' && dragItem.hopperItemId) {
       await fetch('/api/schedule', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: dragItem.name, hopper_item_id: dragItem.hopperItemId, activity_id: dragItem.activityId ?? null, scheduled_date: todayStr(), flexibility: dragItem.flexibility, energy_level: dragItem.energyLevel, emotional_weight: dragItem.emotionalWeight, time_block_id: block?.dbId ?? null }),
+        body: JSON.stringify({ name: dragItem.name, hopper_item_id: dragItem.hopperItemId, activity_id: dragItem.activityId ?? null, scheduled_date: todayStr(), flexibility: dragItem.flexibility, time_type: dragItem.energyLevel, emotional_weight: dragItem.emotionalWeight, time_block_id: block?.dbId ?? null }),
       })
     }
   }
@@ -339,7 +339,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     if (dragItem.fromSection === 'hopper' && dragItem.hopperItemId) {
       await fetch('/api/schedule', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: dragItem.name, hopper_item_id: dragItem.hopperItemId, activity_id: dragItem.activityId ?? null, scheduled_date: todayStr(), flexibility: 'anytime_today', energy_level: dragItem.energyLevel, emotional_weight: dragItem.emotionalWeight }),
+        body: JSON.stringify({ name: dragItem.name, hopper_item_id: dragItem.hopperItemId, activity_id: dragItem.activityId ?? null, scheduled_date: todayStr(), flexibility: 'anytime_today', time_type: dragItem.energyLevel, emotional_weight: dragItem.emotionalWeight }),
       })
     }
   }
@@ -439,7 +439,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
           scheduled_time: hopperEdit.schedTime || null,
           scheduled_end_time: hopperEdit.schedTime ? computeEndTime(hopperEdit.schedTime, hopperEdit.schedDuration) : null,
           flexibility: hopperEdit.schedTime ? 'soft_scheduled' : 'anytime_today',
-          energy_level: item.energyLevel,
+          time_type: item.energyLevel,
           emotional_weight: item.emotionalWeight,
           time_block_id: block?.dbId ?? null,
         }),
@@ -552,7 +552,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     const hr = await fetch('/api/hopper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_input: name, source: 'quick_capture', proposed_date: today }) })
     if (hr.ok) {
       const h = await hr.json()
-      await fetch('/api/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, hopper_item_id: h.id, scheduled_date: today, flexibility: 'anytime_today', energy_level: block?.energyLevel ?? 'B', emotional_weight: 'normal', time_block_id: block?.dbId ?? null }) })
+      await fetch('/api/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, hopper_item_id: h.id, scheduled_date: today, flexibility: 'anytime_today', time_type: block?.energyLevel ?? 'B', emotional_weight: 'normal', time_block_id: block?.dbId ?? null }) })
     }
   }
 
@@ -561,7 +561,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     const item: LocalItem = { localId: 'new-' + Date.now(), name, source: 'quick_capture', energyLevel: 'B', emotionalWeight: 'normal', durationMin: 15, durationMax: 30, flexibility: 'anytime_today', values: [] }
     setUnscheduledTasks(t => [...t, item])
     const hr = await fetch('/api/hopper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_input: name, source: 'quick_capture', proposed_date: today }) })
-    if (hr.ok) { const h = await hr.json(); await fetch('/api/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, hopper_item_id: h.id, scheduled_date: today, flexibility: 'anytime_today', energy_level: 'B', emotional_weight: 'normal' }) }) }
+    if (hr.ok) { const h = await hr.json(); await fetch('/api/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, hopper_item_id: h.id, scheduled_date: today, flexibility: 'anytime_today', time_type: 'B', emotional_weight: 'normal' }) }) }
   }
 
   const captureToHopper = async (name: string) => {
@@ -579,7 +579,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     setTimeBlocks(bs => [...bs.filter(b => !b.isHardBlock), block, ...bs.filter(b => b.isHardBlock)])
     setNewBlock({ label: '', start: '', end: '', energyLevel: 'B' })
     setAddingBlock(false)
-    const res = await fetch('/api/time-blocks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ block_date: today, label: block.label, start_time: newBlock.start || null, end_time: newBlock.end || null, energy_level: newBlock.energyLevel }) })
+    const res = await fetch('/api/time-blocks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ block_date: today, label: block.label, start_time: newBlock.start || null, end_time: newBlock.end || null, time_type: newBlock.energyLevel }) })
     if (res.ok) { const data = await res.json(); setTimeBlocks(bs => bs.map(b => b.localId === block.localId ? { ...b, dbId: data.id } : b)) }
   }
 

@@ -25,7 +25,7 @@ Your task:
    - Life domain (use only IDs from the provided list)
    - Value links (which values this serves, with contribution_strength: weak/moderate/strong)
    - Big Outcome link (if this clearly serves an active goal)
-   - Energy level (A = needs best attention/external-facing, B = routine/batchable, C = easy/recovery)
+   - Time type (A = productive focus/deep work, B = routine obligation/admin, C = unwanted obligation — must do but resent it, D = focused self-care: exercise/therapy/meditation, 0 = unstructured free time: reading/walking/doing nothing)
    - Emotional weight (light / normal / heavy — heavy = disproportionate felt burden relative to time)
    - Context tags (e.g. 'errand-out', 'computer-home', 'phone-anywhere', 'focused-quiet')
    - Block type (which type of time block this fits in — use only IDs from the provided list)
@@ -53,7 +53,7 @@ Return ONLY a valid JSON object with this exact structure — no preamble, no ma
   "suggested_value_links": [{"value_id": string, "value_name": string, "contribution_strength": "weak"|"moderate"|"strong"}],
   "suggested_big_outcome_id": string | null,
   "suggested_big_outcome_name": string | null,
-  "suggested_energy_level": "A" | "B" | "C",
+  "suggested_time_type": "A" | "B" | "C" | "D" | "0",
   "suggested_emotional_weight": "light" | "normal" | "heavy",
   "suggested_context": string[],
   "suggested_block_type_id": string | null,
@@ -78,9 +78,9 @@ function buildUserMessage(rawInput: string, ctx: {
 User context:
 Values: ${JSON.stringify((ctx.values as Record<string, unknown>[]).map(v => ({ id: v.id, name: v.name, type: v.value_type, score: v.score, sufficiency_status: v.sufficiency_status })))}
 Life domains: ${JSON.stringify((ctx.domains as Record<string, unknown>[]).map(d => ({ id: d.id, name: d.name })))}
-Activity templates: ${JSON.stringify((ctx.activities as Record<string, unknown>[]).map(a => ({ id: a.id, name: a.name, recurrence: a.frequency, energy_level: a.energy_level, value_links: a.activity_value_links, domain_links: a.activity_domain_links })))}
+Activity templates: ${JSON.stringify((ctx.activities as Record<string, unknown>[]).map(a => ({ id: a.id, name: a.name, recurrence: a.frequency, time_type: a.time_type, value_links: a.activity_value_links, domain_links: a.activity_domain_links })))}
 Big Outcomes: ${JSON.stringify((ctx.outcomes as Record<string, unknown>[]).map(o => ({ id: o.id, name: o.name, status: o.status })))}
-Block types: ${JSON.stringify((ctx.blockTypes as Record<string, unknown>[]).map(bt => ({ id: bt.id, name: bt.name, energy_level: bt.energy_level })))}
+Block types: ${JSON.stringify((ctx.blockTypes as Record<string, unknown>[]).map(bt => ({ id: bt.id, name: bt.name, time_type: bt.time_type })))}
 Recent captures: ${JSON.stringify((ctx.recentHopper as Record<string, unknown>[]).map(h => ({ raw_input: h.raw_input, enriched_name: (h.enrichment_data as Record<string, unknown> | null)?.suggested_name ?? null })))}`
 }
 
@@ -149,10 +149,10 @@ export async function POST(req: NextRequest) {
       supabase.from('user_values').select('*').eq('user_id', user.id).eq('is_active', true),
       supabase.from('life_domains').select('*').eq('user_id', user.id).eq('is_active', true),
       supabase.from('activities')
-        .select('id, name, frequency, energy_level, activity_value_links(value_id, contribution_strength), activity_domain_links(domain_id)')
+        .select('id, name, frequency, time_type, activity_value_links(value_id, contribution_strength), activity_domain_links(domain_id)')
         .eq('user_id', user.id).eq('status', 'active').is('archived_at', null),
       supabase.from('big_outcomes').select('id, name, status').eq('user_id', user.id).in('status', ['aspirational', 'in_progress']),
-      supabase.from('block_types').select('id, name, energy_level').eq('user_id', user.id).eq('is_active', true),
+      supabase.from('block_types').select('id, name, time_type').eq('user_id', user.id).eq('is_active', true),
       supabase.from('hopper_items').select('raw_input, enrichment_data')
         .eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
     ])

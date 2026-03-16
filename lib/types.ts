@@ -4,6 +4,7 @@ export interface UserValue {
   name: string
   description: string | null
   value_type: 'preventive' | 'promotional'
+  layer: 'safety' | 'security' | 'freedom' | 'opportunity'
   sufficiency_threshold: string | null
   sufficiency_status: string
   score: number
@@ -36,7 +37,6 @@ export interface BigOutcome {
   completed_at: string | null
   completion_note: string | null
   abandonment_reason: string | null
-  life_domain_id: string | null
   sort_order: number
   created_at: string
   updated_at: string
@@ -49,7 +49,7 @@ export interface Activity {
   user_id: string
   name: string
   description: string | null
-  activity_type: 'recurring' | 'one_time'
+  activity_type: 'recurring'
   frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual' | null
   target_date: string | null
   status: 'active' | 'aspirational' | 'paused' | 'completed'
@@ -63,7 +63,7 @@ export interface Activity {
   sort_order: number
   // Session 3 additions
   context: string[]
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   emotional_weight: 'light' | 'normal' | 'heavy'
   flexibility: 'hard_scheduled' | 'soft_scheduled' | 'anytime_today' | 'anytime_this_week'
   clusterable: boolean
@@ -113,21 +113,31 @@ export interface TaskSuggestion {
   description: string | null
   recurrence: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'seasonal' | 'annual' | 'one_time' | null
   context: string[]
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   emotional_weight: 'light' | 'normal' | 'heavy'
   duration_range_min: number | null
   duration_range_max: number | null
   flexibility: 'hard_scheduled' | 'soft_scheduled' | 'anytime_today' | 'anytime_this_week'
   preferred_days: string[] | null
   preferred_time: string | null
-  life_domain_id: string | null
   source: 'template_derived' | 'user_created' | 'outside_request' | 'planning_function'
   sort_order: number
   last_completed_at: string | null
+  last_proposed_at: string | null
+  consecutive_dismissals: number
   is_active: boolean
   archived_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface TaskSuggestionValueLink {
+  id: string
+  user_id: string
+  task_suggestion_id: string
+  value_id: string
+  contribution_strength: 'weak' | 'moderate' | 'strong'
+  created_at: string
 }
 
 export interface TimeBlock {
@@ -141,7 +151,7 @@ export interface TimeBlock {
   focus_override_minutes: 25 | 50 | 75 | null
   block_type_id: string | null
   context: string[]
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   is_hard: boolean
   sort_order: number
   source: 'manual' | 'time_template' | 'calendar_import'
@@ -235,6 +245,8 @@ export interface HopperItem {
   priority_score: number
   priority_tier: 'urgent' | 'normal' | 'suggested'
   block_type_hint: string | null
+  bounding_type: 'time' | 'action' | 'outcome' | 'unbounded'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   enrichment_status: 'none' | 'pending' | 'enriched' | 'confirmed' | 'declined'
   enrichment_data: Record<string, unknown> | null
   enriched_at: string | null
@@ -258,8 +270,10 @@ export interface ScheduleItem {
   scheduled_end_time: string | null
   flexibility: 'hard_scheduled' | 'soft_scheduled' | 'anytime_today'
   context: string[]
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   emotional_weight: 'light' | 'normal' | 'heavy'
+  bounding_type: 'time' | 'action' | 'outcome' | 'unbounded'
+  committed_at: string | null
   status: 'active' | 'completed' | 'skipped' | 'rescheduled'
   completion_note: string | null
   actual_duration_minutes: number | null
@@ -310,8 +324,7 @@ export interface CalendarEventClassification {
   match_type: 'series' | 'event'
   classification: 'provisional' | 'info' | 'fixed_commitment' | 'flexible_commitment'
   display_label: string | null
-  energy_level: 'A' | 'B' | 'C' | null
-  life_domain_id: string | null
+  time_type: 'A' | 'B' | 'C' | 'D' | '0' | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -325,7 +338,7 @@ export interface TimeTemplateBlock {
   start_time: string
   end_time: string
   context: string[]
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   sort_order: number
   is_active: boolean
   created_at: string
@@ -338,7 +351,7 @@ export interface BlockType {
   name: string
   color: string
   default_duration_minutes: number
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   icon: string | null
   sort_order: number
   is_active: boolean
@@ -357,10 +370,10 @@ export interface FocusSettings {
 export interface ActivitySpec {
   name: string
   description?: string
-  activity_type: 'recurring' | 'one_time'
+  activity_type: 'recurring'
   frequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual' | null
   context: string[]
-  energy_level: 'A' | 'B' | 'C'
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
   emotional_weight: 'light' | 'normal' | 'heavy'
   flexibility: 'hard_scheduled' | 'soft_scheduled' | 'anytime_today' | 'anytime_this_week'
   clusterable: boolean

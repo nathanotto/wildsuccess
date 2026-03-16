@@ -1,48 +1,49 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET() {
+// GET /api/task-suggestion-value-links?task_suggestion_id=
+export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const taskSuggestionId = req.nextUrl.searchParams.get('task_suggestion_id')
+  if (!taskSuggestionId) return NextResponse.json({ error: 'task_suggestion_id required' }, { status: 400 })
+
   const { data, error } = await supabase
-    .from('calendar_event_classifications')
+    .from('task_suggestion_value_links')
     .select('*')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+    .eq('task_suggestion_id', taskSuggestionId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+  return NextResponse.json(data)
 }
 
+// POST /api/task-suggestion-value-links
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { match_key, match_type, classification, display_label, time_type, life_domain_id, notes } = body
+  const { task_suggestion_id, value_id, contribution_strength = 'moderate' } = body
 
-  if (!match_key || !match_type || !classification) {
-    return NextResponse.json({ error: 'match_key, match_type, and classification are required' }, { status: 400 })
+  if (!task_suggestion_id || !value_id) {
+    return NextResponse.json({ error: 'task_suggestion_id and value_id are required' }, { status: 400 })
   }
 
   const { data, error } = await supabase
-    .from('calendar_event_classifications')
+    .from('task_suggestion_value_links')
     .upsert({
       user_id: user.id,
-      match_key,
-      match_type,
-      classification,
-      display_label: display_label ?? null,
-      time_type: time_type ?? null,
-      life_domain_id: life_domain_id ?? null,
-      notes: notes ?? null,
-    }, { onConflict: 'user_id,match_key' })
+      task_suggestion_id,
+      value_id,
+      contribution_strength,
+    }, { onConflict: 'task_suggestion_id,value_id' })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data, { status: 201 })
 }

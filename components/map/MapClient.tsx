@@ -14,6 +14,7 @@ import SeedQuestionsModal from './SeedQuestionsModal'
 import QuickCapture from './QuickCapture'
 import ContextualNudge from './ContextualNudge'
 import OrganizeWeekModal from '@/components/organize/OrganizeWeekModal'
+import WaterfallDiagram from './WaterfallDiagram'
 
 interface Props {
   userId: string
@@ -43,6 +44,7 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [mapMode, setMapMode] = useState<'values' | 'life'>('values')
   const [organizeOpen, setOrganizeOpen] = useState(false)
+  const [referenceOpen, setReferenceOpen] = useState(false)
   const [hopperCount, setHopperCount] = useState(0)
 
   // Intake state
@@ -204,6 +206,7 @@ export default function MapClient({ userId, userEmail }: Props) {
             onAddValue={() => setModal({ type: 'newValue' })}
             onAddActivity={() => setModal({ type: 'newActivity' })}
             onAddOutcome={() => setModal({ type: 'newOutcome' })}
+            onShowReference={() => setReferenceOpen(true)}
           />
         ) : (
           <LifeMapSVG
@@ -403,6 +406,33 @@ export default function MapClient({ userId, userEmail }: Props) {
           domains={domains}
           activities={activities}
         />
+      )}
+
+      {referenceOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(45,42,38,0.40)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setReferenceOpen(false) }}
+        >
+          <div style={{
+            background: '#FAFAF7', borderRadius: 16, boxShadow: '0 8px 40px rgba(45,42,38,0.18)',
+            width: '90vw', maxWidth: 860, maxHeight: '90vh', overflowY: 'auto', position: 'relative',
+          }}>
+            <button
+              onClick={() => setReferenceOpen(false)}
+              style={{
+                position: 'sticky', top: 12, float: 'right', marginRight: 16,
+                width: 28, height: 28, borderRadius: 8, border: 'none',
+                background: '#E8E4DC', cursor: 'pointer', fontSize: 16, color: '#5A5650',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1,
+              }}
+            >×</button>
+            <WaterfallDiagram />
+          </div>
+        </div>
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} />}

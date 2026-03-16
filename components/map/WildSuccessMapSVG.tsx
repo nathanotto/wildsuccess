@@ -14,6 +14,7 @@ interface Props {
   onAddValue: () => void
   onAddActivity: () => void
   onAddOutcome: () => void
+  onShowReference: () => void
 }
 
 const CX = 500
@@ -98,7 +99,7 @@ function computeActivityLayout(
 
 export default function WildSuccessMapSVG({
   values, activities, outcomes, overdueActivityIds, displayName,
-  onEditValue, onEditActivity, onEditOutcome, onAddValue, onAddActivity, onAddOutcome,
+  onEditValue, onEditActivity, onEditOutcome, onAddValue, onAddActivity, onAddOutcome, onShowReference,
 }: Props) {
   const [selectedValue, setSelectedValue] = useState<UserValue | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
@@ -158,6 +159,11 @@ export default function WildSuccessMapSVG({
       {/* PROTECT / EXPAND labels */}
       <text x={CX - 310} y={38} textAnchor="middle" fontSize={10} fontWeight={700} fill="#9E6A46" letterSpacing="2" opacity={0.5}>PROTECT</text>
       <text x={CX + 310} y={38} textAnchor="middle" fontSize={10} fontWeight={700} fill="#4B82AF" letterSpacing="2" opacity={0.5}>EXPAND</text>
+      <text
+        x={CX - 310} y={52} textAnchor="middle" fontSize={9} fill="#9E6A46" opacity={0.45}
+        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+        onClick={onShowReference}
+      >Reference</text>
 
       {/* Lines: center → values */}
       {values.map(v => {

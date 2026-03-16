@@ -60,7 +60,7 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
   const [valueLinks, setValueLinks] = useState<ValueLink[]>(activity?.value_links ?? [])
 
   // Session 3 fields
-  const [energyLevel, setEnergyLevel] = useState<'A' | 'B' | 'C'>(activity?.energy_level ?? 'B')
+  const [energyLevel, setEnergyLevel] = useState<'A' | 'B' | 'C' | 'D' | '0'>(activity?.time_type ?? 'B')
   const [emotionalWeight, setEmotionalWeight] = useState<'light' | 'normal' | 'heavy'>(activity?.emotional_weight ?? 'normal')
   const [flexibility, setFlexibility] = useState<'hard_scheduled' | 'soft_scheduled' | 'anytime_today' | 'anytime_this_week'>(activity?.flexibility ?? 'anytime_this_week')
   const [context, setContext] = useState<string[]>(activity?.context ?? [])
@@ -133,7 +133,7 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
       domain_links: domainLinks.map(l => ({ domain_id: l.domain_id })),
       value_links: valueLinks.map(l => ({ value_id: l.value_id, contribution_strength: l.contribution_strength })),
       // Session 3
-      energy_level: energyLevel,
+      time_type: energyLevel,
       emotional_weight: emotionalWeight,
       flexibility,
       context,
@@ -216,16 +216,18 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
           </div>
         </div>
 
-        {/* Energy Level */}
+        {/* Time Type */}
         <div style={fieldStyle}>
-          <label style={labelStyle}>Energy Level</label>
+          <label style={labelStyle}>Time Type</label>
           <SegmentedControl
             value={energyLevel}
             onChange={setEnergyLevel}
             options={[
-              { value: 'A', label: 'A — High stakes', hint: 'External-facing, needs your best attention' },
-              { value: 'B', label: 'B — Routine', hint: 'Important but batchable, filler-friendly' },
-              { value: 'C', label: 'C — Low stakes', hint: 'Downtime, recovery, background tasks' },
+              { value: 'A', label: 'A — Focus', hint: 'Productive deep work, needs your best attention' },
+              { value: 'B', label: 'B — Routine', hint: 'Obligations, admin, errands' },
+              { value: 'C', label: 'C — Unwanted', hint: 'Must do but resent it' },
+              { value: 'D', label: 'D — Self-care', hint: 'Exercise, therapy, meditation' },
+              { value: '0', label: '0 — Free', hint: 'Unstructured, protected time' },
             ]}
           />
         </div>

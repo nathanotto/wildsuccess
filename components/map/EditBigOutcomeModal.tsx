@@ -21,7 +21,7 @@ export default function EditBigOutcomeModal({ outcome, values, domains, activiti
   const [description, setDescription] = useState(outcome?.description ?? '')
   const [status, setStatus] = useState(outcome?.status ?? 'aspirational')
   const [targetDate, setTargetDate] = useState(outcome?.target_date ?? '')
-  const [lifeDomainId, setLifeDomainId] = useState(outcome?.life_domain_id ?? '')
+  const [lifeDomainId, setLifeDomainId] = useState('')
   const [completionNote, setCompletionNote] = useState(outcome?.completion_note ?? '')
   const [abandonmentReason, setAbandonmentReason] = useState(outcome?.abandonment_reason ?? '')
   const [valueLinks, setValueLinks] = useState<ValueLink[]>(outcome?.value_links ?? [])

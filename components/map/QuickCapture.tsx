@@ -19,7 +19,7 @@ interface EnrichmentData {
   suggested_value_links: Array<{ value_id: string; value_name: string; contribution_strength: string }>
   suggested_big_outcome_id: string | null
   suggested_big_outcome_name: string | null
-  suggested_energy_level: 'A' | 'B' | 'C'
+  suggested_time_type: 'A' | 'B' | 'C' | 'D' | '0'
   suggested_emotional_weight: 'light' | 'normal' | 'heavy'
   suggested_context: string[]
   suggested_block_type_id: string | null
