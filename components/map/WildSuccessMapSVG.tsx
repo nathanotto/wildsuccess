@@ -112,19 +112,20 @@ export default function WildSuccessMapSVG({
   const protectAvg = protect.length > 0 ? protect.reduce((s, v) => s + v.score, 0) / protect.length : 0
   const expandAvg = expand.length > 0 ? expand.reduce((s, v) => s + v.score, 0) / expand.length : 0
 
+  const visibleActivities = activities.filter(a => a.status === 'active' || a.status === 'aspirational')
   const valueLayout = computeValueLayout(values)
-  const activityLayout = computeActivityLayout(activities, valueLayout)
+  const activityLayout = computeActivityLayout(visibleActivities, valueLayout)
 
   const hlValues = selectedActivity
     ? (selectedActivity.value_links?.map(l => l.value_id) ?? [])
     : selectedValue ? [selectedValue.id] : []
 
   const hlActivities = selectedValue
-    ? activities.filter(a => a.value_links?.some(l => l.value_id === selectedValue.id)).map(a => a.id)
+    ? visibleActivities.filter(a => a.value_links?.some(l => l.value_id === selectedValue.id)).map(a => a.id)
     : selectedActivity ? [selectedActivity.id] : []
 
   const hlOutcomeActivities = selectedOutcome
-    ? activities.filter(a => a.big_outcome_id === selectedOutcome.id).map(a => a.id)
+    ? visibleActivities.filter(a => a.big_outcome_id === selectedOutcome.id).map(a => a.id)
     : []
 
   const getHighestLeverage = () => {
@@ -189,7 +190,7 @@ export default function WildSuccessMapSVG({
       })}
 
       {/* Lines: values → activities */}
-      {activities.map(a => {
+      {visibleActivities.map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
         return a.value_links?.map(link => {
@@ -212,7 +213,7 @@ export default function WildSuccessMapSVG({
       })}
 
       {/* Cross-links (secondary values) */}
-      {activities.filter(a => (a.value_links?.length ?? 0) > 1).map(a => {
+      {visibleActivities.filter(a => (a.value_links?.length ?? 0) > 1).map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
         return a.value_links?.slice(1).map(link => {
@@ -232,7 +233,7 @@ export default function WildSuccessMapSVG({
       })}
 
       {/* Dashed lines from activities to their outcome boxes */}
-      {activities.map(a => {
+      {visibleActivities.map(a => {
         const ap = activityLayout[a.id]
         if (!ap || !a.big_outcome_id) return null
         const oIdx = outcomes.findIndex(o => o.id === a.big_outcome_id)
@@ -271,7 +272,7 @@ export default function WildSuccessMapSVG({
         const isSel = selectedValue?.id === v.id
         const isHl = hlValues.includes(v.id)
         const below = v.score < v.sufficiency_mark
-        const actCount = activities.filter(a => a.value_links?.some(l => l.value_id === v.id)).length
+        const actCount = visibleActivities.filter(a => a.value_links?.some(l => l.value_id === v.id)).length
 
         return (
           <g key={v.id}
@@ -304,7 +305,7 @@ export default function WildSuccessMapSVG({
       })}
 
       {/* ACTIVITY NODES */}
-      {activities.map(a => {
+      {visibleActivities.map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
         const isOverdue = overdueActivityIds.includes(a.id)
@@ -342,7 +343,7 @@ export default function WildSuccessMapSVG({
       })}
 
       {/* Always-visible labels for overdue activities */}
-      {activities.filter(a => overdueActivityIds.includes(a.id)).map(a => {
+      {visibleActivities.filter(a => overdueActivityIds.includes(a.id)).map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
         if (hlActivities.includes(a.id) || selectedActivity?.id === a.id || hoveredNode === a.id) return null
