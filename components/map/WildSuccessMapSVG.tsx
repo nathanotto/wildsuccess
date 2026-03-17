@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { UserValue, LifeDomain, BigOutcome, Activity } from '@/lib/types'
 
 interface Props {
@@ -37,7 +37,10 @@ function curvePath(x1: number, y1: number, x2: number, y2: number, curvature = 0
   return `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`
 }
 
-function computeValueLayout(values: UserValue[]): Record<string, { x: number; y: number }> {
+function computeValueLayout(
+  values: UserValue[],
+  overrides: Record<string, { x: number; y: number }>
+): Record<string, { x: number; y: number }> {
   const protect = values.filter(v => v.value_type === 'preventive')
   const expand = values.filter(v => v.value_type === 'promotional')
   const positions: Record<string, { x: number; y: number }> = {}
@@ -45,12 +48,14 @@ function computeValueLayout(values: UserValue[]): Record<string, { x: number; y:
   const outerRadius = 245
 
   protect.forEach((v, i) => {
+    if (overrides[v.id]) { positions[v.id] = overrides[v.id]; return }
     const angle = (Math.PI * 0.72) + (protect.length > 1 ? (i / (protect.length - 1)) * (Math.PI * 0.56) : Math.PI * 0.28)
     const r = i % 2 === 0 ? innerRadius : outerRadius
     positions[v.id] = { x: CX + Math.cos(angle) * r, y: CY + Math.sin(angle) * r * 0.85 }
   })
 
   expand.forEach((v, i) => {
+    if (overrides[v.id]) { positions[v.id] = overrides[v.id]; return }
     const angle = (Math.PI * -0.28) + (expand.length > 1 ? (i / (expand.length - 1)) * (Math.PI * 0.56) : Math.PI * 0.28)
     const r = i % 2 === 0 ? innerRadius : outerRadius
     positions[v.id] = { x: CX + Math.cos(angle) * r, y: CY + Math.sin(angle) * r * 0.85 }
@@ -107,13 +112,54 @@ export default function WildSuccessMapSVG({
   const [selectedOutcome, setSelectedOutcome] = useState<BigOutcome | null>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
 
+  // Drag state
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [posOverrides, setPosOverrides] = useState<Record<string, { x: number; y: number }>>(() =>
+    Object.fromEntries(values.filter(v => v.position_x != null).map(v => [v.id, { x: v.position_x!, y: v.position_y! }]))
+  )
+  const dragging = useRef<{ id: string; ox: number; oy: number } | null>(null)
+
+  function svgPoint(e: React.MouseEvent): { x: number; y: number } | null {
+    if (!svgRef.current) return null
+    const pt = svgRef.current.createSVGPoint()
+    pt.x = e.clientX; pt.y = e.clientY
+    const svgP = pt.matrixTransform(svgRef.current.getScreenCTM()!.inverse())
+    return { x: svgP.x, y: svgP.y }
+  }
+
+  function handleMouseMove(e: React.MouseEvent) {
+    if (!dragging.current) return
+    const pt = svgPoint(e)
+    if (!pt) return
+    const x = Math.max(30, Math.min(970, pt.x - dragging.current.ox))
+    const y = Math.max(30, Math.min(550, pt.y - dragging.current.oy))
+    setPosOverrides(prev => ({ ...prev, [dragging.current!.id]: { x, y } }))
+  }
+
+  function handleMouseUp() {
+    if (!dragging.current) return
+    const { id } = dragging.current
+    dragging.current = null
+    setPosOverrides(prev => {
+      const pos = prev[id]
+      if (pos) {
+        fetch(`/api/values/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position_x: pos.x, position_y: pos.y }),
+        })
+      }
+      return prev
+    })
+  }
+
   const protect = values.filter(v => v.value_type === 'preventive')
   const expand = values.filter(v => v.value_type === 'promotional')
   const protectAvg = protect.length > 0 ? protect.reduce((s, v) => s + v.score, 0) / protect.length : 0
   const expandAvg = expand.length > 0 ? expand.reduce((s, v) => s + v.score, 0) / expand.length : 0
 
   const visibleActivities = activities.filter(a => a.status === 'active' || a.status === 'aspirational')
-  const valueLayout = computeValueLayout(values)
+  const valueLayout = computeValueLayout(values, posOverrides)
   const activityLayout = computeActivityLayout(visibleActivities, valueLayout)
 
   const hlValues = selectedActivity
@@ -143,9 +189,14 @@ export default function WildSuccessMapSVG({
 
   return (
     <svg
+      ref={svgRef}
       viewBox="0 0 1000 580"
       style={{ width: '100%', height: 'auto', maxWidth: 'min(1400px, calc((100vh - 160px) * 1.724))' }}
       onClick={() => { setSelectedValue(null); setSelectedActivity(null); setSelectedOutcome(null) }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onContextMenu={e => { if (dragging.current) e.preventDefault() }}
     >
       <defs>
         <filter id="glow">
@@ -283,9 +334,19 @@ export default function WildSuccessMapSVG({
               setSelectedOutcome(null)
             }}
             onDoubleClick={(e) => { e.stopPropagation(); onEditValue(v) }}
+            onMouseDown={(e) => {
+              const isRightClick = e.button === 2 || (e.button === 0 && e.ctrlKey)
+              if (!isRightClick) return
+              e.preventDefault()
+              e.stopPropagation()
+              const pt = svgPoint(e)
+              if (!pt) return
+              dragging.current = { id: v.id, ox: pt.x - vp.x, oy: pt.y - vp.y }
+            }}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation() }}
             onMouseEnter={() => setHoveredNode(`v${v.id}`)}
             onMouseLeave={() => setHoveredNode(null)}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: dragging.current?.id === v.id ? 'grabbing' : 'pointer' }}
           >
             {(isSel || isHl) && (
               <circle cx={vp.x} cy={vp.y} r={r + 6} fill="none" stroke={vc.stroke} strokeWidth={1.5} strokeOpacity={0.3} filter="url(#glow)" />
@@ -403,6 +464,11 @@ export default function WildSuccessMapSVG({
         <circle cx={CX + 310} cy={98} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
         <text x={CX + 310} y={102} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
         <text x={CX + 310} y={120} textAnchor="middle" fontSize={7} fill="#8A8578">outcome</text>
+      </g>
+      <g onClick={(e) => { e.stopPropagation(); onAddValue() }} style={{ cursor: 'pointer' }}>
+        <circle cx={CX + 310} cy={138} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
+        <text x={CX + 310} y={142} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
+        <text x={CX + 310} y={160} textAnchor="middle" fontSize={7} fill="#8A8578">value</text>
       </g>
     </svg>
   )

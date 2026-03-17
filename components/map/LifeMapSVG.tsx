@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { UserValue, LifeDomain, Activity, BigOutcome } from '@/lib/types'
 
 interface Props {
@@ -36,7 +36,10 @@ function curvePath(x1: number, y1: number, x2: number, y2: number, curvature = 0
   return `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`
 }
 
-function computeDomainLayout(domains: LifeDomain[]): Record<string, { x: number; y: number }> {
+function computeDomainLayout(
+  domains: LifeDomain[],
+  overrides: Record<string, { x: number; y: number }>
+): Record<string, { x: number; y: number }> {
   const sorted = [...domains].sort((a, b) => a.sort_order - b.sort_order)
   const half = Math.ceil(sorted.length / 2)
   const left = sorted.slice(0, half)
@@ -46,12 +49,14 @@ function computeDomainLayout(domains: LifeDomain[]): Record<string, { x: number;
   const outerRadius = 250
 
   left.forEach((d, i) => {
+    if (overrides[d.id]) { positions[d.id] = overrides[d.id]; return }
     const angle = (Math.PI * 0.72) + (left.length > 1 ? (i / (left.length - 1)) * (Math.PI * 0.56) : Math.PI * 0.28)
     const r = i % 2 === 0 ? innerRadius : outerRadius
     positions[d.id] = { x: CX + Math.cos(angle) * r, y: CY + Math.sin(angle) * r * 0.85 }
   })
 
   right.forEach((d, i) => {
+    if (overrides[d.id]) { positions[d.id] = overrides[d.id]; return }
     const angle = (Math.PI * -0.28) + (right.length > 1 ? (i / (right.length - 1)) * (Math.PI * 0.56) : Math.PI * 0.28)
     const r = i % 2 === 0 ? innerRadius : outerRadius
     positions[d.id] = { x: CX + Math.cos(angle) * r, y: CY + Math.sin(angle) * r * 0.85 }
@@ -108,8 +113,50 @@ export default function LifeMapSVG({
   const [selectedOutcome, setSelectedOutcome] = useState<BigOutcome | null>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
 
-  const domainLayout = computeDomainLayout(domains)
-  const activityLayout = computeActivityLayout(activities, domainLayout)
+  // Drag state
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [posOverrides, setPosOverrides] = useState<Record<string, { x: number; y: number }>>(() =>
+    Object.fromEntries(domains.filter(d => d.position_x != null).map(d => [d.id, { x: d.position_x!, y: d.position_y! }]))
+  )
+  const dragging = useRef<{ id: string; ox: number; oy: number } | null>(null)
+
+  function svgPoint(e: React.MouseEvent): { x: number; y: number } | null {
+    if (!svgRef.current) return null
+    const pt = svgRef.current.createSVGPoint()
+    pt.x = e.clientX; pt.y = e.clientY
+    const svgP = pt.matrixTransform(svgRef.current.getScreenCTM()!.inverse())
+    return { x: svgP.x, y: svgP.y }
+  }
+
+  function handleMouseMove(e: React.MouseEvent) {
+    if (!dragging.current) return
+    const pt = svgPoint(e)
+    if (!pt) return
+    const x = Math.max(30, Math.min(970, pt.x - dragging.current.ox))
+    const y = Math.max(30, Math.min(550, pt.y - dragging.current.oy))
+    setPosOverrides(prev => ({ ...prev, [dragging.current!.id]: { x, y } }))
+  }
+
+  function handleMouseUp() {
+    if (!dragging.current) return
+    const { id } = dragging.current
+    dragging.current = null
+    setPosOverrides(prev => {
+      const pos = prev[id]
+      if (pos) {
+        fetch(`/api/life-domains/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position_x: pos.x, position_y: pos.y }),
+        })
+      }
+      return prev
+    })
+  }
+
+  const visibleActivities = activities.filter(a => a.status === 'active' || a.status === 'aspirational')
+  const domainLayout = computeDomainLayout(domains, posOverrides)
+  const activityLayout = computeActivityLayout(visibleActivities, domainLayout)
 
   // Value → color map
   const valueColorMap: Record<string, string> = {}
@@ -117,7 +164,7 @@ export default function LifeMapSVG({
 
   // Activity count per domain
   const actCountByDomain: Record<string, number> = {}
-  activities.forEach(a => {
+  visibleActivities.forEach(a => {
     a.domain_links?.forEach(dl => {
       actCountByDomain[dl.domain_id] = (actCountByDomain[dl.domain_id] ?? 0) + 1
     })
@@ -129,11 +176,11 @@ export default function LifeMapSVG({
     : selectedDomain ? [selectedDomain.id] : []
 
   const hlActivities = selectedDomain
-    ? activities.filter(a => a.domain_links?.some(l => l.domain_id === selectedDomain.id)).map(a => a.id)
+    ? visibleActivities.filter(a => a.domain_links?.some(l => l.domain_id === selectedDomain.id)).map(a => a.id)
     : selectedActivity ? [selectedActivity.id] : []
 
   const hlOutcomeActivities = selectedOutcome
-    ? activities.filter(a => a.big_outcome_id === selectedOutcome.id).map(a => a.id)
+    ? visibleActivities.filter(a => a.big_outcome_id === selectedOutcome.id).map(a => a.id)
     : []
 
   // Big outcomes row layout
@@ -155,9 +202,14 @@ export default function LifeMapSVG({
 
   return (
     <svg
+      ref={svgRef}
       viewBox="0 0 1000 580"
       style={{ width: '100%', height: 'auto', maxWidth: 'min(1400px, calc((100vh - 160px) * 1.724))' }}
       onClick={() => { setSelectedDomain(null); setSelectedActivity(null); setSelectedOutcome(null) }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onContextMenu={e => { if (dragging.current) e.preventDefault() }}
     >
       <defs>
         <filter id="glow-life">
@@ -192,7 +244,7 @@ export default function LifeMapSVG({
       })}
 
       {/* Lines: domain → activities (primary) */}
-      {activities.map(a => {
+      {visibleActivities.map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
         const primaryDomainId = a.domain_links?.[0]?.domain_id
@@ -212,7 +264,7 @@ export default function LifeMapSVG({
       })}
 
       {/* Dashed lines from activities to their outcome boxes */}
-      {activities.map(a => {
+      {visibleActivities.map(a => {
         const ap = activityLayout[a.id]
         if (!ap || !a.big_outcome_id) return null
         const oIdx = outcomes.findIndex(o => o.id === a.big_outcome_id)
@@ -231,7 +283,7 @@ export default function LifeMapSVG({
       })}
 
       {/* Dashed lines to secondary domains */}
-      {activities.filter(a => (a.domain_links?.length ?? 0) > 1).map(a => {
+      {visibleActivities.filter(a => (a.domain_links?.length ?? 0) > 1).map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
         return a.domain_links?.slice(1).map(dl => {
@@ -282,6 +334,16 @@ export default function LifeMapSVG({
               setSelectedActivity(null)
             }}
             onDoubleClick={(e) => { e.stopPropagation(); onEditDomain(d) }}
+            onMouseDown={(e) => {
+              const isRightClick = e.button === 2 || (e.button === 0 && e.ctrlKey)
+              if (!isRightClick) return
+              e.preventDefault()
+              e.stopPropagation()
+              const pt = svgPoint(e)
+              if (!pt) return
+              dragging.current = { id: d.id, ox: pt.x - dp.x, oy: pt.y - dp.y }
+            }}
+            onContextMenu={(e) => { e.preventDefault(); e.stopPropagation() }}
             onMouseEnter={() => setHoveredNode(`d${d.id}`)}
             onMouseLeave={() => setHoveredNode(null)}
             style={{ cursor: 'pointer' }}
@@ -310,7 +372,7 @@ export default function LifeMapSVG({
       })}
 
       {/* ACTIVITY NODES */}
-      {activities.map(a => {
+      {visibleActivities.map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
         const isOverdue = overdueActivityIds.includes(a.id)
@@ -354,7 +416,7 @@ export default function LifeMapSVG({
       })}
 
       {/* Always-visible overdue labels */}
-      {activities.filter(a => overdueActivityIds.includes(a.id)).map(a => {
+      {visibleActivities.filter(a => overdueActivityIds.includes(a.id)).map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
         if (hlActivities.includes(a.id) || selectedActivity?.id === a.id || hoveredNode === a.id) return null

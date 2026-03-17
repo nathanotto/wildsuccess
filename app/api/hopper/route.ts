@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('hopper_items')
-    .select('*, activity:activities(id, name, time_type, flexibility, context)')
+    .select('*, activity:activities(id, name, time_type, flexibility, context, preferred_time, preferred_days, frequency, duration_range_min, duration_range_max)')
     .eq('user_id', user.id)
     .order('priority_score', { ascending: false })
     .order('proposed_date', { ascending: true, nullsFirst: false })
@@ -18,10 +18,11 @@ export async function GET(req: NextRequest) {
 
   if (status) {
     query = query.eq('status', status)
-    // When fetching pending items, hide future-snoozed ones (proposed_date > today)
+    // When fetching pending items, hide future-snoozed ones beyond the view window
     if (status === 'pending') {
-      const today = new Date().toISOString().split('T')[0]
-      query = query.or(`proposed_date.is.null,proposed_date.lte.${today}`)
+      const throughDate = req.nextUrl.searchParams.get('through_date')
+        ?? new Date().toISOString().split('T')[0]
+      query = query.or(`proposed_date.is.null,proposed_date.lte.${throughDate}`)
     }
   }
 

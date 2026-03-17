@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   const { data: taskSuggestions, error: tsErr } = await supabase
     .from('task_suggestions')
     .select(`
-      id, name, time_type, bounding_type, recurrence, frequency,
+      id, name, time_type, recurrence,
       preferred_days, preferred_time, flexibility, emotional_weight,
       duration_range_min, duration_range_max, context, sort_order,
       last_completed_at, last_proposed_at, consecutive_dismissals,
@@ -151,16 +151,44 @@ export async function POST(req: NextRequest) {
       .map(h => `${h.activity_id}:${h.proposed_date}`)
   )
 
-  // --- Load existing active schedule_items this week (suppress if already scheduled) ---
+  // One item per activity across ALL pending items (not just this week)
+  // Prevents opening different weeks from creating duplicate hopper entries
+  const pendingActivityIdsThisWeek = new Set(
+    (existingHopper ?? [])
+      .filter(h => h.activity_id)
+      .map(h => h.activity_id as string)
+  )
+  // Also track within this run so the first day wins even before DB flush
+  const proposedActivityIdsThisRun = new Set<string>()
+
+  // --- Load ALL future active schedule_items (not just this week) ---
+  // Used for two purposes:
+  //   1. Suppress proposal if already scheduled in the target week
+  //   2. Use scheduled_date as the cadence anchor when pre-planning ahead
+  const today = new Date().toISOString().split('T')[0]
   const { data: scheduledItems } = await supabase
     .from('schedule_items')
-    .select('activity_id')
+    .select('activity_id, scheduled_date')
     .eq('user_id', user.id)
     .eq('status', 'active')
-    .gte('scheduled_date', weekStart)
-    .lte('scheduled_date', weekEnd)
+    .gte('scheduled_date', today)
 
-  const scheduledActivityIds = new Set((scheduledItems ?? []).map(s => s.activity_id).filter(Boolean))
+  // activity_id → most recent future scheduled_date (the intention anchor)
+  const lastScheduledByActivity: Record<string, Date> = {}
+  for (const s of scheduledItems ?? []) {
+    if (!s.activity_id) continue
+    const dt = new Date(s.scheduled_date)
+    if (!lastScheduledByActivity[s.activity_id] || dt > lastScheduledByActivity[s.activity_id]) {
+      lastScheduledByActivity[s.activity_id] = dt
+    }
+  }
+
+  // Set of activity_ids scheduled within the target week range (suppress duplicates)
+  const scheduledActivityIds = new Set(
+    (scheduledItems ?? [])
+      .filter(s => s.activity_id && s.scheduled_date >= weekStart && s.scheduled_date <= weekEnd)
+      .map(s => s.activity_id as string)
+  )
 
   // --- Load block types for hint assignment ---
   const { data: blockTypes } = await supabase
@@ -211,7 +239,7 @@ export async function POST(req: NextRequest) {
   for (const targetDate of targetDates) {
     if (isWeek && weekCreatedCount >= MAX_PER_WEEK) break
 
-    const today = new Date(targetDate)
+    const targetDay = new Date(targetDate)
     const candidates: Array<{
       urgency: number
       create: () => Promise<void>
@@ -225,21 +253,29 @@ export async function POST(req: NextRequest) {
       // Already scheduled this week
       if (ts.activity_id && scheduledActivityIds.has(ts.activity_id)) continue
 
+      // One item per activity per week
+      if (isWeek && ts.activity_id && (pendingActivityIdsThisWeek.has(ts.activity_id) || proposedActivityIdsThisRun.has(ts.activity_id))) continue
+
       // Dismissed today
       const dismissed = lastDismissedByTS[ts.id]
       if (dismissed && dismissed.toISOString().split('T')[0] === targetDate) continue
 
       // Dismissed within cadence window
       if (dismissed) {
-        const daysSinceDismissal = Math.floor((today.getTime() - dismissed.getTime()) / (1000 * 60 * 60 * 24))
+        const daysSinceDismissal = Math.floor((targetDay.getTime() - dismissed.getTime()) / (1000 * 60 * 60 * 24))
         if (daysSinceDismissal < cadence) continue
       }
 
       // Already pending for this date
       if (ts.activity_id && pendingByActivityDate.has(`${ts.activity_id}:${targetDate}`)) continue
 
-      const lastDone = lastCompletedByTaskSuggestion[ts.id] ?? (ts.activity_id ? lastCompletedByActivity[ts.activity_id] : undefined)
-      if (!isDue(cadence, lastDone ? new Date(lastDone) : undefined, today, ts.preferred_days)) continue
+      const lastCompleted = lastCompletedByTaskSuggestion[ts.id] ?? (ts.activity_id ? lastCompletedByActivity[ts.activity_id] : undefined)
+      const lastScheduled = ts.activity_id ? lastScheduledByActivity[ts.activity_id] : undefined
+      const lastCompletedDate = lastCompleted ? new Date(lastCompleted) : undefined
+      const anchor = lastCompletedDate && lastScheduled
+        ? (lastCompletedDate > lastScheduled ? lastCompletedDate : lastScheduled)
+        : (lastCompletedDate ?? lastScheduled)
+      if (!isDue(cadence, anchor, targetDay, ts.preferred_days)) continue
 
       const urgency = computeValueUrgency(ts.value_links ?? [])
 
@@ -257,7 +293,7 @@ export async function POST(req: NextRequest) {
               status: 'pending',
               proposed_date: targetDate,
               time_type: ts.time_type ?? 'B',
-              bounding_type: (ts as Record<string, unknown>).bounding_type ?? 'action',
+              bounding_type: 'action',
               block_type_hint: blockTypeHint,
             })
             .select()
@@ -265,7 +301,11 @@ export async function POST(req: NextRequest) {
 
           if (hopperItem) {
             totalCreated.push(hopperItem)
-            if (ts.activity_id) pendingByActivityDate.add(`${ts.activity_id}:${targetDate}`)
+            if (ts.activity_id) {
+              pendingByActivityDate.add(`${ts.activity_id}:${targetDate}`)
+              pendingActivityIdsThisWeek.add(ts.activity_id)
+              proposedActivityIdsThisRun.add(ts.activity_id)
+            }
             // Update last_proposed_at
             await supabase.from('task_suggestions')
               .update({ last_proposed_at: new Date().toISOString() })
@@ -284,15 +324,23 @@ export async function POST(req: NextRequest) {
       if (scheduledActivityIds.has(activity.id)) continue
       if (pendingByActivityDate.has(key)) continue
 
+      // One item per activity per week
+      if (isWeek && (pendingActivityIdsThisWeek.has(activity.id) || proposedActivityIdsThisRun.has(activity.id))) continue
+
       const dismissed = lastDismissedByActivity[activity.id]
       if (dismissed && dismissed.toISOString().split('T')[0] === targetDate) continue
       if (dismissed) {
-        const daysSince = Math.floor((today.getTime() - dismissed.getTime()) / (1000 * 60 * 60 * 24))
+        const daysSince = Math.floor((targetDay.getTime() - dismissed.getTime()) / (1000 * 60 * 60 * 24))
         if (daysSince < cadence) continue
       }
 
-      const lastDone = lastCompletedByActivity[activity.id]
-      if (!isDue(cadence, lastDone ? new Date(lastDone) : undefined, today, activity.preferred_days)) continue
+      const lastCompleted = lastCompletedByActivity[activity.id]
+      const lastScheduled = lastScheduledByActivity[activity.id]
+      const lastCompletedDate = lastCompleted ? new Date(lastCompleted) : undefined
+      const anchor = lastCompletedDate && lastScheduled
+        ? (lastCompletedDate > lastScheduled ? lastCompletedDate : lastScheduled)
+        : (lastCompletedDate ?? lastScheduled)
+      if (!isDue(cadence, anchor, targetDay, activity.preferred_days)) continue
 
       const urgency = computeValueUrgency(activity.value_links ?? [])
 
@@ -319,6 +367,8 @@ export async function POST(req: NextRequest) {
           if (hopperItem) {
             totalCreated.push(hopperItem)
             pendingByActivityDate.add(key)
+            pendingActivityIdsThisWeek.add(activity.id)
+            proposedActivityIdsThisRun.add(activity.id)
           }
         }
       })

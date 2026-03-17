@@ -1,7 +1,22 @@
 'use client'
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
 import { UserValue, LifeDomain, Activity } from '@/lib/types'
-import EnrichmentCard from '@/components/capture/EnrichmentCard'
+import EditActivityModal from '@/components/map/EditActivityModal'
+
+const CADENCE_DAYS: Record<string, number> = {
+  daily: 1, weekly: 7, biweekly: 14, monthly: 30, quarterly: 90, annual: 365,
+}
+
+interface ActivityLocal {
+  id: string
+  name: string
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
+  emotional_weight: 'light' | 'normal' | 'heavy'
+  frequency: string | null
+  duration_range_min: number | null
+  duration_range_max: number | null
+  preferred_time: string | null
+}
 
 // ── Design constants ──────────────────────────────────────────────────────────
 const HOUR_HEIGHT = 60
@@ -12,7 +27,7 @@ const GRID_HEIGHT = GRID_HOURS * HOUR_HEIGHT
 
 const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
 const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Unwanted', D: 'Self-care', '0': 'Free' }
-const TIER_COLORS: Record<string, string> = { urgent: '#C4725A', normal: '#2D2A26', suggested: '#B5B0A8' }
+const TIER_COLORS: Record<string, string> = { urgent: '#C4725A', normal: '#2D2A26', suggested: '#2D2A26' }
 
 // ── Local types ───────────────────────────────────────────────────────────────
 interface BlockType {
@@ -45,6 +60,7 @@ interface ScheduleItemLocal {
   id: string
   name: string
   hopper_item_id: string | null
+  activity_id?: string | null
   time_type: 'A' | 'B' | 'C' | 'D' | '0'
   emotional_weight: 'light' | 'normal' | 'heavy'
   status: 'active' | 'completed' | 'skipped'
@@ -54,7 +70,7 @@ interface ScheduleItemLocal {
 interface HopperItemLocal {
   id: string
   name: string
-  source: string
+  source: 'quick_capture' | 'template_proposal' | 'outside_request' | 'planning_function' | string
   time_type: 'A' | 'B' | 'C' | 'D' | '0'
   emotional_weight: 'light' | 'normal' | 'heavy'
   priority_tier: 'urgent' | 'normal' | 'suggested'
@@ -63,9 +79,22 @@ interface HopperItemLocal {
   duration_min: number
   duration_max: number
   values: string[]
-  enrichment_status?: 'none' | 'pending' | 'enriched' | 'confirmed' | 'declined'
-  enrichment_data?: Record<string, unknown> | null
+  activity_id: string | null
+  preferred_time: string | null
+  frequency: string | null
   meta?: { requestedBy?: string }
+}
+
+interface FloatingScheduleItem {
+  id: string
+  scheduled_date: string
+  scheduled_time: string
+  scheduled_end_time: string | null
+  name: string
+  time_type: 'A' | 'B' | 'C' | 'D' | '0'
+  status: 'active' | 'completed' | 'skipped'
+  activity_id: string | null
+  hopper_item_id: string | null
 }
 
 interface CalEventLocal {
@@ -153,9 +182,11 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   // Core state
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()))
   const [blockTypes, setBlockTypes] = useState<BlockType[]>([])
+  const [outcomes, setOutcomes] = useState<{ id: string; name: string }[]>([])
   const [focusMinutes, setFocusMinutes] = useState(50)
   const [dayBlocks, setDayBlocks] = useState<Record<string, TimeBlockLocal[]>>({})
   const [hopper, setHopper] = useState<HopperItemLocal[]>([])
+  const [floatingItems, setFloatingItems] = useState<Record<string, FloatingScheduleItem[]>>({})
   const [calEvents, setCalEvents] = useState<CalEventLocal[]>([])
   const [calConnected, setCalConnected] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -194,14 +225,41 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
   // Capture
   const [captureInput, setCaptureInput] = useState('')
-  const [enrichmentCards, setEnrichmentCards] = useState<Record<string, Record<string, unknown>>>({}) // hopperItemId → enrichment_data
-  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set())
 
-  // Hopper item edit (double-click)
-  const [editingHopperId, setEditingHopperId] = useState<string | null>(null)
+  // Activity editor (double-click on hopper item, or "Make Activity" on capture)
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null) // UUID or 'new'
+  const [editingActivityPrefillName, setEditingActivityPrefillName] = useState<string>('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [editingActivityFull, setEditingActivityFull] = useState<any | null>(null)
+
+  async function openActivityEditor(activityId: string) {
+    const res = await fetch(`/api/activities/${activityId}`)
+    if (res.ok) {
+      const data = await res.json()
+      setEditingActivityFull(data)
+    }
+    setEditingActivityId(activityId)
+  }
 
   // Block type editor state
   const [editingBlockTypes, setEditingBlockTypes] = useState<BlockType[]>([])
+
+  // Auto-place highlight
+  const [newlyPlacedIds, setNewlyPlacedIds] = useState<Set<string>>(new Set())
+
+  // Animation state
+  const [exitingHopperIds, setExitingHopperIds] = useState<Set<string>>(new Set())
+  const [exitingBlockIds, setExitingBlockIds] = useState<Set<string>>(new Set())
+  const [flashingItemIds, setFlashingItemIds] = useState<Set<string>>(new Set())
+  const [returningHopperIds, setReturningHopperIds] = useState<Set<string>>(new Set())
+
+  // Activities + schedule coverage for dynamic Suggested computation
+  const [activities, setActivities] = useState<ActivityLocal[]>([])
+  const [scheduleCoverage, setScheduleCoverage] = useState<{ activity_id: string; scheduled_date: string }[]>([])
+  const [dismissedVirtualIds, setDismissedVirtualIds] = useState<Set<string>>(new Set())
+
+  // Block hover tooltip
+  const [blockTooltip, setBlockTooltip] = useState<{ label: string; time: string; x: number; y: number } | null>(null)
 
   // Refs
   const gridScrollRef = useRef<HTMLDivElement>(null)
@@ -211,23 +269,18 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   dayBlocksRef.current = dayBlocks                   // keep in sync without triggering effects
 
   // ── Data loading ────────────────────────────────────────────────────────────
+  const lastProposedWeekRef = useRef<string | null>(null)
+
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const rangeStartForPropose = dateStr(weekStart)
 
-      // Seed block types (idempotent) + generate proposals for this week
-      await Promise.allSettled([
-        fetch('/api/block-types/seed-defaults', { method: 'POST' }),
-        fetch('/api/hopper/propose', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ week_start_date: rangeStartForPropose }),
-        }),
-      ])
-
-      // After proposals are created, score them
-      await fetch('/api/hopper/compute-priorities', { method: 'POST' })
+      // Seed block types once per week (idempotent)
+      if (lastProposedWeekRef.current !== rangeStartForPropose) {
+        lastProposedWeekRef.current = rangeStartForPropose
+        await fetch('/api/block-types/seed-defaults', { method: 'POST' })
+      }
 
       const rangeStart = rangeStartForPropose
       const rangeEnd = dateStr(addDays(weekStart, 6))
@@ -239,27 +292,39 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         hopperRes,
         calRes,
         calSettingsRes,
+        outcomesRes,
+        activitiesRes,
+        coverageRes,
       ] = await Promise.all([
         fetch('/api/block-types'),
         fetch(`/api/time-blocks?range_start=${rangeStart}&range_end=${rangeEnd}`),
         fetch(`/api/schedule?range_start=${rangeStart}&range_end=${rangeEnd}`),
-        fetch('/api/hopper?status=pending'),
+        fetch(`/api/hopper?status=pending&through_date=${rangeEnd}`),
         fetch(`/api/calendar/events?start=${rangeStart}T00:00:00Z&end=${rangeEnd}T23:59:59Z`),
         fetch('/api/calendar/settings'),
+        fetch('/api/big-outcomes'),
+        fetch('/api/activities'),
+        fetch('/api/schedule/coverage'),
       ])
 
-      const [btData, tbData, siData, hopperData, calData, calSettings] = await Promise.all([
+      const [btData, tbData, siData, hopperData, calData, calSettings, outcomesData, activitiesData, coverageData] = await Promise.all([
         btRes.ok ? btRes.json() : [],
         tbRes.ok ? tbRes.json() : [],
         siRes.ok ? siRes.json() : [],
         hopperRes.ok ? hopperRes.json() : [],
         calRes.ok ? calRes.json() : [],
         calSettingsRes.ok ? calSettingsRes.json() : { connected: false },
+        outcomesRes.ok ? outcomesRes.json() : [],
+        activitiesRes.ok ? activitiesRes.json() : [],
+        coverageRes.ok ? coverageRes.json() : [],
       ])
 
       const bts: BlockType[] = Array.isArray(btData) ? btData : []
       setBlockTypes(bts)
       setEditingBlockTypes(bts)
+
+      const outcomesArr: { id: string; name: string; status: string }[] = Array.isArray(outcomesData) ? outcomesData : []
+      setOutcomes(outcomesArr.filter(o => o.status !== 'abandoned').map(o => ({ id: o.id, name: o.name })))
 
       // Build dayBlocks from time_blocks + schedule_items
       const blocks: TimeBlockLocal[] = Array.isArray(tbData) ? tbData : []
@@ -267,8 +332,11 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         id: string
         time_block_id?: string | null
         scheduled_date: string
+        scheduled_time?: string | null
+        scheduled_end_time?: string | null
         name: string
         hopper_item_id: string | null
+        activity_id?: string | null
         time_type: 'A' | 'B' | 'C' | 'D' | '0'
         emotional_weight: 'light' | 'normal' | 'heavy'
         status: 'active' | 'completed' | 'skipped'
@@ -286,6 +354,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             id: si.id,
             name: si.name,
             hopper_item_id: si.hopper_item_id,
+            activity_id: si.activity_id ?? null,
             time_type: si.time_type,
             emotional_weight: si.emotional_weight,
             status: si.status,
@@ -311,6 +380,26 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       }
       setDayBlocks(newDayBlocks)
 
+      // Extract floating schedule items (no time_block_id, have scheduled_time)
+      const newFloating: Record<string, FloatingScheduleItem[]> = {}
+      for (const si of schedItems) {
+        if (si.time_block_id || !si.scheduled_time) continue
+        const ds = si.scheduled_date
+        if (!newFloating[ds]) newFloating[ds] = []
+        newFloating[ds].push({
+          id: si.id,
+          scheduled_date: si.scheduled_date,
+          scheduled_time: si.scheduled_time,
+          scheduled_end_time: si.scheduled_end_time ?? null,
+          name: si.name,
+          time_type: si.time_type,
+          status: si.status,
+          activity_id: si.activity_id ?? null,
+          hopper_item_id: si.hopper_item_id ?? null,
+        })
+      }
+      setFloatingItems(newFloating)
+
       // Build hopper
       const activatedHopperIds = new Set(
         schedItems.map(si => si.hopper_item_id).filter(Boolean)
@@ -320,11 +409,15 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         raw_input: string
         source: string
         status: string
+        activity_id?: string | null
         activity?: {
           time_type?: 'A' | 'B' | 'C' | 'D' | '0'
           emotional_weight?: 'light' | 'normal' | 'heavy'
           duration_range_min?: number | null
           duration_range_max?: number | null
+          preferred_time?: string | null
+          preferred_days?: string[] | null
+          frequency?: string | null
         } | null
         metadata?: Record<string, unknown> | null
         priority_tier?: string
@@ -334,34 +427,41 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       }> = Array.isArray(hopperData) ? hopperData : []
 
       const hopperItems: HopperItemLocal[] = rawHopper
-        .filter(h => h.status === 'pending' && !activatedHopperIds.has(h.id))
-        .map(h => {
-          const ed = h.enrichment_data as Record<string, unknown> | null
-          return {
-            id: h.id,
-            name: (ed?.suggested_name as string | null) ?? h.raw_input,
-            source: h.source,
-            time_type: ((ed?.suggested_time_type as string | null) ?? h.activity?.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
-            emotional_weight: ((ed?.suggested_emotional_weight as string | null) ?? h.activity?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
-            priority_tier: (h.priority_tier ?? 'normal') as 'urgent' | 'normal' | 'suggested',
-            priority_score: h.priority_score ?? 50,
-            block_type_hint: null,
-            duration_min: (ed?.suggested_duration_min as number | null) ?? h.activity?.duration_range_min ?? 20,
-            duration_max: (ed?.suggested_duration_max as number | null) ?? h.activity?.duration_range_max ?? 60,
-            values: [],
-            enrichment_status: (h.enrichment_status ?? 'none') as HopperItemLocal['enrichment_status'],
-            enrichment_data: h.enrichment_data ?? null,
-            meta: h.metadata as { requestedBy?: string } | undefined,
-          }
-        })
-      setHopper(hopperItems)
+        // Exclude template_proposal items — Suggested is now computed dynamically from activities
+        .filter(h => h.status === 'pending' && !activatedHopperIds.has(h.id) && h.source !== 'template_proposal')
+        .map(h => ({
+          id: h.id,
+          name: h.raw_input,
+          source: h.source,
+          time_type: (h.activity?.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
+          emotional_weight: (h.activity?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
+          priority_tier: (h.priority_tier ?? 'normal') as 'urgent' | 'normal' | 'suggested',
+          priority_score: h.priority_score ?? 50,
+          block_type_hint: null,
+          duration_min: h.activity?.duration_range_min ?? 20,
+          duration_max: h.activity?.duration_range_max ?? 60,
+          values: [],
+          activity_id: h.activity_id ?? null,
+          preferred_time: h.activity?.preferred_time ?? null,
+          frequency: h.activity?.frequency ?? null,
+          meta: h.metadata as { requestedBy?: string } | undefined,
+        }))
+      // Deduplicate by id — should never be needed but prevents key collisions if state gets polluted
+      const seen = new Set<string>()
+      setHopper(hopperItems.filter(h => seen.has(h.id) ? false : (seen.add(h.id), true)))
 
-      // Restore enrichment cards for items that are enriched but not yet confirmed
-      const cardsFromLoad: Record<string, Record<string, unknown>> = {}
-      rawHopper
-        .filter(h => h.enrichment_status === 'enriched' && h.enrichment_data)
-        .forEach(h => { cardsFromLoad[h.id] = h.enrichment_data! })
-      setEnrichmentCards(cardsFromLoad)
+      // Activities for dynamic Suggested computation
+      if (Array.isArray(activitiesData)) {
+        setActivities(activitiesData
+          .filter((a: ActivityLocal & { status?: string }) => a.status === 'active' && a.frequency && CADENCE_DAYS[a.frequency])
+          .map((a: ActivityLocal) => ({
+            id: a.id, name: a.name, time_type: a.time_type, emotional_weight: a.emotional_weight,
+            frequency: a.frequency, duration_range_min: a.duration_range_min,
+            duration_range_max: a.duration_range_max, preferred_time: a.preferred_time,
+          }))
+        )
+      }
+      if (Array.isArray(coverageData)) setScheduleCoverage(coverageData)
 
       // Map cal events
       const rawCal: Array<{
@@ -546,13 +646,34 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     const isPersist = hopperDuplicateArmed === item.id
     setHopperDuplicateArmed(null)
 
+    // Virtual items (from dynamic Suggested) need a real DB record first
+    let resolvedItem = item
+    if (item.id.startsWith('activity:')) {
+      const activityId = item.id.slice('activity:'.length)
+      const activity = activities.find(a => a.id === activityId)
+      const createRes = await fetch('/api/hopper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw_input: activity?.name ?? activityId,
+          source: 'template_proposal',
+          activity_id: activityId,
+        }),
+      })
+      if (!createRes.ok) return
+      const newItem = await createRes.json()
+      resolvedItem = { ...item, id: newItem.id }
+      // Optimistically update coverage so the virtual item disappears from Suggested
+      setScheduleCoverage(prev => [...prev, { activity_id: activityId, scheduled_date: ds }])
+    }
+
     const snapTime = getTimeFromClientY(clientY)
-    const duration = item.duration_min > 0 ? item.duration_min : 60
+    const duration = resolvedItem.duration_min > 0 ? resolvedItem.duration_min : 60
     const endTime = minutesToTime(timeToMinutes(snapTime) + duration)
 
     // Find matching block type from hint
-    const hintBt = item.block_type_hint
-      ? blockTypes.find(bt => bt.name.toLowerCase() === item.block_type_hint!.toLowerCase())
+    const hintBt = resolvedItem.block_type_hint
+      ? blockTypes.find(bt => bt.name.toLowerCase() === resolvedItem.block_type_hint!.toLowerCase())
       : null
 
     try {
@@ -561,7 +682,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           block_date: ds,
-          label: item.name,
+          label: resolvedItem.name,
           start_time: snapTime,
           end_time: endTime,
           duration_minutes: duration,
@@ -569,7 +690,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           is_hard: false,
           sort_order: 0,
           source: 'manual',
-          time_type: item.time_type,
+          time_type: resolvedItem.time_type,
         }),
       })
       if (!blockRes.ok) return
@@ -579,13 +700,13 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: item.name,
+          name: resolvedItem.name,
           scheduled_date: ds,
           time_block_id: newBlock.id,
           flexibility: 'anytime_today',
-          time_type: item.time_type,
-          emotional_weight: item.emotional_weight,
-          hopper_item_id: isPersist ? null : item.id,
+          time_type: resolvedItem.time_type,
+          emotional_weight: resolvedItem.emotional_weight,
+          hopper_item_id: isPersist ? null : resolvedItem.id,
         }),
       })
       if (!siRes.ok) return
@@ -593,10 +714,10 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
       const schedItem: ScheduleItemLocal = {
         id: newSI.id,
-        name: item.name,
-        hopper_item_id: isPersist ? null : item.id,
-        time_type: item.time_type,
-        emotional_weight: item.emotional_weight,
+        name: resolvedItem.name,
+        hopper_item_id: isPersist ? null : resolvedItem.id,
+        time_type: resolvedItem.time_type,
+        emotional_weight: resolvedItem.emotional_weight,
         status: 'active',
       }
 
@@ -607,7 +728,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           [ds]: [...existing, {
             id: newBlock.id,
             block_date: ds,
-            label: item.name,
+            label: resolvedItem.name,
             start_time: snapTime,
             end_time: endTime,
             duration_minutes: duration,
@@ -620,7 +741,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         }
       })
 
-      if (!isPersist) setHopper(prev => prev.filter(h => h.id !== item.id))
+      if (!isPersist) setHopper(prev => prev.filter(h => h.id !== resolvedItem.id))
     } catch (err) {
       console.error('Hopper drop on column error:', err)
     }
@@ -637,19 +758,40 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     const isPersist = hopperDuplicateArmed === item.id
     setHopperDuplicateArmed(null)
 
+    // Virtual items (from dynamic Suggested) need a real DB record first
+    let resolvedItem = item
+    if (item.id.startsWith('activity:')) {
+      const activityId = item.id.slice('activity:'.length)
+      const activity = activities.find(a => a.id === activityId)
+      const createRes = await fetch('/api/hopper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw_input: activity?.name ?? activityId,
+          source: 'template_proposal',
+          activity_id: activityId,
+        }),
+      })
+      if (!createRes.ok) return
+      const newHopperItem = await createRes.json()
+      resolvedItem = { ...item, id: newHopperItem.id }
+      // Optimistically update coverage so the virtual item disappears from Suggested
+      setScheduleCoverage(prev => [...prev, { activity_id: activityId, scheduled_date: ds }])
+    }
+
     try {
       const res = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: item.name,
+          name: resolvedItem.name,
           scheduled_date: ds,
           time_block_id: block.id,
           flexibility: 'anytime_today',
-          time_type: item.time_type,
-          emotional_weight: item.emotional_weight,
+          time_type: resolvedItem.time_type,
+          emotional_weight: resolvedItem.emotional_weight,
           // When persisting, don't link to hopper item so it stays pending
-          hopper_item_id: isPersist ? null : item.id,
+          hopper_item_id: isPersist ? null : resolvedItem.id,
         }),
       })
       if (!res.ok) return
@@ -657,10 +799,10 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
       const schedItem: ScheduleItemLocal = {
         id: newSI.id,
-        name: item.name,
-        hopper_item_id: isPersist ? null : item.id,
-        time_type: item.time_type,
-        emotional_weight: item.emotional_weight,
+        name: resolvedItem.name,
+        hopper_item_id: isPersist ? null : resolvedItem.id,
+        time_type: resolvedItem.time_type,
+        emotional_weight: resolvedItem.emotional_weight,
         status: 'active',
       }
 
@@ -669,7 +811,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         fetch(`/api/time-blocks/${block.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label: item.name }),
+          body: JSON.stringify({ label: resolvedItem.name }),
         })
       }
 
@@ -679,14 +821,14 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           ...prev,
           [ds]: dayList.map(b =>
             b.id === block.id
-              ? { ...b, label: isFirst ? item.name : b.label, items: [...b.items, schedItem] }
+              ? { ...b, label: isFirst ? resolvedItem.name : b.label, items: [...b.items, schedItem] }
               : b
           ),
         }
       })
 
       // Only consume hopper item if not in persist mode
-      if (!isPersist) setHopper(prev => prev.filter(h => h.id !== item.id))
+      if (!isPersist) setHopper(prev => prev.filter(h => h.id !== resolvedItem.id))
     } catch (err) {
       console.error('Drop on block error:', err)
     }
@@ -699,39 +841,50 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   async function returnToHopper(item: ScheduleItemLocal, block: TimeBlockLocal, ds: string) {
     try {
       await fetch(`/api/schedule/${item.id}`, { method: 'DELETE' })
-      if (item.hopper_item_id) {
-        await fetch(`/api/hopper/${item.hopper_item_id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'pending' }),
-        })
-      }
 
+      // Always remove the block from the calendar
       setDayBlocks(prev => {
         const dayList = prev[ds] ?? []
         return {
           ...prev,
-          [ds]: dayList.map(b =>
-            b.id === block.id ? { ...b, items: b.items.filter(i => i.id !== item.id) } : b
-          ),
+          [ds]: dayList
+            .map(b => b.id === block.id ? { ...b, items: b.items.filter(i => i.id !== item.id) } : b)
+            .filter(b => b.items.length > 0),
         }
       })
 
       if (item.hopper_item_id) {
-        const hopperItem: HopperItemLocal = {
-          id: item.hopper_item_id,
-          name: item.name,
-          source: 'quick_capture',
-          time_type: item.time_type,
-          emotional_weight: item.emotional_weight,
-          priority_tier: 'normal',
-          priority_score: 50,
-          block_type_hint: null,
-          duration_min: 20,
-          duration_max: 60,
-          values: [],
-        }
-        setHopper(prev => [hopperItem, ...prev])
+        // Only restore to hopper if it isn't already there
+        setHopper(prev => {
+          const alreadyPresent = prev.some(h => h.id === item.hopper_item_id)
+          if (alreadyPresent) return prev
+          const isAutoPlace = block.source === 'auto_place'
+          const hopperItem: HopperItemLocal = {
+            id: item.hopper_item_id!,
+            name: item.name,
+            source: isAutoPlace ? 'template_proposal' : 'quick_capture',
+            time_type: item.time_type,
+            emotional_weight: item.emotional_weight,
+            priority_tier: isAutoPlace ? 'suggested' : 'normal',
+            priority_score: 50,
+            block_type_hint: null,
+            duration_min: 20,
+            duration_max: 60,
+            values: [],
+            activity_id: null,
+            preferred_time: null,
+            frequency: null,
+          }
+          // Also patch the DB status (fire-and-forget)
+          fetch(`/api/hopper/${item.hopper_item_id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'pending' }),
+          })
+          setReturningHopperIds(prev => new Set([...prev, item.hopper_item_id!]))
+          setTimeout(() => setReturningHopperIds(prev => { const s = new Set(prev); s.delete(item.hopper_item_id!); return s }), 2000)
+          return [hopperItem, ...prev]
+        })
       }
     } catch (err) {
       console.error('Return to hopper error:', err)
@@ -741,6 +894,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   // ── Mark complete ───────────────────────────────────────────────────────────
   async function markItemComplete(item: ScheduleItemLocal, block: TimeBlockLocal, ds: string) {
     try {
+      setFlashingItemIds(prev => new Set([...prev, item.id]))
       await fetch(`/api/schedule/${item.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -757,6 +911,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           ),
         }
       })
+      setTimeout(() => setFlashingItemIds(prev => { const s = new Set(prev); s.delete(item.id); return s }), 900)
     } catch (err) {
       console.error('Mark complete error:', err)
     }
@@ -765,12 +920,25 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   // ── Dismiss hopper item ─────────────────────────────────────────────────────
   async function dismissHopperItem(id: string) {
     try {
-      await fetch(`/api/hopper/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'dismissed', resolved_at: new Date().toISOString() }),
-      })
-      setHopper(prev => prev.filter(h => h.id !== id))
+      setExitingHopperIds(prev => new Set([...prev, id]))
+      if (id.startsWith('activity:')) {
+        // Virtual item — just hide it locally for this session
+        const activityId = id.slice('activity:'.length)
+        setTimeout(() => {
+          setDismissedVirtualIds(prev => new Set([...prev, activityId]))
+          setExitingHopperIds(prev => { const s = new Set(prev); s.delete(id); return s })
+        }, 360)
+      } else {
+        await fetch(`/api/hopper/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'dismissed', resolved_at: new Date().toISOString() }),
+        })
+        setTimeout(() => {
+          setHopper(prev => prev.filter(h => h.id !== id))
+          setExitingHopperIds(prev => { const s = new Set(prev); s.delete(id); return s })
+        }, 360)
+      }
     } catch (err) {
       console.error('Dismiss hopper error:', err)
     }
@@ -779,11 +947,60 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   // ── Delete block ────────────────────────────────────────────────────────────
   async function deleteBlock(blockId: string, ds: string) {
     try {
+      // Find block before removing it so we can restore hopper items
+      const block = (dayBlocks[ds] ?? []).find(b => b.id === blockId)
+
+      setExitingBlockIds(prev => new Set([...prev, blockId]))
       await fetch(`/api/time-blocks/${blockId}`, { method: 'DELETE' })
-      setDayBlocks(prev => {
-        const dayList = prev[ds] ?? []
-        return { ...prev, [ds]: dayList.filter(b => b.id !== blockId) }
-      })
+      setTimeout(() => {
+        setDayBlocks(prev => {
+          const dayList = prev[ds] ?? []
+          return { ...prev, [ds]: dayList.filter(b => b.id !== blockId) }
+        })
+        setExitingBlockIds(prev => { const s = new Set(prev); s.delete(blockId); return s })
+      }, 260)
+
+      // Restore any linked hopper items back to pending
+      if (block) {
+        const itemsWithHopper = block.items.filter(i => i.hopper_item_id)
+        if (itemsWithHopper.length > 0) {
+          await Promise.all(itemsWithHopper.map(i =>
+            fetch(`/api/hopper/${i.hopper_item_id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'pending' }),
+            })
+          ))
+          setHopper(prev => {
+            const existingIds = new Set(prev.map(h => h.id))
+            const toAdd: HopperItemLocal[] = itemsWithHopper
+              .filter(i => !existingIds.has(i.hopper_item_id!))
+              .map(i => ({
+                id: i.hopper_item_id!,
+                name: i.name,
+                source: (block.source === 'auto_place' ? 'template_proposal' : 'quick_capture') as HopperItemLocal['source'],
+                time_type: i.time_type,
+                emotional_weight: i.emotional_weight,
+                priority_tier: (block.source === 'auto_place' ? 'suggested' : 'normal') as 'suggested' | 'normal',
+                priority_score: 50,
+                block_type_hint: null,
+                duration_min: 20,
+                duration_max: 60,
+                values: [],
+                activity_id: null,
+                preferred_time: null,
+                frequency: null,
+              }))
+            if (toAdd.length > 0) {
+              toAdd.forEach(r => {
+                setReturningHopperIds(p => new Set([...p, r.id]))
+                setTimeout(() => setReturningHopperIds(p => { const s = new Set(p); s.delete(r.id); return s }), 2000)
+              })
+            }
+            return toAdd.length > 0 ? [...toAdd, ...prev] : prev
+          })
+        }
+      }
     } catch (err) {
       console.error('Delete block error:', err)
     }
@@ -911,17 +1128,26 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         .map(item => ({
           id: item.hopper_item_id!,
           name: item.name,
-          source: 'quick_capture' as const,
+          source: (block.source === 'auto_place' ? 'template_proposal' : 'quick_capture') as HopperItemLocal['source'],
           time_type: item.time_type,
           emotional_weight: item.emotional_weight,
-          priority_tier: 'normal' as const,
+          priority_tier: (block.source === 'auto_place' ? 'suggested' : 'normal') as 'suggested' | 'normal',
           priority_score: 50,
           block_type_hint: null,
           duration_min: 20,
           duration_max: 60,
           values: [],
+          activity_id: null,
+          preferred_time: null,
+          frequency: null,
         }))
-      if (returning.length > 0) setHopper(prev => [...returning, ...prev])
+      if (returning.length > 0) {
+        setHopper(prev => {
+          const existingIds = new Set(prev.map(h => h.id))
+          const toAdd = returning.filter(r => !existingIds.has(r.id))
+          return toAdd.length > 0 ? [...toAdd, ...prev] : prev
+        })
+      }
     } catch (err) {
       console.error('Delete block with items error:', err)
     }
@@ -953,109 +1179,180 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         duration_min: 20,
         duration_max: 60,
         values: [],
-        enrichment_status: 'pending',
+        activity_id: null,
+        preferred_time: null,
+        frequency: null,
       }
       setHopper(prev => [...prev, hopperItem])
-
-      // Fire enrichment in background
-      setEnrichingIds(prev => new Set(prev).add(newItem.id))
-      fetch('/api/capture/enrich', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hopper_item_id: newItem.id }),
-      })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data && !data.error) {
-            setEnrichmentCards(prev => ({ ...prev, [newItem.id]: data }))
-            setHopper(prev => prev.map(h =>
-              h.id === newItem.id
-                ? { ...h, enrichment_status: 'enriched', name: data.suggested_name ?? h.name }
-                : h
-            ))
-          } else {
-            setHopper(prev => prev.map(h =>
-              h.id === newItem.id ? { ...h, enrichment_status: 'none' } : h
-            ))
-          }
-        })
-        .catch(() => {
-          setHopper(prev => prev.map(h =>
-            h.id === newItem.id ? { ...h, enrichment_status: 'none' } : h
-          ))
-        })
-        .finally(() => setEnrichingIds(prev => { const s = new Set(prev); s.delete(newItem.id); return s }))
     } catch (err) {
       console.error('Quick capture error:', err)
     }
   }
 
-  function buildEditEnrichment(item: HopperItemLocal): Record<string, unknown> {
-    if (item.enrichment_data) return item.enrichment_data
-    return {
-      match_type: 'new_template',
-      matched_activity_id: null,
-      matched_activity_name: null,
-      suggested_name: item.name,
-      suggested_description: null,
-      suggested_life_domain_id: null,
-      suggested_life_domain_name: null,
-      suggested_value_links: [],
-      suggested_big_outcome_id: null,
-      suggested_big_outcome_name: null,
-      suggested_time_type: item.time_type,
-      suggested_emotional_weight: item.emotional_weight,
-      suggested_context: [],
-      suggested_block_type_id: null,
-      suggested_block_type_name: null,
-      suggested_recurrence: null,
-      suggested_preferred_days: null,
-      suggested_preferred_time: null,
-      suggested_duration_min: item.duration_min || null,
-      suggested_duration_max: item.duration_max || null,
-      suggested_flexibility: 'anytime_this_week',
-      suggested_is_preventive: false,
-      confidence: 0,
-      reasoning: '',
+  async function handleSaveActivity(data: Record<string, unknown>) {
+    if (editingActivityId === 'new') {
+      const res = await fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (res.ok) {
+        const created = await res.json()
+        setActivities(prev => [...prev, {
+          id: created.id, name: created.name, time_type: created.time_type,
+          emotional_weight: created.emotional_weight, frequency: created.frequency,
+          duration_range_min: created.duration_range_min, duration_range_max: created.duration_range_max,
+          preferred_time: created.preferred_time,
+        }])
+      }
+    } else if (editingActivityId) {
+      const res = await fetch(`/api/activities/${editingActivityId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setActivities(prev => prev.map(a => a.id === editingActivityId ? {
+          ...a, name: updated.name, time_type: updated.time_type,
+          emotional_weight: updated.emotional_weight, frequency: updated.frequency,
+          duration_range_min: updated.duration_range_min, duration_range_max: updated.duration_range_max,
+          preferred_time: updated.preferred_time,
+        } : a))
+        // Update any matching hopper items with new name/type
+        setHopper(prev => prev.map(h => h.activity_id === editingActivityId ? {
+          ...h, name: updated.name, time_type: updated.time_type,
+          emotional_weight: updated.emotional_weight, preferred_time: updated.preferred_time,
+        } : h))
+      }
+    }
+    setEditingActivityId(null)
+    setEditingActivityPrefillName('')
+    setEditingActivityFull(null)
+  }
+
+  async function handleAutoPlace(itemId: string, overrides?: { preferred_time: string; duration_minutes: number }) {
+    // Virtual items (from dynamic Suggested) have no DB record yet — create one first
+    let hopperItemId = itemId
+    if (itemId.startsWith('activity:')) {
+      const activityId = itemId.slice('activity:'.length)
+      const activity = activities.find(a => a.id === activityId)
+      const createRes = await fetch('/api/hopper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw_input: activity?.name ?? activityId,
+          source: 'template_proposal',
+          activity_id: activityId,
+        }),
+      })
+      if (!createRes.ok) return
+      const newItem = await createRes.json()
+      hopperItemId = newItem.id
+    }
+
+    const res = await fetch('/api/schedule/auto-place', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hopper_item_id: hopperItemId, week_start: dateStr(weekStart), ...overrides }),
+    })
+    if (!res.ok) return
+    const { created } = await res.json()
+    if (!created?.length) return  // nothing placed — leave hopper item in place
+
+    // Add new blocks (with their items) to dayBlocks state
+    setDayBlocks(prev => {
+      const next = { ...prev }
+      for (const { block, item: si } of created) {
+        const ds: string = block.block_date
+        if (!next[ds]) next[ds] = []
+        const startMin = timeToMinutes(block.start_time)
+        const endMin = timeToMinutes(block.end_time)
+        const newBlock: TimeBlockLocal = {
+          id: block.id,
+          block_date: ds,
+          label: block.label,
+          start_time: block.start_time,
+          end_time: block.end_time,
+          duration_minutes: endMin - startMin,
+          is_hard: false,
+          block_type_id: null,
+          block_type: undefined,
+          source: 'auto_place',
+          items: [{
+            id: si.id,
+            name: si.name,
+            hopper_item_id: itemId,
+            time_type: si.time_type ?? 'B',
+            emotional_weight: si.emotional_weight ?? 'normal',
+            status: 'active',
+          }],
+        }
+        next[ds] = [...next[ds], newBlock]
+      }
+      return next
+    })
+    // Remove from hopper (virtual items aren't in hopper state — they disappear
+    // automatically once coverage is updated, but update coverage optimistically)
+    if (itemId.startsWith('activity:')) {
+      const activityId = itemId.slice('activity:'.length)
+      setScheduleCoverage(prev => [...prev, { activity_id: activityId, scheduled_date: dateStr(weekStart) }])
+    } else {
+      setHopper(prev => prev.filter(h => h.id !== itemId))
+    }
+
+    // Highlight new blocks and scroll to the earliest one
+    const newIds = new Set<string>(created.map((c: { block: { id: string } }) => c.block.id))
+    setNewlyPlacedIds(newIds)
+    setTimeout(() => setNewlyPlacedIds(new Set()), 2500)
+
+    const earliestStart = created.reduce(
+      (min: string, c: { block: { start_time: string } }) => c.block.start_time < min ? c.block.start_time : min,
+      created[0].block.start_time
+    )
+    const scrollTo = Math.max(0, (timeToMinutes(earliestStart) - GRID_START * 60) * (HOUR_HEIGHT / 60) - 80)
+    requestAnimationFrame(() => {
+      gridScrollRef.current?.scrollTo({ top: scrollTo, behavior: 'smooth' })
+    })
+  }
+
+  async function deleteFloatingItem(fi: FloatingScheduleItem) {
+    try {
+      await fetch(`/api/schedule/${fi.id}`, { method: 'DELETE' })
+      if (fi.hopper_item_id) {
+        await fetch(`/api/hopper/${fi.hopper_item_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'pending', resolved_at: null }),
+        })
+        const hopperItem: HopperItemLocal = {
+          id: fi.hopper_item_id,
+          name: fi.name,
+          source: 'template_proposal',
+          time_type: fi.time_type,
+          emotional_weight: 'normal',
+          priority_tier: 'suggested',
+          priority_score: 50,
+          block_type_hint: null,
+          duration_min: 30,
+          duration_max: 60,
+          values: [],
+          activity_id: fi.activity_id,
+          preferred_time: null,
+          frequency: null,
+        }
+        setHopper(prev => [hopperItem, ...prev.filter(h => h.id !== hopperItem.id)])
+      }
+      setFloatingItems(prev => {
+        const next = { ...prev }
+        next[fi.scheduled_date] = (next[fi.scheduled_date] ?? []).filter(x => x.id !== fi.id)
+        return next
+      })
+    } catch (err) {
+      console.error('Delete floating item error:', err)
     }
   }
 
-  async function handleEnrichmentConfirm(hopperItemId: string, data: Record<string, unknown>) {
-    setEnrichmentCards(prev => { const s = { ...prev }; delete s[hopperItemId]; return s })
-    await fetch('/api/capture/confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hopper_item_id: hopperItemId, enrichment_data: data }),
-    })
-    setHopper(prev => prev.map(h => h.id === hopperItemId ? { ...h, enrichment_status: 'confirmed' } : h))
-  }
-
-  async function handleEnrichmentDecline(hopperItemId: string) {
-    setEnrichmentCards(prev => { const s = { ...prev }; delete s[hopperItemId]; return s })
-    await fetch('/api/capture/decline', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hopper_item_id: hopperItemId }),
-    })
-    setHopper(prev => prev.map(h => h.id === hopperItemId ? { ...h, enrichment_status: 'declined' } : h))
-  }
-
-  const handleEnrichItem = useCallback((itemId: string) => {
-    setEnrichingIds(prev => new Set(prev).add(itemId))
-    setHopper(prev => prev.map(h => h.id === itemId ? { ...h, enrichment_status: 'pending' } : h))
-    fetch('/api/capture/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hopper_item_id: itemId }) })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data && !data.error) {
-          setEnrichmentCards(prev => ({ ...prev, [itemId]: data }))
-          setHopper(prev => prev.map(h => h.id === itemId ? { ...h, enrichment_status: 'enriched', name: data.suggested_name ?? h.name } : h))
-        } else {
-          setHopper(prev => prev.map(h => h.id === itemId ? { ...h, enrichment_status: 'none' } : h))
-        }
-      })
-      .catch(() => setHopper(prev => prev.map(h => h.id === itemId ? { ...h, enrichment_status: 'none' } : h)))
-      .finally(() => setEnrichingIds(prev => { const s = new Set(prev); s.delete(itemId); return s }))
-  }, [])
 
   // ── Start resize ────────────────────────────────────────────────────────────
   function startResize(e: React.MouseEvent, block: TimeBlockLocal, ds: string) {
@@ -1192,9 +1489,86 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     return item.time_type === hopperFilter
   }), [hopper, hopperFilter])
 
-  const urgentHopper = useMemo(() => filteredHopper.filter(i => i.priority_tier === 'urgent'), [filteredHopper])
-  const normalHopper = useMemo(() => filteredHopper.filter(i => i.priority_tier === 'normal'), [filteredHopper])
-  const suggestedHopper = useMemo(() => filteredHopper.filter(i => i.priority_tier === 'suggested'), [filteredHopper])
+  const TIME_ORDER: Record<string, number> = { morning: 0, afternoon: 1, evening: 2 }
+  function sortByTime<T extends { preferred_time?: string | null }>(items: T[]): T[] {
+    return [...items].sort((a, b) => {
+      const ao = a.preferred_time ? (TIME_ORDER[a.preferred_time] ?? 3) : 3
+      const bo = b.preferred_time ? (TIME_ORDER[b.preferred_time] ?? 3) : 3
+      return ao - bo
+    })
+  }
+
+  const urgentHopper = useMemo(() => sortByTime(filteredHopper.filter(i => i.priority_tier === 'urgent')), [filteredHopper])
+  const normalHopper = useMemo(() => sortByTime(filteredHopper.filter(i => i.priority_tier === 'normal')), [filteredHopper])
+
+  // Dynamic Suggested: activities not covered within their cadence window
+  const suggestedHopper = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+
+    // Build coverage map from DB schedule_items
+    const coverageMap: Record<string, Date[]> = {}
+    for (const { activity_id, scheduled_date } of scheduleCoverage) {
+      if (!coverageMap[activity_id]) coverageMap[activity_id] = []
+      coverageMap[activity_id].push(new Date(scheduled_date + 'T00:00:00'))
+    }
+    // Also include schedule_items loaded for the current week (in dayBlocks / floatingItems)
+    for (const blocks of Object.values(dayBlocks)) {
+      for (const block of blocks) {
+        for (const item of block.items) {
+          if (!item.activity_id) continue
+          if (!coverageMap[item.activity_id]) coverageMap[item.activity_id] = []
+          coverageMap[item.activity_id].push(new Date())
+        }
+      }
+    }
+    for (const items of Object.values(floatingItems)) {
+      for (const fi of items) {
+        if (!fi.activity_id) continue
+        if (!coverageMap[fi.activity_id]) coverageMap[fi.activity_id] = []
+        coverageMap[fi.activity_id].push(new Date())
+      }
+    }
+
+    // Activities already in the hopper (as real items) shouldn't appear in Suggested
+    const hopperActivityIds = new Set(hopper.filter(h => h.activity_id).map(h => h.activity_id!))
+
+    const virtual: HopperItemLocal[] = activities
+      .filter(a => a.frequency && CADENCE_DAYS[a.frequency])
+      .filter(a => !hopperActivityIds.has(a.id))
+      .filter(a => !dismissedVirtualIds.has(a.id))
+      .filter(a => {
+        const cadenceDays = CADENCE_DAYS[a.frequency!]
+        const windowMs = cadenceDays * 24 * 60 * 60 * 1000
+        const dates = coverageMap[a.id] ?? []
+        return !dates.some(d => Math.abs(d.getTime() - today.getTime()) <= windowMs)
+      })
+      .map(a => ({
+        id: `activity:${a.id}`,
+        name: a.name,
+        source: 'template_proposal' as const,
+        time_type: a.time_type,
+        emotional_weight: a.emotional_weight,
+        priority_tier: 'suggested' as const,
+        priority_score: 0,
+        block_type_hint: null,
+        duration_min: a.duration_range_min ?? 30,
+        duration_max: a.duration_range_max ?? 60,
+        values: [],
+        activity_id: a.id,
+        preferred_time: a.preferred_time,
+        frequency: a.frequency,
+      }))
+
+    // Apply time_type filter if active
+    const filtered = hopperFilter === 'all' ? virtual : virtual.filter(i => i.time_type === hopperFilter)
+    const PT_ORDER: Record<string, number> = { morning: 0, afternoon: 1, evening: 2 }
+    return filtered.sort((a, b) => {
+      const ao = a.preferred_time ? (PT_ORDER[a.preferred_time] ?? 3) : 3
+      const bo = b.preferred_time ? (PT_ORDER[b.preferred_time] ?? 3) : 3
+      if (ao !== bo) return ao - bo
+      return a.name.localeCompare(b.name)
+    })
+  }, [activities, scheduleCoverage, dayBlocks, floatingItems, hopper, dismissedVirtualIds, hopperFilter])
 
   // Completed items by day for Done tab
   const completedByDay = useMemo(() => {
@@ -1214,6 +1588,32 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
+    <>
+    <style>{`
+      @keyframes auto-place-pulse {
+        0%   { box-shadow: 0 0 0 0 rgba(75,130,175,0.8), 0 0 0 0 rgba(75,130,175,0.4); }
+        40%  { box-shadow: 0 0 0 6px rgba(75,130,175,0.3), 0 0 12px 4px rgba(75,130,175,0.15); }
+        100% { box-shadow: 0 0 0 0 rgba(75,130,175,0), 0 0 0 0 rgba(75,130,175,0); }
+      }
+      @keyframes hopper-dismiss {
+        0%   { opacity: 1; transform: translateX(0); max-height: 120px; margin-bottom: 4px; }
+        100% { opacity: 0; transform: translateX(-16px); max-height: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; }
+      }
+      @keyframes block-exit {
+        0%   { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(0.93); }
+      }
+      @keyframes item-complete-flash {
+        0%   { background: transparent; }
+        20%  { background: rgba(90,158,111,0.35); }
+        100% { background: rgba(90,158,111,0.04); }
+      }
+      @keyframes hopper-return {
+        0%   { box-shadow: 0 0 0 0 rgba(158,106,70,0.8); }
+        40%  { box-shadow: 0 0 0 6px rgba(158,106,70,0.25); }
+        100% { box-shadow: 0 0 0 0 rgba(158,106,70,0); }
+      }
+    `}</style>
     <div
       style={{
         position: 'fixed',
@@ -1535,7 +1935,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                 {loading && hopper.length === 0 && (
                   <div style={{ color: '#B5B0A8', fontSize: 11, textAlign: 'center', paddingTop: 20 }}>Loading…</div>
                 )}
-                {!loading && filteredHopper.length === 0 && (
+                {!loading && filteredHopper.length === 0 && suggestedHopper.length === 0 && (
                   <div style={{ color: '#B5B0A8', fontSize: 11, textAlign: 'center', paddingTop: 20 }}>
                     {hopper.length === 0 ? 'Hopper is empty' : 'No items match filter'}
                   </div>
@@ -1555,10 +1955,13 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         onDragStart={() => setDraggingHopperItem(item)}
                         onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
                         onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
-                        onDoubleClick={() => setEditingHopperId(item.id)}
-                        onEnrich={() => handleEnrichItem(item.id)}
+                        onDoubleClick={() => item.activity_id ? openActivityEditor(item.activity_id) : undefined}
+                        onMakeActivity={!item.activity_id ? () => { setEditingActivityPrefillName(item.name); setEditingActivityId('new') } : undefined}
+                        onAutoPlace={item.source === 'template_proposal' ? (overrides) => handleAutoPlace(item.id, overrides) : undefined}
                         dragging={draggingHopperItem?.id === item.id}
                         armed={hopperDuplicateArmed === item.id}
+                        isExiting={exitingHopperIds.has(item.id)}
+                        isReturning={returningHopperIds.has(item.id)}
                       />
                     ))}
                   </div>
@@ -1580,10 +1983,13 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         onDragStart={() => setDraggingHopperItem(item)}
                         onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
                         onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
-                        onDoubleClick={() => setEditingHopperId(item.id)}
-                        onEnrich={() => handleEnrichItem(item.id)}
+                        onDoubleClick={() => item.activity_id ? openActivityEditor(item.activity_id) : undefined}
+                        onMakeActivity={!item.activity_id ? () => { setEditingActivityPrefillName(item.name); setEditingActivityId('new') } : undefined}
+                        onAutoPlace={item.source === 'template_proposal' ? (overrides) => handleAutoPlace(item.id, overrides) : undefined}
                         dragging={draggingHopperItem?.id === item.id}
                         armed={hopperDuplicateArmed === item.id}
+                        isExiting={exitingHopperIds.has(item.id)}
+                        isReturning={returningHopperIds.has(item.id)}
                       />
                     ))}
                   </div>
@@ -1603,36 +2009,20 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         onDragStart={() => setDraggingHopperItem(item)}
                         onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
                         onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
-                        onDoubleClick={() => setEditingHopperId(item.id)}
+                        onDoubleClick={() => {
+                          const actId = item.id.startsWith('activity:') ? item.id.slice('activity:'.length) : item.activity_id
+                          if (actId) openActivityEditor(actId)
+                        }}
+                        onAutoPlace={(overrides) => handleAutoPlace(item.id, overrides)}
                         dragging={draggingHopperItem?.id === item.id}
                         armed={hopperDuplicateArmed === item.id}
-                        muted
+                        isExiting={exitingHopperIds.has(item.id)}
+                        isReturning={returningHopperIds.has(item.id)}
                       />
                     ))}
                   </div>
                 )}
               </div>
-
-              {/* Enrichment cards */}
-              {Object.keys(enrichmentCards).length > 0 && (
-                <div style={{ padding: '8px 10px', borderTop: '1px solid #E8E4DC', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
-                  {Object.entries(enrichmentCards).map(([hopperItemId, data]) => (
-                    <EnrichmentCard
-                      key={hopperItemId}
-                      hopperItemId={hopperItemId}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      enrichmentData={data as any}
-                      domains={(domains ?? []).map(d => ({ id: d.id, name: d.name }))}
-                      values={(values ?? []).map(v => ({ id: v.id, name: v.name }))}
-                      outcomes={[]}
-                      blockTypes={blockTypes.map(bt => ({ id: bt.id, name: bt.name }))}
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      onConfirm={(id, ed) => handleEnrichmentConfirm(id, ed as any)}
-                      onDecline={handleEnrichmentDecline}
-                    />
-                  ))}
-                </div>
-              )}
 
               {/* Quick capture */}
               <div style={{ padding: '8px 10px', borderTop: '1px solid #E8E4DC', flexShrink: 0 }}>
@@ -1989,6 +2379,9 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                               setDuplicateArmed(null)
                             } : undefined}
                             onDragEnd={() => { setDraggingBlock(null); setDuplicateArmed(null) }}
+                            onMouseEnter={e => setBlockTooltip({ label: block.label, time: `${formatTime12(block.start_time)} · ${block.duration_minutes}m`, x: e.clientX, y: e.clientY })}
+                            onMouseMove={e => setBlockTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                            onMouseLeave={() => setBlockTooltip(null)}
                             style={{
                               position: 'absolute',
                               top: blockTopPx(block.start_time),
@@ -2006,6 +2399,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                               cursor: block.is_hard ? 'default' : 'grab',
                               outline: duplicateArmed === block.id ? `2px dashed ${blockColor}` : 'none',
                               outlineOffset: 2,
+                              animation: exitingBlockIds.has(block.id) ? 'block-exit 260ms ease-out forwards' : newlyPlacedIds.has(block.id) ? 'auto-place-pulse 2s ease-out' : undefined,
                             }}
                             onDragOver={!block.is_hard ? e => {
                               e.preventDefault()
@@ -2071,7 +2465,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                                   alignItems: 'center',
                                   gap: 4,
                                   borderBottom: '1px solid #F5F3EF',
-                                  background: item.status === 'completed' ? '#5A9E6F08' : 'transparent',
+                                  background: flashingItemIds.has(item.id) ? 'transparent' : item.status === 'completed' ? '#5A9E6F08' : 'transparent',
+                                  animation: flashingItemIds.has(item.id) ? 'item-complete-flash 0.9s ease-out forwards' : undefined,
                                   borderLeft: item.status === 'completed'
                                     ? '3px solid #5A9E6F'
                                     : item.committed_at
@@ -2154,6 +2549,46 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                                 }}
                               />
                             )}
+                          </div>
+                        )
+                      })}
+
+                      {/* Floating schedule items (auto-placed, no time block) */}
+                      {(floatingItems[ds] ?? []).map(fi => {
+                        const startMin = timeToMinutes(fi.scheduled_time)
+                        const endMin = fi.scheduled_end_time ? timeToMinutes(fi.scheduled_end_time) : startMin + 45
+                        const dur = endMin - startMin
+                        return (
+                          <div
+                            key={fi.id}
+                            style={{
+                              position: 'absolute',
+                              top: blockTopPx(fi.scheduled_time),
+                              height: blockHeightPx(dur),
+                              left: 2,
+                              right: 2,
+                              zIndex: 3,
+                              borderRadius: 6,
+                              border: `1.5px solid ${EC[fi.time_type] ?? '#B5B0A8'}80`,
+                              background: `${EC[fi.time_type] ?? '#B5B0A8'}14`,
+                              padding: '3px 6px',
+                              overflow: 'hidden',
+                              cursor: 'default',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: EC[fi.time_type] ?? '#5A5650', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                {fi.name}
+                              </div>
+                              <button
+                                onClick={e => { e.stopPropagation(); deleteFloatingItem(fi) }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 10, color: '#8A857D', lineHeight: 1, flexShrink: 0 }}
+                                title="Remove and return to hopper"
+                              >×</button>
+                            </div>
+                            <div style={{ fontSize: 9, color: '#8A857D', marginTop: 1 }}>
+                              {formatTime12(fi.scheduled_time)}
+                            </div>
                           </div>
                         )
                       })}
@@ -2506,57 +2941,45 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         </div>
       )}
 
-      {/* ── Hopper Item Edit Modal ───────────────────────────────────────────── */}
-      {editingHopperId && (() => {
-        const item = hopper.find(h => h.id === editingHopperId)
-        if (!item) return null
-        const enrichData = buildEditEnrichment(item)
+      {/* ── Activity Editor Modal ────────────────────────────────────────────── */}
+      {editingActivityId && (editingActivityId === 'new' || editingActivityFull) && (() => {
         return (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 1002,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'rgba(45,42,38,0.30)',
-            }}
-            onClick={e => { if (e.target === e.currentTarget) setEditingHopperId(null) }}
-          >
-            <div style={{ maxWidth: 400, width: '90vw', maxHeight: '90vh', overflowY: 'auto', borderRadius: 12 }}>
-              <EnrichmentCard
-                hopperItemId={item.id}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                enrichmentData={enrichData as any}
-                domains={(domains ?? []).map(d => ({ id: d.id, name: d.name }))}
-                values={(values ?? []).map(v => ({ id: v.id, name: v.name }))}
-                outcomes={[]}
-                blockTypes={blockTypes.map(bt => ({ id: bt.id, name: bt.name }))}
-                defaultExpanded
-                onConfirm={(id, ed) => {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  const data = ed as any
-                  handleEnrichmentConfirm(id, data)
-                  setHopper(prev => prev.map(h => h.id === id ? {
-                    ...h,
-                    name: data.suggested_name ?? h.name,
-                    time_type: data.suggested_time_type ?? h.time_type,
-                    emotional_weight: data.suggested_emotional_weight ?? h.emotional_weight,
-                    duration_min: data.suggested_duration_min ?? h.duration_min,
-                    duration_max: data.suggested_duration_max ?? h.duration_max,
-                    enrichment_data: data,
-                    enrichment_status: 'confirmed' as const,
-                  } : h))
-                  setEditingHopperId(null)
-                }}
-                onDecline={() => setEditingHopperId(null)}
-              />
-            </div>
-          </div>
+          <EditActivityModal
+            activity={editingActivityId === 'new' ? null : editingActivityFull}
+            defaultName={editingActivityId === 'new' ? editingActivityPrefillName : undefined}
+            values={values ?? []}
+            domains={domains ?? []}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            outcomes={outcomes as any}
+            onSave={handleSaveActivity}
+            onDelete={null}
+            onClose={() => { setEditingActivityId(null); setEditingActivityPrefillName(''); setEditingActivityFull(null) }}
+          />
         )
       })()}
     </div>
+    {blockTooltip && (
+      <div style={{
+        position: 'fixed',
+        left: blockTooltip.x + 12,
+        top: blockTooltip.y - 8,
+        background: '#2D2A26',
+        color: '#FAF9F6',
+        padding: '5px 10px',
+        borderRadius: 6,
+        fontSize: 12,
+        pointerEvents: 'none',
+        zIndex: 9999,
+        maxWidth: 280,
+        whiteSpace: 'normal',
+        lineHeight: 1.4,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ fontWeight: 600 }}>{blockTooltip.label}</div>
+        <div style={{ fontSize: 10, color: '#B5B0A8', marginTop: 2 }}>{blockTooltip.time}</div>
+      </div>
+    )}
+    </>
   )
 }
 
@@ -2576,16 +2999,47 @@ interface HopperItemCardProps {
   onDragEnd: () => void
   onContextMenu: (e: React.MouseEvent) => void
   onDoubleClick: () => void
-  onEnrich?: () => void
+  onMakeActivity?: () => void
+  onAutoPlace?: (overrides?: { preferred_time: string; duration_minutes: number }) => void
   dragging: boolean
   armed?: boolean
   muted?: boolean
+  isExiting?: boolean
+  isReturning?: boolean
 }
 
-const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onEnrich, dragging, armed, muted }: HopperItemCardProps) {
-  const borderColor: Record<string, string> = { urgent: '#C4725A40', normal: '#E8E4DC', suggested: '#F0EDE8' }
-  const leftBorderColor: Record<string, string> = { urgent: '#C4725A', normal: '#D0CBC3', suggested: '#E8E4DC' }
-  const bgColor: Record<string, string> = { urgent: '#FDF8F5', normal: '#FFFFFF', suggested: '#F9F7F4' }
+const FREQ_LABELS: Record<string, string> = {
+  daily: 'Daily', weekly: 'Weekly', biweekly: 'Biweekly',
+  monthly: 'Monthly', quarterly: 'Quarterly', annual: 'Annual',
+}
+const TIME_OPTIONS = ['morning', 'afternoon', 'evening'] as const
+const TIME_LABELS: Record<string, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
+const DUR_OPTIONS = [15, 30, 45, 60, 90]
+
+const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
+  const [showScheduleForm, setShowScheduleForm] = useState(false)
+  const [formTime, setFormTime] = useState<string>(() => item.preferred_time ?? 'morning')
+  const [formDur, setFormDur] = useState<number>(() => {
+    if (item.duration_min && item.duration_min > 0) {
+      return DUR_OPTIONS.reduce((prev, cur) => Math.abs(cur - item.duration_min) < Math.abs(prev - item.duration_min) ? cur : prev)
+    }
+    return 30
+  })
+
+  const borderColor: Record<string, string> = { urgent: '#C4725A40', normal: '#E8E4DC', suggested: '#E8E4DC' }
+  const leftBorderColor: Record<string, string> = { urgent: '#C4725A', normal: '#D0CBC3', suggested: '#7BAF7B' }
+  const bgColor: Record<string, string> = { urgent: '#FDF8F5', normal: '#FFFFFF', suggested: '#FFFFFF' }
+
+  function handleScheduleClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    setShowScheduleForm(f => !f)
+  }
+
+  function handleScheduleConfirm(e: React.MouseEvent) {
+    e.stopPropagation()
+    onAutoPlace?.({ preferred_time: formTime, duration_minutes: formDur })
+    setShowScheduleForm(false)
+  }
 
   return (
     <div
@@ -2608,6 +3062,8 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragSta
         opacity: dragging ? 0.4 : muted ? 0.7 : 1,
         userSelect: 'none',
         position: 'relative',
+        overflow: isExiting ? 'hidden' : undefined,
+        animation: isExiting ? 'hopper-dismiss 360ms ease-out forwards' : isReturning ? 'hopper-return 2s ease-out' : undefined,
       }}
     >
       {armed && (
@@ -2635,22 +3091,83 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragSta
           lineHeight: 1.3,
           wordBreak: 'break-word',
         }}>
-          {item.enrichment_status === 'pending' && (
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#C4725A', marginRight: 5, animation: 'ws-pulse 1s infinite', verticalAlign: 'middle' }} />
-          )}
-          {item.enrichment_status === 'enriched' && (
-            <span style={{ fontSize: 8, color: '#BA7517', marginRight: 4 }}>✦</span>
-          )}
           {item.name}
           {item.emotional_weight === 'heavy' && (
             <span style={{ color: '#C4725A', marginLeft: 3, fontSize: 8 }}>◆</span>
           )}
         </div>
-        {item.enrichment_status === 'none' && onEnrich && (
+        {onMakeActivity && (
           <button
-            onClick={e => { e.stopPropagation(); onEnrich() }}
-            style={{ fontSize: 9, color: '#BA7517', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', marginTop: 2 }}
-          >✦ Enrich</button>
+            onClick={e => { e.stopPropagation(); onMakeActivity() }}
+            style={{ fontSize: 9, color: '#5A9E6F', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', marginTop: 2 }}
+          >+ Make Activity</button>
+        )}
+        {onAutoPlace && (
+          <div style={{ marginTop: 3 }}>
+            <button
+              onClick={handleScheduleClick}
+              style={{
+                fontSize: 9, fontWeight: 600,
+                color: '#4B82AF',
+                background: '#4B82AF12',
+                border: '1px solid #4B82AF40',
+                borderRadius: 4, padding: '2px 7px',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              → Schedule…
+            </button>
+            {showScheduleForm && (
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{ marginTop: 5, display: 'flex', flexDirection: 'column', gap: 4 }}
+              >
+                {/* Time row — named slots or exact HH:MM */}
+                <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {TIME_OPTIONS.map(t => (
+                    <button key={t} onClick={() => setFormTime(t)} style={{
+                      fontSize: 9, padding: '2px 7px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                      background: formTime === t ? '#4B82AF' : '#F5F3EF',
+                      color: formTime === t ? '#FFF' : '#5A5650',
+                      border: `1px solid ${formTime === t ? '#4B82AF' : 'transparent'}`,
+                      fontWeight: formTime === t ? 600 : 400,
+                    }}>{TIME_LABELS[t]}</button>
+                  ))}
+                  <input
+                    type="text"
+                    placeholder="HH:MM"
+                    value={TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) ? '' : formTime}
+                    onChange={e => setFormTime(e.target.value)}
+                    style={{
+                      fontSize: 9, padding: '2px 6px', borderRadius: 10, width: 52,
+                      border: `1px solid ${!TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) && formTime ? '#4B82AF' : '#E0DDD6'}`,
+                      background: !TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) && formTime ? '#4B82AF12' : '#F5F3EF',
+                      fontFamily: 'inherit', outline: 'none',
+                    }}
+                  />
+                </div>
+                {/* Duration row + confirm */}
+                <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                  {DUR_OPTIONS.map(d => (
+                    <button key={d} onClick={() => setFormDur(d)} style={{
+                      fontSize: 9, padding: '2px 6px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                      background: formDur === d ? '#4B82AF' : '#F5F3EF',
+                      color: formDur === d ? '#FFF' : '#5A5650',
+                      border: `1px solid ${formDur === d ? '#4B82AF' : 'transparent'}`,
+                      fontWeight: formDur === d ? 600 : 400,
+                    }}>{d}m</button>
+                  ))}
+                  <button
+                    onClick={handleScheduleConfirm}
+                    style={{
+                      marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '2px 9px', borderRadius: 10,
+                      background: '#5A9E6F', color: '#FFF', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >Go →</button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
         <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
           <span style={{
@@ -2663,6 +3180,11 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragSta
           }}>
             {SOURCE_ICONS[item.source] ?? '○'} {SOURCE_LABELS[item.source] ?? item.source}
           </span>
+          {item.frequency && FREQ_LABELS[item.frequency] && (
+            <span style={{ fontSize: 8, color: '#8A857D', background: '#F0EDE8', borderRadius: 4, padding: '1px 4px' }}>
+              {FREQ_LABELS[item.frequency]}
+            </span>
+          )}
           {item.duration_min > 0 && (
             <span style={{ fontSize: 8, color: '#B5B0A8' }}>
               {item.duration_min === item.duration_max

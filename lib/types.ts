@@ -11,6 +11,8 @@ export interface UserValue {
   sufficiency_mark: number
   sort_order: number
   is_active: boolean
+  position_x: number | null
+  position_y: number | null
   created_at: string
   updated_at: string
 }
@@ -23,6 +25,8 @@ export interface LifeDomain {
   color: string | null
   sort_order: number
   is_active: boolean
+  position_x: number | null
+  position_y: number | null
   created_at: string
   updated_at: string
 }

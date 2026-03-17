@@ -14,7 +14,8 @@ export async function GET() {
       activity_domain_links(id, domain_id, life_domains(name)),
       big_outcomes(name)
     `)
-    .order('sort_order')
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const result = activities?.map(a => ({
