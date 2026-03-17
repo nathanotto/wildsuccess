@@ -107,7 +107,7 @@ interface CalEventLocal {
   external_series_id: string | null
   external_event_id: string
   classification: {
-    classification: 'provisional' | 'info' | 'fixed_commitment' | 'flexible_commitment'
+    classification: 'provisional' | 'info' | 'fixed_commitment' | 'flexible_commitment' | 'hidden'
     display_label: string | null
   } | null
 }
@@ -118,6 +118,7 @@ interface ClassifyState {
   displayLabel: string
   energyLevel: 'A' | 'B' | 'C' | 'D' | '0'
   applyToSeries: boolean
+  hiding?: boolean
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -162,6 +163,13 @@ function formatTime12(t: string): string {
   const h12 = h % 12 || 12
   return m === 0 ? `${h12} ${ap}` : `${h12}:${m} ${ap}`
 }
+function localTimeStr(isoOrHHMM: string): string {
+  // If it's a full ISO timestamp, extract local HH:MM; otherwise pass through
+  if (!isoOrHHMM.includes('-') && !isoOrHHMM.includes('+') && isoOrHHMM.length <= 5) return isoOrHHMM
+  const d = new Date(isoOrHHMM)
+  if (isNaN(d.getTime())) return isoOrHHMM.substring(0, 5)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const SOURCE_LABELS: Record<string, string> = {
@@ -190,6 +198,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   const [calEvents, setCalEvents] = useState<CalEventLocal[]>([])
   const [calConnected, setCalConnected] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
 
   // UI state
   const [paletteShrunk, setPaletteShrunk] = useState(false)
@@ -257,6 +266,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   const [activities, setActivities] = useState<ActivityLocal[]>([])
   const [scheduleCoverage, setScheduleCoverage] = useState<{ activity_id: string; scheduled_date: string }[]>([])
   const [dismissedVirtualIds, setDismissedVirtualIds] = useState<Set<string>>(new Set())
+  // DB-backed week dismissals: { id: hopper_item_id, activity_id, name, time_type, preferred_time }
+  const [weekDismissed, setWeekDismissed] = useState<HopperItemLocal[]>([])
 
   // Block hover tooltip
   const [blockTooltip, setBlockTooltip] = useState<{ label: string; time: string; x: number; y: number } | null>(null)
@@ -290,6 +301,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         tbRes,
         siRes,
         hopperRes,
+        dismissedRes,
         calRes,
         calSettingsRes,
         outcomesRes,
@@ -300,6 +312,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         fetch(`/api/time-blocks?range_start=${rangeStart}&range_end=${rangeEnd}`),
         fetch(`/api/schedule?range_start=${rangeStart}&range_end=${rangeEnd}`),
         fetch(`/api/hopper?status=pending&through_date=${rangeEnd}`),
+        fetch(`/api/hopper?status=dismissed`),
         fetch(`/api/calendar/events?start=${rangeStart}T00:00:00Z&end=${rangeEnd}T23:59:59Z`),
         fetch('/api/calendar/settings'),
         fetch('/api/big-outcomes'),
@@ -307,11 +320,12 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         fetch('/api/schedule/coverage'),
       ])
 
-      const [btData, tbData, siData, hopperData, calData, calSettings, outcomesData, activitiesData, coverageData] = await Promise.all([
+      const [btData, tbData, siData, hopperData, dismissedData, calData, calSettings, outcomesData, activitiesData, coverageData] = await Promise.all([
         btRes.ok ? btRes.json() : [],
         tbRes.ok ? tbRes.json() : [],
         siRes.ok ? siRes.json() : [],
         hopperRes.ok ? hopperRes.json() : [],
+        dismissedRes.ok ? dismissedRes.json() : [],
         calRes.ok ? calRes.json() : [],
         calSettingsRes.ok ? calSettingsRes.json() : { connected: false },
         outcomesRes.ok ? outcomesRes.json() : [],
@@ -449,6 +463,43 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       // Deduplicate by id — should never be needed but prevents key collisions if state gets polluted
       const seen = new Set<string>()
       setHopper(hopperItems.filter(h => seen.has(h.id) ? false : (seen.add(h.id), true)))
+
+      // Week-dismissed suggested items: template_proposal dismissed items whose metadata.dismissed_week === rangeStart
+      const rawDismissed: Array<{
+        id: string
+        raw_input: string
+        activity_id?: string | null
+        metadata?: { dismissed_week?: string } | null
+        activity?: {
+          time_type?: 'A' | 'B' | 'C' | 'D' | '0'
+          preferred_time?: string | null
+          duration_range_min?: number | null
+          duration_range_max?: number | null
+          frequency?: string | null
+        } | null
+      }> = Array.isArray(dismissedData) ? dismissedData : []
+
+      const dismissedThisWeek = rawDismissed.filter(
+        h => h.metadata?.dismissed_week === rangeStart && h.activity_id
+      )
+      setWeekDismissed(dismissedThisWeek.map(h => ({
+        id: h.id,
+        name: h.raw_input,
+        source: 'template_proposal' as const,
+        time_type: (h.activity?.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
+        emotional_weight: 'normal' as const,
+        priority_tier: 'suggested' as const,
+        priority_score: 0,
+        block_type_hint: null,
+        duration_min: h.activity?.duration_range_min ?? 20,
+        duration_max: h.activity?.duration_range_max ?? 60,
+        values: [],
+        activity_id: h.activity_id!,
+        preferred_time: h.activity?.preferred_time ?? null,
+        frequency: h.activity?.frequency ?? null,
+      })))
+      // Also set the in-memory dismissed set so suggestedHopper excludes them immediately
+      setDismissedVirtualIds(new Set(dismissedThisWeek.map(h => h.activity_id!)))
 
       // Activities for dynamic Suggested computation
       if (Array.isArray(activitiesData)) {
@@ -922,12 +973,42 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     try {
       setExitingHopperIds(prev => new Set([...prev, id]))
       if (id.startsWith('activity:')) {
-        // Virtual item — just hide it locally for this session
         const activityId = id.slice('activity:'.length)
+        const activity = activities.find(a => a.id === activityId)
         setTimeout(() => {
           setDismissedVirtualIds(prev => new Set([...prev, activityId]))
           setExitingHopperIds(prev => { const s = new Set(prev); s.delete(id); return s })
         }, 360)
+        // Persist the dismissal for this week to the DB
+        fetch('/api/hopper', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            raw_input: activity?.name ?? activityId,
+            source: 'template_proposal',
+            activity_id: activityId,
+            status: 'dismissed',
+            metadata: { dismissed_week: dateStr(weekStart) },
+          }),
+        }).then(res => res.ok ? res.json() : null).then(record => {
+          if (!record) return
+          setWeekDismissed(prev => [...prev, {
+            id: record.id,
+            name: record.raw_input,
+            source: 'template_proposal' as const,
+            time_type: (activity?.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
+            emotional_weight: 'normal' as const,
+            priority_tier: 'suggested' as const,
+            priority_score: 0,
+            block_type_hint: null,
+            duration_min: activity?.duration_range_min ?? 20,
+            duration_max: activity?.duration_range_max ?? 60,
+            values: [],
+            activity_id: activityId,
+            preferred_time: activity?.preferred_time ?? null,
+            frequency: activity?.frequency ?? null,
+          }])
+        })
       } else {
         await fetch(`/api/hopper/${id}`, {
           method: 'PATCH',
@@ -941,6 +1022,23 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       }
     } catch (err) {
       console.error('Dismiss hopper error:', err)
+    }
+  }
+
+  // ── Revive a week-dismissed suggested item ──────────────────────────────────
+  async function reviveHopperItem(item: HopperItemLocal) {
+    try {
+      await fetch(`/api/hopper/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'pending', metadata: null }),
+      })
+      setWeekDismissed(prev => prev.filter(d => d.id !== item.id))
+      if (item.activity_id) {
+        setDismissedVirtualIds(prev => { const s = new Set(prev); s.delete(item.activity_id!); return s })
+      }
+    } catch (err) {
+      console.error('Revive hopper error:', err)
     }
   }
 
@@ -1231,7 +1329,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     setEditingActivityFull(null)
   }
 
-  async function handleAutoPlace(itemId: string, overrides?: { preferred_time: string; duration_minutes: number }) {
+  async function handleAutoPlace(itemId: string, overrides?: { preferred_time: string; duration_minutes: number }, force?: boolean) {
     // Virtual items (from dynamic Suggested) have no DB record yet — create one first
     let hopperItemId = itemId
     if (itemId.startsWith('activity:')) {
@@ -1254,7 +1352,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     const res = await fetch('/api/schedule/auto-place', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hopper_item_id: hopperItemId, week_start: dateStr(weekStart), ...overrides }),
+      body: JSON.stringify({ hopper_item_id: hopperItemId, week_start: dateStr(weekStart), utc_offset_minutes: new Date().getTimezoneOffset(), force: force ?? false, ...overrides }),
     })
     if (!res.ok) return
     const { created } = await res.json()
@@ -1370,12 +1468,21 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   // ── Calendar classification ─────────────────────────────────────────────────
   async function saveClassification() {
     if (!classifying) return
-    const { event, classification, displayLabel, energyLevel, applyToSeries } = classifying
+    const { event, classification, displayLabel, energyLevel, applyToSeries, hiding } = classifying
+    const effectiveClassification = hiding ? 'hidden' : classification
 
     const matchKey = applyToSeries && event.external_series_id
       ? event.external_series_id
       : event.external_event_id
     const matchType = applyToSeries && event.external_series_id ? 'series' : 'event'
+
+    // Optimistically update local state so the grid changes immediately
+    setCalEvents(prev => prev.map(ev => {
+      const evKey = ev.external_series_id && applyToSeries ? ev.external_series_id : ev.external_event_id
+      if (evKey !== matchKey) return ev
+      return { ...ev, classification: { classification: effectiveClassification as CalEventLocal['classification'] extends { classification: infer T } | null ? T : never, display_label: displayLabel || null } }
+    }))
+    setClassifying(null)
 
     try {
       await fetch('/api/calendar/classify', {
@@ -1384,47 +1491,57 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         body: JSON.stringify({
           match_key: matchKey,
           match_type: matchType,
-          classification,
+          classification: effectiveClassification,
           display_label: displayLabel || null,
           time_type: energyLevel,
         }),
       })
 
-      if (classification === 'fixed_commitment') {
-        const startParts = event.start_time.replace('Z', '').split('T')
-        const eventDate = startParts[0]
-        const startT = startParts[1]?.substring(0, 5) ?? '09:00'
-        const endParts = event.end_time.replace('Z', '').split('T')
-        const endT = endParts[1]?.substring(0, 5) ?? '10:00'
-        await fetch('/api/time-blocks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            block_date: eventDate,
-            label: displayLabel || event.title,
-            start_time: startT,
-            end_time: endT,
-            is_hard: true,
-            source: 'calendar_import',
-            time_type: energyLevel,
-          }),
-        })
-      } else if (classification === 'flexible_commitment') {
+      // fixed_commitment: no time block created — the 🔒 overlay on the grid already shows the
+      // event, and the auto-planner already avoids it via calendar_events. Creating a block
+      // would duplicate the slot.
+      if (!hiding && classification === 'flexible_commitment') {
         await fetch('/api/hopper', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            raw_input: displayLabel || event.title,
-            source: 'outside_request',
-          }),
+          body: JSON.stringify({ raw_input: displayLabel || event.title, source: 'outside_request' }),
         })
+        await loadData()
       }
-
-      await loadData()
     } catch (err) {
       console.error('Classify error:', err)
     }
-    setClassifying(null)
+  }
+
+  async function hideCalEvent(ev: CalEventLocal) {
+    // Optimistically remove from view
+    setCalEvents(prev => prev.map(e => e.id === ev.id
+      ? { ...e, classification: { classification: 'hidden', display_label: null } }
+      : e
+    ))
+    await fetch('/api/calendar/classify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        match_key: ev.external_event_id,
+        match_type: 'event',
+        classification: 'hidden',
+        display_label: null,
+      }),
+    }).catch(() => {/* silent — optimistic update already applied */})
+  }
+
+  function openClassifyDialog(ev: CalEventLocal) {
+    const existingClass = ev.classification?.classification
+    setClassifying({
+      event: ev,
+      classification: (existingClass === 'info' || existingClass === 'fixed_commitment' || existingClass === 'flexible_commitment')
+        ? existingClass
+        : 'info',
+      displayLabel: ev.classification?.display_label ?? ev.title,
+      energyLevel: 'B',
+      applyToSeries: !!ev.external_series_id,
+    })
   }
 
   // ── Block type editor save ──────────────────────────────────────────────────
@@ -1613,6 +1730,10 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         40%  { box-shadow: 0 0 0 6px rgba(158,106,70,0.25); }
         100% { box-shadow: 0 0 0 0 rgba(158,106,70,0); }
       }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
     `}</style>
     <div
       style={{
@@ -1677,6 +1798,25 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             <span style={{ fontSize: 11, color: '#8A857D' }}>
               {calConnected ? 'Cal synced' : 'No calendar'}
             </span>
+            {calConnected && (
+              <button
+                onClick={async () => {
+                  if (syncing) return
+                  setSyncing(true)
+                  try {
+                    const res = await fetch('/api/calendar/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+                    if (res.ok) await loadData()
+                  } finally {
+                    setSyncing(false)
+                  }
+                }}
+                disabled={syncing}
+                style={{ fontSize: 10, color: syncing ? '#B5B0A8' : '#4B82AF', background: 'none', border: 'none', cursor: syncing ? 'default' : 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 3 }}
+              >
+                <span style={{ display: 'inline-block', animation: syncing ? 'spin 0.8s linear infinite' : 'none' }}>↻</span>
+                {syncing ? 'Syncing…' : 'Sync'}
+              </button>
+            )}
           </div>
           <div style={{ flex: 1 }} />
           {loading && (
@@ -2022,6 +2162,29 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                     ))}
                   </div>
                 )}
+
+                {/* Dismissed this week */}
+                {weekDismissed.length > 0 && (
+                  <div style={{ marginBottom: 8, marginTop: 4 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: '#D0CBC3', letterSpacing: 1, marginBottom: 4, paddingLeft: 4 }}>
+                      SKIPPED THIS WEEK
+                    </div>
+                    {weekDismissed.map(item => (
+                      <HopperItemCard
+                        key={item.id}
+                        item={item}
+                        onDismiss={() => {}}
+                        onRevive={() => reviveHopperItem(item)}
+                        onDragStart={() => {}}
+                        onDragEnd={() => {}}
+                        onContextMenu={e => e.preventDefault()}
+                        onDoubleClick={() => item.activity_id ? openActivityEditor(item.activity_id) : undefined}
+                        dragging={false}
+                        muted
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Quick capture */}
@@ -2135,9 +2298,17 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   const ds = dateStr(d)
                   const isToday = ds === today
                   const blocks = dayBlocks[ds] ?? []
+                  const blockLabels = new Set(blocks.map(b => b.label.trim().toLowerCase()))
                   const dayCalEvents = calEvents.filter(ev => {
-                    const evDate = ev.start_time.split('T')[0]
-                    return evDate === ds && !ev.is_all_day
+                    if (ev.is_all_day) return false
+                    if (ev.classification?.classification === 'hidden') return false
+                    const local = new Date(ev.start_time)
+                    const evDate = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`
+                    if (evDate !== ds) return false
+                    // Skip if a Wild Success block with the same name already exists on this day
+                    const evTitle = (ev.classification?.display_label ?? ev.title).trim().toLowerCase()
+                    if (blockLabels.has(evTitle)) return false
+                    return true
                   })
 
                   const showPlaceholder = (draggingBlockTypeId || draggingBlock || draggingHopperItem) && dragOverCol === ds && dragOverTime
@@ -2248,17 +2419,17 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         )
                       })()}
 
-                      {/* Calendar event info bands */}
+                      {/* Calendar event info bands — subtle, clickable to reclassify */}
                       {dayCalEvents
-                        .filter(ev => ev.classification?.classification === 'info' || ev.classification === null && false)
                         .filter(ev => ev.classification?.classification === 'info')
                         .map(calEv => {
-                          const startT = calEv.start_time.includes('T') ? calEv.start_time.split('T')[1].substring(0, 5) : calEv.start_time.substring(0, 5)
-                          const endT = calEv.end_time.includes('T') ? calEv.end_time.split('T')[1].substring(0, 5) : calEv.end_time.substring(0, 5)
+                          const startT = localTimeStr(calEv.start_time)
+                          const endT = localTimeStr(calEv.end_time)
                           const dur = timeToMinutes(endT) - timeToMinutes(startT)
                           return (
                             <div
                               key={calEv.id}
+                              onClick={() => openClassifyDialog(calEv)}
                               style={{
                                 position: 'absolute',
                                 left: 0,
@@ -2268,34 +2439,33 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                                 height: blockHeightPx(dur),
                                 background: '#4B82AF08',
                                 borderLeft: '2px solid #4B82AF20',
-                                pointerEvents: 'none',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                justifyContent: 'space-between',
+                                overflow: 'hidden',
                               }}
                             >
-                              <span style={{ fontSize: 8, color: '#4B82AF80', padding: '2px 4px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: 8, color: '#4B82AF80', padding: '2px 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                                 {calEv.display_label ?? calEv.title}
                               </span>
+                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#4B82AF60', padding: '1px 3px', lineHeight: 1, flexShrink: 0 }} title="Hide event">×</button>
                             </div>
                           )
                         })
                       }
 
-                      {/* Calendar event provisional */}
+                      {/* Calendar event provisional — unclassified, needs attention */}
                       {dayCalEvents
                         .filter(ev => !ev.classification || ev.classification.classification === 'provisional')
                         .map(calEv => {
-                          const startT = calEv.start_time.includes('T') ? calEv.start_time.split('T')[1].substring(0, 5) : calEv.start_time.substring(0, 5)
-                          const endT = calEv.end_time.includes('T') ? calEv.end_time.split('T')[1].substring(0, 5) : calEv.end_time.substring(0, 5)
+                          const startT = localTimeStr(calEv.start_time)
+                          const endT = localTimeStr(calEv.end_time)
                           const dur = timeToMinutes(endT) - timeToMinutes(startT)
                           return (
                             <div
                               key={calEv.id}
-                              onClick={() => setClassifying({
-                                event: calEv,
-                                classification: 'info',
-                                displayLabel: calEv.title,
-                                energyLevel: 'B',
-                                applyToSeries: !!calEv.external_series_id,
-                              })}
+                              onClick={() => openClassifyDialog(calEv)}
                               style={{
                                 position: 'absolute',
                                 left: 2,
@@ -2315,27 +2485,30 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                               }}
                             >
                               <span style={{ fontSize: 9, background: '#C4725A', color: 'white', borderRadius: 3, padding: '1px 4px', fontWeight: 700, flexShrink: 0, marginTop: 1 }}>?</span>
-                              <span style={{ fontSize: 9, color: '#2D2A26', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{calEv.title}</span>
+                              <span style={{ fontSize: 9, color: '#2D2A26', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{calEv.title}</span>
+                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#C4725A80', padding: '0 2px', lineHeight: 1, flexShrink: 0, marginTop: 1 }} title="Hide event">×</button>
                             </div>
                           )
                         })
                       }
 
-                      {/* Calendar event fixed_commitment — hard block display */}
+                      {/* Calendar event fixed_commitment — hard block, clickable to reclassify */}
                       {dayCalEvents
                         .filter(ev => ev.classification?.classification === 'fixed_commitment')
                         .map(calEv => {
-                          const startT = calEv.start_time.includes('T') ? calEv.start_time.split('T')[1].substring(0, 5) : calEv.start_time.substring(0, 5)
-                          const endT = calEv.end_time.includes('T') ? calEv.end_time.split('T')[1].substring(0, 5) : calEv.end_time.substring(0, 5)
+                          const startT = localTimeStr(calEv.start_time)
+                          const endT = localTimeStr(calEv.end_time)
                           const dur = timeToMinutes(endT) - timeToMinutes(startT)
                           return (
                             <div
                               key={calEv.id}
+                              onClick={() => openClassifyDialog(calEv)}
                               style={{
                                 position: 'absolute',
                                 left: 2,
                                 right: 2,
                                 zIndex: 1,
+                                cursor: 'pointer',
                                 top: blockTopPx(startT),
                                 height: blockHeightPx(dur),
                                 borderRadius: 6,
@@ -2348,10 +2521,11 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                                 overflow: 'hidden',
                               }}
                             >
-                              <span style={{ fontSize: 8, color: '#9E6A46' }}>🔒</span>
-                              <span style={{ fontSize: 9, color: '#9E6A46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: 8, color: '#9E6A46', flexShrink: 0 }}>🔒</span>
+                              <span style={{ fontSize: 9, color: '#9E6A46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                                 {calEv.display_label ?? calEv.title}
                               </span>
+                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#9E6A4660', padding: '0 2px', lineHeight: 1, flexShrink: 0 }} title="Hide event">×</button>
                             </div>
                           )
                         })
@@ -2442,17 +2616,15 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                               </span>
                               <span style={{ fontSize: 9, color: '#8A857D', flexShrink: 0 }}>{formatTime12(block.start_time)}</span>
                               {block.is_hard && <span style={{ fontSize: 8, color: '#9E6A46' }}>🔒</span>}
-                              {!block.is_hard && (
-                                <button
-                                  onClick={() => deleteBlock(block.id, ds)}
-                                  style={{
-                                    width: 12, height: 12, borderRadius: 3, border: 'none', background: 'transparent',
-                                    cursor: 'pointer', fontSize: 9, color: '#8A857D', display: 'flex', alignItems: 'center',
-                                    justifyContent: 'center', padding: 0, lineHeight: 1, flexShrink: 0,
-                                  }}
-                                  title="Delete block"
-                                >×</button>
-                              )}
+                              <button
+                                onClick={() => deleteBlock(block.id, ds)}
+                                style={{
+                                  width: 12, height: 12, borderRadius: 3, border: 'none', background: 'transparent',
+                                  cursor: 'pointer', fontSize: 9, color: '#8A857D', display: 'flex', alignItems: 'center',
+                                  justifyContent: 'center', padding: 0, lineHeight: 1, flexShrink: 0,
+                                }}
+                                title="Delete block"
+                              >×</button>
                             </div>
 
                             {/* Scheduled items */}
@@ -2831,115 +3003,117 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       </div>
 
       {/* ── Classification Popover ──────────────────────────────────────────── */}
-      {classifying && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1001,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(45,42,38,0.15)',
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setClassifying(null) }}
-        >
-          <div style={{
-            background: '#FAFAF7',
-            borderRadius: 14,
-            padding: 24,
-            width: 340,
-            boxShadow: '0 8px 32px rgba(45,42,38,0.18)',
-            fontFamily: '"Source Sans 3", sans-serif',
-          }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#2D2A26', marginBottom: 4 }}>
-              Classify Event
-            </div>
-            <div style={{ fontSize: 13, color: '#5A5650', marginBottom: 16, background: '#F0EDE8', borderRadius: 8, padding: '6px 10px' }}>
-              {classifying.event.title}
-            </div>
+      {classifying && (() => {
+        const OPTS: { value: 'info' | 'fixed_commitment' | 'flexible_commitment'; icon: string; label: string; desc: string; color: string }[] = [
+          { value: 'fixed_commitment', icon: '🔒', label: 'Hard Commitment', desc: 'Blocks this time — shown as a solid event on the grid', color: '#9E6A46' },
+          { value: 'info', icon: '○', label: 'Background Info', desc: 'Just context — barely visible, won\'t affect scheduling', color: '#4B82AF' },
+          { value: 'flexible_commitment', icon: '→', label: 'Add to Hopper', desc: 'Turns into a task you can drag to a slot', color: '#5A9E6F' },
+        ]
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,38,0.2)' }}
+            onClick={e => { if (e.target === e.currentTarget) setClassifying(null) }}
+          >
+            <div style={{ background: '#FAFAF7', borderRadius: 14, padding: 24, width: 350, boxShadow: '0 8px 32px rgba(45,42,38,0.2)', fontFamily: '"Source Sans 3", sans-serif' }}>
 
-            {/* Classification radio */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Type</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {(['info', 'fixed_commitment', 'flexible_commitment'] as const).map(opt => (
-                  <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#2D2A26' }}>
-                    <input
-                      type="radio"
-                      name="classify"
-                      value={opt}
-                      checked={classifying.classification === opt}
-                      onChange={() => setClassifying(s => s ? { ...s, classification: opt } : s)}
-                    />
-                    {opt === 'info' ? 'Info only (background)' : opt === 'fixed_commitment' ? 'Fixed commitment (hard block)' : 'Flexible commitment (add to hopper)'}
-                  </label>
-                ))}
+              {/* Header */}
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Google Calendar Event</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#2D2A26', marginBottom: 4 }}>{classifying.event.title}</div>
+              <div style={{ fontSize: 11, color: '#8A857D', marginBottom: 16 }}>
+                {(() => {
+                  const d = new Date(classifying.event.start_time)
+                  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                })()}
               </div>
-            </div>
 
-            {/* Display label */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Display Label</div>
+              {/* Display label (compact) */}
               <input
                 value={classifying.displayLabel}
                 onChange={e => setClassifying(s => s ? { ...s, displayLabel: e.target.value } : s)}
-                style={{ width: '100%', fontSize: 13, border: '1px solid #E0DDD6', borderRadius: 8, padding: '7px 10px', background: '#FFF', color: '#2D2A26', boxSizing: 'border-box', outline: 'none' }}
+                placeholder="Display label (optional)"
+                style={{ width: '100%', fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 8, padding: '6px 10px', background: '#FFF', color: '#2D2A26', boxSizing: 'border-box', outline: 'none', marginBottom: 14 }}
               />
-            </div>
 
-            {/* Energy level (for commitments) */}
-            {classifying.classification !== 'info' && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Energy Level</div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {(['A', 'B', 'C', 'D', '0'] as const).map(level => (
-                    <button
-                      key={level}
-                      onClick={() => setClassifying(s => s ? { ...s, energyLevel: level } : s)}
+              {/* Classification cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                {OPTS.map(opt => {
+                  const sel = !classifying.hiding && classifying.classification === opt.value
+                  return (
+                    <div
+                      key={opt.value}
+                      onClick={() => setClassifying(s => s ? { ...s, classification: opt.value, hiding: false } : s)}
                       style={{
-                        flex: 1, padding: '5px', borderRadius: 8,
-                        border: `1.5px solid ${classifying.energyLevel === level ? EC[level] : '#E0DDD6'}`,
-                        background: classifying.energyLevel === level ? EC[level] + '15' : '#FFF',
-                        cursor: 'pointer', fontSize: 11, fontWeight: 500,
-                        color: classifying.energyLevel === level ? EC[level] : '#8A857D',
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 9, cursor: 'pointer',
+                        border: `1.5px solid ${sel ? opt.color + '60' : '#E8E4DC'}`,
+                        background: sel ? opt.color + '0C' : '#FFF',
+                        transition: 'all 0.1s',
                       }}
                     >
-                      {level} {EL[level]}
-                    </button>
-                  ))}
+                      <span style={{ fontSize: 16, flexShrink: 0, width: 20, textAlign: 'center', color: opt.color }}>{opt.icon}</span>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: sel ? 700 : 500, color: sel ? opt.color : '#2D2A26' }}>{opt.label}</div>
+                        <div style={{ fontSize: 10, color: '#8A857D' }}>{opt.desc}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Energy level — only for non-info */}
+              {!classifying.hiding && classifying.classification !== 'info' && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>Energy type</div>
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    {(['A', 'B', 'C', 'D', '0'] as const).map(level => (
+                      <button
+                        key={level}
+                        onClick={() => setClassifying(s => s ? { ...s, energyLevel: level } : s)}
+                        style={{
+                          flex: 1, padding: '4px', borderRadius: 6,
+                          border: `1.5px solid ${classifying.energyLevel === level ? EC[level] : '#E0DDD6'}`,
+                          background: classifying.energyLevel === level ? EC[level] + '15' : '#FFF',
+                          cursor: 'pointer', fontSize: 10, fontWeight: 500,
+                          color: classifying.energyLevel === level ? EC[level] : '#8A857D',
+                        }}
+                      >{EL[level]}</button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Apply to series */}
-            {classifying.event.external_series_id && (
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: '#5A5650' }}>
-                  <input
-                    type="checkbox"
-                    checked={classifying.applyToSeries}
-                    onChange={e => setClassifying(s => s ? { ...s, applyToSeries: e.target.checked } : s)}
-                  />
-                  Apply to all instances of this recurring event
-                </label>
-              </div>
-            )}
+              {/* Apply to series */}
+              {classifying.event.external_series_id && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 11, color: '#5A5650' }}>
+                    <input type="checkbox" checked={classifying.applyToSeries} onChange={e => setClassifying(s => s ? { ...s, applyToSeries: e.target.checked } : s)} />
+                    Apply to all instances of this recurring event
+                  </label>
+                </div>
+              )}
 
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={() => setClassifying(null)}
-                style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid #E0DDD6', background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#5A5650' }}
-              >Cancel</button>
-              <button
-                onClick={saveClassification}
-                style={{ flex: 2, padding: '9px', borderRadius: 8, border: 'none', background: '#2D2A26', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#FFF' }}
-              >Save Classification</button>
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={() => setClassifying(s => s ? { ...s, hiding: true } : s)}
+                  title="Remove this event from Wild Success view"
+                  style={{ fontSize: 11, color: '#B5B0A8', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textDecoration: classifying.hiding ? 'none' : 'none', fontFamily: 'inherit',
+                    ...(classifying.hiding ? { color: '#C4504A', fontWeight: 600 } : {}),
+                  }}
+                >
+                  {classifying.hiding ? '✕ Will hide this event' : 'Hide from Wild Success'}
+                </button>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => setClassifying(null)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E0DDD6', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#5A5650', fontFamily: 'inherit' }}>Cancel</button>
+                <button
+                  onClick={saveClassification}
+                  style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: classifying.hiding ? '#C4504A' : '#2D2A26', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#FFF', fontFamily: 'inherit' }}
+                >{classifying.hiding ? 'Hide' : 'Confirm'}</button>
+              </div>
+
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Activity Editor Modal ────────────────────────────────────────────── */}
       {editingActivityId && (editingActivityId === 'new' || editingActivityFull) && (() => {
@@ -2995,12 +3169,13 @@ const SOURCE_COLORS: Record<string, string> = {
 interface HopperItemCardProps {
   item: HopperItemLocal
   onDismiss: () => void
+  onRevive?: () => void
   onDragStart: () => void
   onDragEnd: () => void
   onContextMenu: (e: React.MouseEvent) => void
   onDoubleClick: () => void
   onMakeActivity?: () => void
-  onAutoPlace?: (overrides?: { preferred_time: string; duration_minutes: number }) => void
+  onAutoPlace?: (overrides?: { preferred_time: string; duration_minutes: number }, force?: boolean) => void
   dragging: boolean
   armed?: boolean
   muted?: boolean
@@ -3016,7 +3191,7 @@ const TIME_OPTIONS = ['morning', 'afternoon', 'evening'] as const
 const TIME_LABELS: Record<string, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
 const DUR_OPTIONS = [15, 30, 45, 60, 90]
 
-const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
+const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
   const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [formTime, setFormTime] = useState<string>(() => item.preferred_time ?? 'morning')
   const [formDur, setFormDur] = useState<number>(() => {
@@ -3035,9 +3210,9 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragSta
     setShowScheduleForm(f => !f)
   }
 
-  function handleScheduleConfirm(e: React.MouseEvent) {
+  function handleScheduleConfirm(e: React.MouseEvent, force = false) {
     e.stopPropagation()
-    onAutoPlace?.({ preferred_time: formTime, duration_minutes: formDur })
+    onAutoPlace?.({ preferred_time: formTime, duration_minutes: formDur }, force)
     setShowScheduleForm(false)
   }
 
@@ -3164,6 +3339,15 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragSta
                       background: '#5A9E6F', color: '#FFF', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                     }}
                   >Go →</button>
+                  <button
+                    onClick={e => handleScheduleConfirm(e, true)}
+                    title="Place at this exact time, ignoring calendar conflicts"
+                    style={{
+                      fontSize: 9, fontWeight: 500, padding: '2px 7px', borderRadius: 10,
+                      background: 'transparent', color: '#B5B0A8',
+                      border: '1px solid #E0DDD6', cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >Force</button>
                 </div>
               </div>
             )}
@@ -3200,28 +3384,30 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onDragSta
         </div>
       </div>
 
-      {/* Dismiss */}
-      <button
-        onClick={e => { e.stopPropagation(); onDismiss() }}
-        style={{
-          width: 14,
-          height: 14,
-          borderRadius: 4,
-          border: 'none',
-          background: 'transparent',
-          cursor: 'pointer',
-          fontSize: 10,
-          color: '#D0CBC3',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          padding: 0,
-          lineHeight: 1,
-          marginTop: 1,
-        }}
-        title="Dismiss"
-      >×</button>
+      {/* Dismiss / Revive */}
+      {onRevive ? (
+        <button
+          onClick={e => { e.stopPropagation(); onRevive() }}
+          style={{
+            height: 14, borderRadius: 4, border: 'none', background: 'transparent',
+            cursor: 'pointer', fontSize: 9, color: '#8A857D',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, padding: '0 2px', lineHeight: 1, marginTop: 1,
+          }}
+          title="Revive — show again this week"
+        >↺</button>
+      ) : (
+        <button
+          onClick={e => { e.stopPropagation(); onDismiss() }}
+          style={{
+            width: 14, height: 14, borderRadius: 4, border: 'none', background: 'transparent',
+            cursor: 'pointer', fontSize: 10, color: '#D0CBC3',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, padding: 0, lineHeight: 1, marginTop: 1,
+          }}
+          title="Dismiss for this week"
+        >×</button>
+      )}
     </div>
   )
 })

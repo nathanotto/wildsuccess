@@ -34,35 +34,53 @@ function minToHHMM(total: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-// Extract HH:MM from an ISO timestamp ("2026-03-17T14:30:00-05:00") or plain "HH:MM"
+// Extract HH:MM (UTC) from an ISO timestamp or plain "HH:MM"
 function extractTime(ts: string): string {
   const m = ts.match(/T(\d{2}:\d{2})/)
   return m ? m[1] : ts.slice(0, 5)
 }
 
+// Convert a UTC Date object to local minutes-from-midnight using JS getTimezoneOffset() value.
+// utcOffsetMin is positive for west of UTC (e.g. 420 for PDT).
+function utcToLocalMin(ts: string, utcOffsetMin: number): number {
+  const utcMin = timeToMin(extractTime(ts))
+  // localMin = utcMin - utcOffsetMin; handle day wrap
+  return ((utcMin - utcOffsetMin) % (24 * 60) + 24 * 60) % (24 * 60)
+}
+
 // Find the earliest start >= desiredStart that doesn't overlap any calendar event.
-// Iterates until no conflicts remain (handles back-to-back events).
+// All times are in LOCAL minutes-from-midnight.
+// utcOffsetMin = new Date().getTimezoneOffset() on the client (positive = west of UTC).
 async function findAvailableStart(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   userId: string,
-  date: string,
+  date: string,          // local date YYYY-MM-DD
   desiredStartMin: number,
-  durationMin: number
+  durationMin: number,
+  utcOffsetMin: number,
 ): Promise<number> {
+  // Query a UTC window that covers the full local day (±1 day to handle any timezone offset)
+  const localMidnightUTC = new Date(`${date}T00:00:00Z`).getTime() + utcOffsetMin * 60_000
+  const startISO = new Date(localMidnightUTC).toISOString()
+  const endISO   = new Date(localMidnightUTC + 24 * 60 * 60 * 1_000).toISOString()
+
   const { data: events } = await supabase
     .from('calendar_events')
     .select('start_time, end_time')
     .eq('user_id', userId)
     .eq('is_all_day', false)
-    .gte('start_time', `${date}T00:00:00`)
-    .lt('start_time', `${date}T24:00:00`)
+    .gte('start_time', startISO)
+    .lt('start_time', endISO)
     .order('start_time')
 
   if (!events?.length) return desiredStartMin
 
   const busy = (events as { start_time: string; end_time: string }[])
-    .map(ev => ({ start: timeToMin(extractTime(ev.start_time)), end: timeToMin(extractTime(ev.end_time)) }))
+    .map(ev => ({
+      start: utcToLocalMin(ev.start_time, utcOffsetMin),
+      end:   utcToLocalMin(ev.end_time,   utcOffsetMin),
+    }))
     .sort((a, b) => a.start - b.start)
 
   let slot = desiredStartMin
@@ -87,7 +105,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { hopper_item_id, week_start, preferred_time: ptOverride, duration_minutes: durOverride } = body
+  const { hopper_item_id, week_start, preferred_time: ptOverride, duration_minutes: durOverride, utc_offset_minutes, force } = body
+  const utcOffMin: number = typeof utc_offset_minutes === 'number' ? utc_offset_minutes : 0
 
   if (!hopper_item_id || !week_start) {
     return NextResponse.json({ error: 'hopper_item_id and week_start are required' }, { status: 400 })
@@ -171,9 +190,11 @@ export async function POST(req: NextRequest) {
   for (const day of targetDays) {
     const scheduledDate = day.toISOString().split('T')[0]
 
-    // Avoid calendar conflicts — find the first open slot >= desired start
+    // Avoid calendar conflicts — find the first open slot >= desired start (unless forced)
     const desiredStartMin = timeToMin(startTime)
-    const availableStartMin = await findAvailableStart(supabase, user.id, scheduledDate, desiredStartMin, effectiveDuration)
+    const availableStartMin = force
+      ? desiredStartMin
+      : await findAvailableStart(supabase, user.id, scheduledDate, desiredStartMin, effectiveDuration, utcOffMin)
     const actualStartTime = minToHHMM(availableStartMin)
     const actualEndTime = addMinutes(actualStartTime, effectiveDuration)
 

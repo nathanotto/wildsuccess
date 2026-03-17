@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile, IntakeQuestion } from '@/lib/types'
 import WildSuccessMapSVG from './WildSuccessMapSVG'
 import LifeMapSVG from './LifeMapSVG'
@@ -48,6 +49,8 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [referenceOpen, setReferenceOpen] = useState(false)
   const [activitiesEditorOpen, setActivitiesEditorOpen] = useState(false)
   const [hopperCount, setHopperCount] = useState(0)
+  const [calendarConnected, setCalendarConnected] = useState(false)
+  const searchParams = useSearchParams()
 
   // Intake state
   const [seedQuestions, setSeedQuestions] = useState<IntakeQuestion[]>([])
@@ -104,6 +107,27 @@ export default function MapClient({ userId, userEmail }: Props) {
     fetchAll()
     fetchIntake()
   }, [fetchAll, fetchIntake])
+
+  // Check calendar connection status and handle OAuth callback
+  useEffect(() => {
+    fetch('/api/calendar/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.connected) setCalendarConnected(true) })
+
+    const calConnected = searchParams.get('calendar_connected')
+    const calError = searchParams.get('calendar_error')
+    if (calConnected) {
+      setCalendarConnected(true)
+      showToast('Google Calendar connected!')
+      // Trigger initial sync
+      fetch('/api/calendar/sync', { method: 'POST' })
+      window.history.replaceState({}, '', '/map')
+    }
+    if (calError) {
+      showToast('Calendar connection failed: ' + calError, 'error')
+      window.history.replaceState({}, '', '/map')
+    }
+  }, [searchParams, showToast])
 
   // Show welcome modal for in_progress users who haven't seen it yet
   useEffect(() => {
@@ -171,6 +195,7 @@ export default function MapClient({ userId, userEmail }: Props) {
         userInitial={userInitial}
         overdueCount={overdueActivityIds.length}
         hopperCount={hopperCount}
+        calendarConnected={calendarConnected}
         onOrganize={() => setOrganizeOpen(true)}
         onNewValue={() => setModal({ type: 'newValue' })}
         onNewActivity={() => setModal({ type: 'newActivity' })}

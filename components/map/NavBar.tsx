@@ -9,6 +9,7 @@ interface Props {
   userInitial: string
   overdueCount: number
   hopperCount: number
+  calendarConnected: boolean
   onOrganize: () => void
   onNewValue: () => void
   onNewActivity: () => void
@@ -25,16 +26,40 @@ const ACTION_MODES = [
   { name: 'Spending', description: 'Review spending against your Financial Sufficiency threshold and budget commitments.' },
 ]
 
-export default function NavBar({ displayName, userInitial, overdueCount, hopperCount, onOrganize, onNewValue, onNewActivity, onNewOutcome, onNewDomain }: Props) {
+export default function NavBar({ displayName, userInitial, overdueCount, hopperCount, calendarConnected, onOrganize, onNewValue, onNewActivity, onNewOutcome, onNewDomain }: Props) {
   const [comingSoon, setComingSoon] = useState<{ name: string; description: string } | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showAISidebar, setShowAISidebar] = useState(false)
+  const [connectingCal, setConnectingCal] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  async function handleConnectCalendar() {
+    setConnectingCal(true)
+    try {
+      const res = await fetch('/api/calendar/connect', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        window.location.href = data.url
+      } else {
+        alert('Calendar connection failed: ' + (data.error ?? 'unknown error'))
+        setConnectingCal(false)
+      }
+    } catch {
+      alert('Calendar connection failed — check console')
+      setConnectingCal(false)
+    }
+  }
+
+  async function handleDisconnectCalendar() {
+    await fetch('/api/calendar/connect', { method: 'DELETE' })
+    setShowUserMenu(false)
+    window.location.reload()
   }
 
   return (
@@ -91,6 +116,18 @@ export default function NavBar({ displayName, userInitial, overdueCount, hopperC
               borderRadius: 8, padding: '4px 0', minWidth: 140, zIndex: 20, boxShadow: '0 4px 16px #2D2A2610',
             }}>
               <div style={{ padding: '6px 14px', fontSize: 11, color: '#8A8578' }}>{displayName}</div>
+              <div style={{ height: 1, background: '#F0EDE6', margin: '2px 0' }} />
+              {calendarConnected ? (
+                <button onClick={handleDisconnectCalendar}
+                  style={{ display: 'block', width: '100%', padding: '6px 14px', fontSize: 12, color: '#8A8578', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                  ✓ Calendar connected
+                </button>
+              ) : (
+                <button onClick={handleConnectCalendar} disabled={connectingCal}
+                  style={{ display: 'block', width: '100%', padding: '6px 14px', fontSize: 12, color: '#4B82AF', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                  {connectingCal ? 'Connecting…' : '+ Connect Google Calendar'}
+                </button>
+              )}
               <div style={{ height: 1, background: '#F0EDE6', margin: '2px 0' }} />
               <button onClick={handleLogout}
                 style={{ display: 'block', width: '100%', padding: '6px 14px', fontSize: 12, color: '#2D2A26', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>

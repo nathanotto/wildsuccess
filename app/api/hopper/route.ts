@@ -37,11 +37,13 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { raw_input, source = 'quick_capture', activity_id, proposed_date, metadata, bounding_type, time_type } = body
+  const { raw_input, source = 'quick_capture', activity_id, proposed_date, metadata, bounding_type, time_type, status: bodyStatus } = body
 
   if (!raw_input?.trim()) {
     return NextResponse.json({ error: 'raw_input is required' }, { status: 400 })
   }
+
+  const status = ['pending', 'dismissed'].includes(bodyStatus) ? bodyStatus : 'pending'
 
   const { data, error } = await supabase
     .from('hopper_items')
@@ -54,7 +56,8 @@ export async function POST(req: NextRequest) {
       metadata: metadata ?? null,
       bounding_type: bounding_type ?? 'action',
       time_type: time_type ?? 'B',
-      status: 'pending',
+      status,
+      ...(status === 'dismissed' ? { resolved_at: new Date().toISOString() } : {}),
     })
     .select()
     .single()
