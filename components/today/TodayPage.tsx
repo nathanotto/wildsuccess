@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ScheduleItemWithNotes, ItemNote } from '@/lib/types'
+import CaptureInput from '@/components/capture/CaptureInput'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -398,10 +399,8 @@ export default function TodayPage({ displayName }: Props) {
   const [items, setItems] = useState<ScheduleItemWithNotes[]>([])
   const [nextUp, setNextUp] = useState<ScheduleItemWithNotes | null>(null)
   const [focusItemId, setFocusItemId] = useState<string | null>(null)
-  const [captureInput, setCaptureInput] = useState('')
   const [loading, setLoading] = useState(true)
   const [nowTime, setNowTime] = useState(currentTimeStr())
-  const capturingRef = useRef(false)
 
   const isToday = selectedDate === todayStr
   const isYesterday = selectedDate === addDays(todayStr, -1)
@@ -555,27 +554,6 @@ export default function TodayPage({ displayName }: Props) {
     })
   }
 
-  async function handleCapture(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== 'Enter' || !captureInput.trim() || capturingRef.current) return
-    e.preventDefault()
-    capturingRef.current = true
-    const text = captureInput.trim()
-    setCaptureInput('')
-    try {
-      const res = await fetch('/api/today/capture', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_input: text }),
-      })
-      const data = await res.json()
-      if (data.scheduleItem) {
-        setItems(prev => [...prev, data.scheduleItem])
-      }
-    } finally {
-      capturingRef.current = false
-    }
-  }
-
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const pageStyle: React.CSSProperties = {
@@ -695,16 +673,9 @@ export default function TodayPage({ displayName }: Props) {
 
             {/* Capture */}
             <div style={{ borderTop: '1px solid #E8E4DC', marginTop: 8 }}>
-              <input
-                value={captureInput}
-                onChange={e => setCaptureInput(e.target.value)}
-                onKeyDown={handleCapture}
-                placeholder="capture..."
-                style={{
-                  width: '100%', border: 'none', background: 'transparent',
-                  outline: 'none', fontSize: 14, color: '#2D2A26',
-                  padding: '12px 0', fontFamily: 'inherit', boxSizing: 'border-box',
-                }}
+              <CaptureInput
+                source="today"
+                onItemCreated={item => setItems(prev => [...prev, item])}
               />
             </div>
           </>
