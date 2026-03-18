@@ -149,13 +149,13 @@ export default function CaptureInput({
       if (data.scheduleItem && onItemCreated) onItemCreated(data.scheduleItem)
       if (data.logEntry && onLogEntry) onLogEntry()
 
-      // UI feedback
-      if (parsed.confidence >= 0.6) {
+      // UI feedback — logged items always get a toast (user narrated something, needs acknowledgment)
+      if (parsed.outcome === 'logged' || parsed.confidence >= 0.6) {
         showToast(toastMessage(parsed), parsed)
       } else if (parsed.confidence >= 0.3) {
         showCard(parsed)
       }
-      // Below 0.3: silent save
+      // Below 0.3 (non-logged): silent save
     } finally {
       submittingRef.current = false
       setSubmitting(false)

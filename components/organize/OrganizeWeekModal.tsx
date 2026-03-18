@@ -1258,38 +1258,79 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   }
 
   // ── Quick capture ───────────────────────────────────────────────────────────
+  const [captureToast, setCaptureToast] = useState<string | null>(null)
+
   async function handleQuickCapture(e: React.FormEvent) {
     e.preventDefault()
     const text = captureInput.trim()
     if (!text) return
     setCaptureInput('')
     try {
-      const res = await fetch('/api/hopper', {
+      const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_input: text, source: 'quick_capture' }),
+        body: JSON.stringify({ rawInput: text, source: 'organize' }),
       })
       if (!res.ok) return
-      const newItem = await res.json()
-      const hopperItem: HopperItemLocal = {
-        id: newItem.id,
-        name: text,
-        source: 'quick_capture',
-        time_type: 'B',
-        emotional_weight: 'normal',
-        priority_tier: 'normal',
-        priority_score: 50,
-        block_type_hint: null,
-        duration_min: 20,
-        duration_max: 60,
-        values: [],
-        activity_id: null,
-        preferred_time: null,
-        frequency: null,
+      const data = await res.json()
+      const parsed = data.parsed
+
+      if (parsed?.outcome === 'logged') {
+        // Show toast, do NOT add to hopper
+        setCaptureToast(`Logged: ${parsed.cleanedName}`)
+        setTimeout(() => setCaptureToast(null), 3500)
+        return
       }
-      setHopper(prev => [...prev, hopperItem])
+
+      // For all other outcomes, add to hopper as before
+      const hi = data.hopperItem
+      if (hi) {
+        const hopperItem: HopperItemLocal = {
+          id: hi.id,
+          name: parsed?.cleanedName ?? text,
+          source: 'quick_capture',
+          time_type: parsed?.timeType ?? 'B',
+          emotional_weight: 'normal',
+          priority_tier: 'normal',
+          priority_score: 50,
+          block_type_hint: null,
+          duration_min: 20,
+          duration_max: 60,
+          values: [],
+          activity_id: null,
+          preferred_time: null,
+          frequency: null,
+        }
+        setHopper(prev => [...prev, hopperItem])
+      }
     } catch (err) {
       console.error('Quick capture error:', err)
+    }
+  }
+
+  // ── Log a hopper item ────────────────────────────────────────────────────────
+  async function handleLogHopperItem(itemId: string, itemName: string) {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      await fetch('/api/action-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_type: 'logged',
+          event_date: today,
+          note: itemName,
+          hopper_item_id: itemId,
+        }),
+      })
+      // Archive the hopper item
+      await fetch(`/api/hopper/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'archived' }),
+      })
+      setHopper(prev => prev.filter(h => h.id !== itemId))
+    } catch (err) {
+      console.error('Log hopper item error:', err)
     }
   }
 
@@ -2194,6 +2235,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         key={item.id}
                         item={item}
                         onDismiss={() => dismissHopperItem(item.id)}
+                        onLog={() => handleLogHopperItem(item.id, item.name)}
                         onDragStart={() => setDraggingHopperItem(item)}
                         onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
                         onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
@@ -2263,6 +2305,9 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
               {/* Quick capture */}
               <div style={{ padding: '8px 10px', borderTop: '1px solid #E8E4DC', flexShrink: 0 }}>
+                {captureToast && (
+                  <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 4 }}>{captureToast}</div>
+                )}
                 <form onSubmit={handleQuickCapture} style={{ display: 'flex', gap: 6 }}>
                   <input
                     value={captureInput}
@@ -3244,6 +3289,7 @@ interface HopperItemCardProps {
   item: HopperItemLocal
   onDismiss: () => void
   onRevive?: () => void
+  onLog?: () => void
   onDragStart: () => void
   onDragEnd: () => void
   onContextMenu: (e: React.MouseEvent) => void
@@ -3265,7 +3311,7 @@ const TIME_OPTIONS = ['morning', 'afternoon', 'evening'] as const
 const TIME_LABELS: Record<string, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
 const DUR_OPTIONS = [15, 30, 45, 60, 90]
 
-const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
+const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onLog, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
   const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [formTime, setFormTime] = useState<string>(() => item.preferred_time ?? 'morning')
   const [formDur, setFormDur] = useState<number>(() => {
@@ -3345,12 +3391,20 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
             <span style={{ color: '#C4725A', marginLeft: 3, fontSize: 8 }}>◆</span>
           )}
         </div>
-        {onMakeActivity && (
-          <button
-            onClick={e => { e.stopPropagation(); onMakeActivity() }}
-            style={{ fontSize: 9, color: '#5A9E6F', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', marginTop: 2 }}
-          >+ Make Activity</button>
-        )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+          {onMakeActivity && (
+            <button
+              onClick={e => { e.stopPropagation(); onMakeActivity() }}
+              style={{ fontSize: 9, color: '#5A9E6F', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+            >+ Make Activity</button>
+          )}
+          {onLog && (
+            <button
+              onClick={e => { e.stopPropagation(); onLog() }}
+              style={{ fontSize: 9, color: '#8A8578', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+            >← Log this</button>
+          )}
+        </div>
         {onAutoPlace && (
           <div style={{ marginTop: 3 }}>
             <button

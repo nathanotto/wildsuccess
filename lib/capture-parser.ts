@@ -55,7 +55,15 @@ const FEELING_WORDS = [
   'fun', 'hard', 'meaningful', 'tedious', 'peaceful', 'stressful', 'satisfying',
   'draining', 'playful', 'frustrating', 'rewarding', 'boring', 'exhausting',
   'relaxing', 'productive', 'enjoyable', 'difficult', 'easy', 'intense', 'calm',
+  'focused', 'energized', 'tired', 'distracted', 'motivated', 'proud', 'anxious',
+  'great', 'good', 'rough', 'slow', 'fast', 'deep', 'creative',
 ]
+
+const WORD_NUMBERS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
+  nine: 9, ten: 10, eleven: 11, twelve: 12, half: 0.5, 'a half': 0.5,
+  'an hour': 60, 'a couple': 2,
+}
 
 const BACKWARD_STARTS = [
   'i just', 'just had', 'just finished', 'just did', 'just went',
@@ -109,6 +117,17 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
 
   // ─── Stage 1: Duration ──────────────────────────────────────────────────────
   let duration: number | null = null
+
+  // Normalize word numbers to digits before duration parsing
+  const wordNumRe = new RegExp(
+    `\\b(${Object.keys(WORD_NUMBERS).filter(k => k.includes(' ') === false).join('|')})\\s+(hours?|minutes?|mins?|hrs?)\\b`,
+    'gi'
+  )
+  working = working.replace(wordNumRe, (_, word, unit) => {
+    const val = WORD_NUMBERS[word.toLowerCase()]
+    if (val !== undefined) return `${val} ${unit}`
+    return _
+  })
 
   const durationRules: [RegExp, (m: RegExpMatchArray) => number][] = [
     [/\bfor\s+(\d+(?:\.\d+)?)\s+hours?\b/i, m => Math.round(parseFloat(m[1]) * 60)],
