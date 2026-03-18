@@ -166,7 +166,7 @@ export interface TimeBlock {
 export interface ActionLog {
   id: string
   user_id: string
-  event_type: 'proposed' | 'scheduled' | 'committed' | 'rescheduled' | 'removed' | 'completed' | 'skipped' | 'captured' | 'dismissed'
+  event_type: 'proposed' | 'scheduled' | 'committed' | 'rescheduled' | 'removed' | 'completed' | 'skipped' | 'captured' | 'dismissed' | 'reopened' | 'parked' | 'in_progress'
   schedule_item_id: string | null
   hopper_item_id: string | null
   activity_id: string | null
@@ -267,6 +267,7 @@ export interface ScheduleItem {
   user_id: string
   activity_id: string | null
   hopper_item_id: string | null
+  task_suggestion_id: string | null
   name: string
   description: string | null
   scheduled_date: string
@@ -278,12 +279,30 @@ export interface ScheduleItem {
   emotional_weight: 'light' | 'normal' | 'heavy'
   bounding_type: 'time' | 'action' | 'outcome' | 'unbounded'
   committed_at: string | null
-  status: 'active' | 'completed' | 'skipped' | 'rescheduled'
+  sort_order: number
+  status: 'active' | 'in_progress' | 'completed' | 'skipped' | 'rescheduled' | 'parked'
+  parked_until: string | null
   completion_note: string | null
   actual_duration_minutes: number | null
   completed_at: string | null
   created_at: string
   updated_at: string
+}
+
+export interface ItemNote {
+  id: string
+  user_id: string
+  schedule_item_id: string
+  note_type: 'note' | 'step'
+  content: string
+  is_completed: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ScheduleItemWithNotes extends ScheduleItem {
+  item_notes?: ItemNote[]
 }
 
 export interface CalendarConnection {

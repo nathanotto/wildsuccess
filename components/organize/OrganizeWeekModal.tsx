@@ -754,6 +754,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           name: resolvedItem.name,
           scheduled_date: ds,
           time_block_id: newBlock.id,
+          scheduled_time: snapTime,
+          scheduled_end_time: endTime,
           flexibility: 'anytime_today',
           time_type: resolvedItem.time_type,
           emotional_weight: resolvedItem.emotional_weight,
@@ -838,6 +840,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           name: resolvedItem.name,
           scheduled_date: ds,
           time_block_id: block.id,
+          scheduled_time: block.start_time ?? null,
+          scheduled_end_time: block.end_time ?? null,
           flexibility: 'anytime_today',
           time_type: resolvedItem.time_type,
           emotional_weight: resolvedItem.emotional_weight,
@@ -1160,6 +1164,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             name: item.name,
             scheduled_date: toDate,
             time_block_id: newBlock.id,
+            scheduled_time: newStartTime,
+            scheduled_end_time: newEndTime,
             flexibility: 'anytime_today',
             time_type: item.time_type,
             emotional_weight: item.emotional_weight,
@@ -1497,9 +1503,56 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         }),
       })
 
-      // fixed_commitment: no time block created — the 🔒 overlay on the grid already shows the
-      // event, and the auto-planner already avoids it via calendar_events. Creating a block
-      // would duplicate the slot.
+      if (!hiding && classification === 'fixed_commitment') {
+        // Create schedule_item(s) so the event appears on Today with its time.
+        // For a series, create for all matching loaded events. For a single event, just that one.
+        const eventsToSchedule: CalEventLocal[] = applyToSeries && event.external_series_id
+          ? calEvents.filter(e => e.external_series_id === event.external_series_id && !e.is_all_day)
+          : (event.is_all_day ? [] : [event])
+
+        const scheduledEventIds = new Set<string>()
+
+        await Promise.all(eventsToSchedule.map(async ev => {
+          const start = new Date(ev.start_time)
+          const end = new Date(ev.end_time)
+          const scheduledDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+          const scheduledTime = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`
+          const scheduledEndTime = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`
+          const label = displayLabel || ev.title
+
+          // Avoid duplicates: check if a schedule_item with this time+name already exists.
+          // DB stores time as "HH:MM:SS" so compare only first 5 chars.
+          const checkRes = await fetch(`/api/schedule?date=${scheduledDate}`)
+          const existing: { name: string; scheduled_time: string | null }[] = checkRes.ok ? await checkRes.json() : []
+          if (existing.some(s => (s.scheduled_time ?? '').slice(0, 5) === scheduledTime && s.name === label)) {
+            scheduledEventIds.add(ev.external_event_id)
+            return
+          }
+
+          await fetch('/api/schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: label,
+              scheduled_date: scheduledDate,
+              scheduled_time: scheduledTime,
+              scheduled_end_time: scheduledEndTime,
+              flexibility: 'hard_scheduled',
+              time_type: energyLevel ?? 'B',
+              bounding_type: 'time',
+              emotional_weight: 'normal',
+            }),
+          })
+          scheduledEventIds.add(ev.external_event_id)
+        }))
+
+        // Remove confirmed events from the calendar overlay — the schedule_item represents them now.
+        // This prevents the event showing twice (once as overlay, once as block).
+        setCalEvents(prev => prev.filter(e => !scheduledEventIds.has(e.external_event_id)))
+
+        await loadData()
+      }
+
       if (!hiding && classification === 'flexible_commitment') {
         await fetch('/api/hopper', {
           method: 'POST',

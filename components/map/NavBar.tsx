@@ -9,6 +9,7 @@ interface Props {
   userInitial: string
   overdueCount: number
   hopperCount: number
+  todayCount?: number
   calendarConnected: boolean
   onOrganize: () => void
   onNewValue: () => void
@@ -26,7 +27,7 @@ const ACTION_MODES = [
   { name: 'Spending', description: 'Review spending against your Financial Sufficiency threshold and budget commitments.' },
 ]
 
-export default function NavBar({ displayName, userInitial, overdueCount, hopperCount, calendarConnected, onOrganize, onNewValue, onNewActivity, onNewOutcome, onNewDomain }: Props) {
+export default function NavBar({ displayName, userInitial, overdueCount, hopperCount, todayCount = 0, calendarConnected, onOrganize, onNewValue, onNewActivity, onNewOutcome, onNewDomain }: Props) {
   const [comingSoon, setComingSoon] = useState<{ name: string; description: string } | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showAISidebar, setShowAISidebar] = useState(false)
@@ -71,7 +72,11 @@ export default function NavBar({ displayName, userInitial, overdueCount, hopperC
         <div style={{ fontSize: 14, fontWeight: 700, color: '#C4725A', marginRight: 10 }}>Wild Success</div>
         {ACTION_MODES.map(m => (
           <button key={m.name}
-            onClick={() => m.name === 'Organize' ? onOrganize() : setComingSoon(m)}
+            onClick={() => {
+              if (m.name === 'Organize') onOrganize()
+              else if (m.name === 'Today') router.push('/today')
+              else setComingSoon(m)
+            }}
             style={{
               padding: '3px 9px', borderRadius: 5, border: '1px solid #F0EDE6',
               fontSize: 10, fontWeight: 600, color: '#2D2A26', cursor: 'pointer', background: 'transparent',
@@ -87,6 +92,13 @@ export default function NavBar({ displayName, userInitial, overdueCount, hopperC
                 background: '#C4725A', color: 'white', fontSize: 8, fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
               }}>{hopperCount}</span>
+            )}
+            {m.name === 'Today' && todayCount > 0 && (
+              <span style={{
+                position: 'absolute', top: -4, right: -4, minWidth: 14, height: 14, borderRadius: 7,
+                background: '#4B6A82', color: 'white', fontSize: 8, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
+              }}>{todayCount}</span>
             )}
           </button>
         ))}
