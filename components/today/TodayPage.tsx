@@ -107,12 +107,14 @@ interface FocusViewProps {
   onAddNote: (scheduleItemId: string, noteType: 'note' | 'step', content: string) => Promise<ItemNote>
   onCompleteStep: (noteId: string) => Promise<void>
   onAddFollowUp: (content: string, sourceId: string) => Promise<void>
+  onMoveToTomorrow: (id: string) => Promise<void>
+  onMarkDoneAndCapture: (id: string, followUpText: string) => Promise<void>
   nextUp: ScheduleItemWithNotes | null
   isToday: boolean
 }
 
 function FocusView({
-  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, nextUp, isToday,
+  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onMoveToTomorrow, onMarkDoneAndCapture, nextUp, isToday,
 }: FocusViewProps) {
   const [title, setTitle] = useState(item.name)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -121,6 +123,8 @@ function FocusView({
   const [noteInput, setNoteInput] = useState('')
   const [stepInput, setStepInput] = useState('')
   const [followUpInput, setFollowUpInput] = useState('')
+  const [captureFollowUp, setCaptureFollowUp] = useState('')
+  const [showCaptureFollowUp, setShowCaptureFollowUp] = useState(false)
   const [saving, setSaving] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
 
@@ -128,8 +132,6 @@ function FocusView({
   const notesList = notes.filter(n => n.note_type === 'note').sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   )
-  const currentStep = steps.find(s => !s.is_completed) ?? null
-  const completedSteps = steps.filter(s => s.is_completed).reverse()
 
   const isTimeLocked = !!item.scheduled_time
 
@@ -152,22 +154,31 @@ function FocusView({
   async function handleCheckStep(stepId: string) {
     await onCompleteStep(stepId)
     setNotes(prev => prev.map(n => n.id === stepId ? { ...n, is_completed: true } : n))
-    // If we had next-step input, create that as a new step
-    if (stepInput.trim()) {
+  }
+
+  async function handleAddStep() {
+    if (!stepInput.trim()) return
+    try {
       const maxOrder = steps.reduce((max, s) => Math.max(max, s.sort_order), -1)
       const newStep = await onAddNote(item.id, 'step', stepInput.trim())
       newStep.sort_order = maxOrder + 1
       setNotes(prev => [...prev, newStep])
       setStepInput('')
+    } catch (err) {
+      console.error('Failed to save step:', err)
     }
   }
 
   async function handleAddNote(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter' || !noteInput.trim()) return
     e.preventDefault()
-    const n = await onAddNote(item.id, 'note', noteInput.trim())
-    setNotes(prev => [n, ...prev])
-    setNoteInput('')
+    try {
+      const n = await onAddNote(item.id, 'note', noteInput.trim())
+      setNotes(prev => [n, ...prev])
+      setNoteInput('')
+    } catch (err) {
+      console.error('Failed to save note:', err)
+    }
   }
 
   async function handleAddFollowUp(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -177,7 +188,6 @@ function FocusView({
     setFollowUpInput('')
   }
 
-  const muted: React.CSSProperties = { color: '#8A8578' }
   const section = { marginTop: 20 }
 
   return (
@@ -232,67 +242,44 @@ function FocusView({
         </div>
       )}
 
-      {/* Next section */}
+      {/* Steps section */}
       <div style={section}>
         <div style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-          Next
+          Steps
         </div>
-        {currentStep ? (
-          <>
-            <div style={{
-              display: 'flex', alignItems: 'flex-start', gap: 8,
-              background: '#F8F7F4', padding: '6px 8px', marginBottom: 4,
-            }}>
-              <Checkbox status="active" onClick={() => handleCheckStep(currentStep.id)} />
-              <span style={{ fontSize: 14, color: '#2D2A26', flex: 1 }}>{currentStep.content}</span>
-            </div>
-            <input
-              value={stepInput}
-              onChange={e => setStepInput(e.target.value)}
-              placeholder="next step after this..."
-              style={inputStyle}
-            />
-          </>
-        ) : (
-          <input
-            value={stepInput}
-            onChange={e => setStepInput(e.target.value)}
-            onKeyDown={async e => {
-              if (e.key === 'Enter' && stepInput.trim()) {
-                e.preventDefault()
-                const maxOrder = steps.reduce((max, s) => Math.max(max, s.sort_order), -1)
-                const newStep = await onAddNote(item.id, 'step', stepInput.trim())
-                newStep.sort_order = maxOrder + 1
-                setNotes(prev => [...prev, newStep])
-                setStepInput('')
-              }
-            }}
-            placeholder="what's next?"
-            style={inputStyle}
-          />
-        )}
-      </div>
-
-      {/* Done section */}
-      {completedSteps.length > 0 && (
-        <div style={section}>
-          <div style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-            Done
+        {steps.map((s) => (
+          <div key={s.id} style={{
+            display: 'flex', alignItems: 'flex-start', gap: 8,
+            padding: '6px 8px', marginBottom: 2,
+          }}>
+            <Checkbox status={s.is_completed ? 'completed' : 'active'} onClick={() => !s.is_completed && handleCheckStep(s.id)} />
+            <span style={{
+              fontSize: 14, flex: 1,
+              color: s.is_completed ? '#B5B0A8' : '#2D2A26',
+              textDecoration: s.is_completed ? 'line-through' : 'none',
+            }}>{s.content}</span>
+            <button
+              onClick={async () => {
+                await fetch(`/api/item-notes/${s.id}`, { method: 'DELETE' })
+                setNotes(prev => prev.filter(n => n.id !== s.id))
+              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: '#C8C3BB', lineHeight: 1 }}
+              title="Delete step"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+            </button>
           </div>
-          {completedSteps.map(s => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 3 }}>
-              <span style={{
-                width: 14, height: 14, border: '1.5px solid #B5B0A8', borderRadius: 2,
-                background: '#B5B0A8', color: 'white', fontSize: 10, flexShrink: 0,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1,
-              }}>✓</span>
-              <span style={{ fontSize: 13, color: '#8A8578', textDecoration: 'line-through', opacity: 0.7 }}>
-                {s.content}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+        ))}
+        <input
+          value={stepInput}
+          onChange={e => setStepInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddStep() } }}
+          placeholder={steps.filter(s => !s.is_completed).length === 0 ? "what's next?" : "add step..."}
+          style={{ ...inputStyle, marginTop: steps.length > 0 ? 4 : 0 }}
+        />
+      </div>
 
       {/* Notes section */}
       <div style={section}>
@@ -344,6 +331,31 @@ function FocusView({
           style={actionBtnStyle}>
           → Done for today
         </button>
+        <button
+          onClick={() => onMoveToTomorrow(item.id).then(onBack)}
+          style={actionBtnStyle}>
+          → Move to tomorrow
+        </button>
+        {showCaptureFollowUp ? (
+          <input
+            value={captureFollowUp}
+            onChange={e => setCaptureFollowUp(e.target.value)}
+            onKeyDown={async e => {
+              if (e.key !== 'Enter' || !captureFollowUp.trim()) return
+              e.preventDefault()
+              await onMarkDoneAndCapture(item.id, captureFollowUp.trim())
+              onBack()
+            }}
+            onBlur={() => { if (!captureFollowUp.trim()) setShowCaptureFollowUp(false) }}
+            placeholder="what's the follow-up?"
+            style={{ ...inputStyle, fontSize: 13 }}
+            autoFocus
+          />
+        ) : (
+          <button onClick={() => setShowCaptureFollowUp(true)} style={actionBtnStyle}>
+            → Mark done and capture follow-up
+          </button>
+        )}
         <button
           onClick={() => onStatusChange(item.id, 'rescheduled').then(onBack)}
           style={actionBtnStyle}>
@@ -491,6 +503,10 @@ export default function TodayPage({ displayName }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ schedule_item_id: scheduleItemId, note_type: noteType, content }),
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error ?? `Failed to save ${noteType}`)
+    }
     const note = await res.json()
     setItems(prev => prev.map(i => i.id === scheduleItemId
       ? { ...i, item_notes: [...(i.item_notes ?? []), note] }
@@ -504,6 +520,31 @@ export default function TodayPage({ displayName }: Props) {
       ...i,
       item_notes: (i.item_notes ?? []).map(n => n.id === noteId ? { ...n, is_completed: true } : n),
     })))
+  }
+
+  async function handleMarkDoneAndCapture(id: string, followUpText: string) {
+    await handleStatusChange(id, 'completed')
+    const res = await fetch('/api/today/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw_input: followUpText, source_schedule_item_id: id }),
+    })
+    const data = await res.json()
+    if (data.scheduleItem) {
+      setItems(prev => [...prev, data.scheduleItem])
+    }
+  }
+
+  async function handleMoveToTomorrow(id: string) {
+    const tomorrow = addDays(todayStr, 1)
+    const res = await fetch(`/api/schedule/${id}/date`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: tomorrow }),
+    })
+    if (res.ok) {
+      setItems(prev => prev.filter(i => i.id !== id))
+    }
   }
 
   async function handleAddFollowUp(content: string, sourceId: string) {
@@ -567,6 +608,8 @@ export default function TodayPage({ displayName }: Props) {
             onAddNote={handleAddNote}
             onCompleteStep={handleCompleteStep}
             onAddFollowUp={handleAddFollowUp}
+            onMoveToTomorrow={handleMoveToTomorrow}
+            onMarkDoneAndCapture={handleMarkDoneAndCapture}
             nextUp={nextUp}
             isToday={isToday}
           />
@@ -651,22 +694,18 @@ export default function TodayPage({ displayName }: Props) {
             )}
 
             {/* Capture */}
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#FAFAF7', zIndex: 5 }}>
-              <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 16px' }}>
-                <div style={{ borderTop: '1px solid #E8E4DC' }}>
-                  <input
-                    value={captureInput}
-                    onChange={e => setCaptureInput(e.target.value)}
-                    onKeyDown={handleCapture}
-                    placeholder="capture..."
-                    style={{
-                      width: '100%', border: 'none', background: 'transparent',
-                      outline: 'none', fontSize: 14, color: '#2D2A26',
-                      padding: '12px 0', fontFamily: 'inherit', boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-              </div>
+            <div style={{ borderTop: '1px solid #E8E4DC', marginTop: 8 }}>
+              <input
+                value={captureInput}
+                onChange={e => setCaptureInput(e.target.value)}
+                onKeyDown={handleCapture}
+                placeholder="capture..."
+                style={{
+                  width: '100%', border: 'none', background: 'transparent',
+                  outline: 'none', fontSize: 14, color: '#2D2A26',
+                  padding: '12px 0', fontFamily: 'inherit', boxSizing: 'border-box',
+                }}
+              />
             </div>
           </>
         )}
@@ -689,44 +728,60 @@ function TodoRow({
   const isParked = item.status === 'parked'
   const muted = isCompleted || isParked
 
-  const currentStep = (item.item_notes ?? [])
-    .filter(n => n.note_type === 'step' && !n.is_completed)
-    .sort((a, b) => a.sort_order - b.sort_order)[0]
+  const steps = (item.item_notes ?? [])
+    .filter(n => n.note_type === 'step')
+    .sort((a, b) => a.sort_order - b.sort_order)
 
   return (
     <div
       onClick={onFocus}
       style={{
-        display: 'flex', alignItems: 'flex-start', gap: 8,
         padding: '5px 0', cursor: 'pointer', userSelect: 'none',
         borderBottom: '1px solid #F8F7F4',
       }}
     >
-      <Checkbox status={item.status} onClick={onCheckbox} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{
-          fontSize: 14,
-          color: muted ? '#B5B0A8' : '#2D2A26',
-          textDecoration: isCompleted ? 'line-through' : 'none',
-        }}>
-          {item.name}
-        </span>
-        {item.status === 'in_progress' && currentStep && (
-          <span style={{ fontSize: 12, color: '#8A8578', marginLeft: 6 }}>
-            — {currentStep.content}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <Checkbox status={item.status} onClick={onCheckbox} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{
+            fontSize: 14,
+            color: muted ? '#B5B0A8' : '#2D2A26',
+            textDecoration: isCompleted ? 'line-through' : 'none',
+          }}>
+            {item.name}
           </span>
-        )}
+        </div>
+        <button
+          onClick={e => { e.stopPropagation(); onReschedule() }}
+          title="Send back to hopper"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#8A857D', fontSize: 16, padding: '0 4px',
+            minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+          ↺
+        </button>
       </div>
-      <button
-        onClick={e => { e.stopPropagation(); onReschedule() }}
-        title="Send back to hopper"
-        style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: '#8A857D', fontSize: 16, padding: '0 4px',
-          minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-        ↺
-      </button>
+      {steps.length > 0 && (
+        <div style={{ paddingLeft: 22, marginTop: 3 }}>
+          {steps.map(s => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <span style={{
+                width: 10, height: 10, borderRadius: 1, flexShrink: 0,
+                border: s.is_completed ? 'none' : '1px solid #C8C3BB',
+                background: s.is_completed ? '#C8C3BB' : 'transparent',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {s.is_completed && <span style={{ fontSize: 7, color: 'white', lineHeight: 1 }}>✓</span>}
+              </span>
+              <span style={{
+                fontSize: 12, color: s.is_completed ? '#C8C3BB' : '#8A8578',
+                textDecoration: s.is_completed ? 'line-through' : 'none',
+              }}>{s.content}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

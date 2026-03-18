@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       time_type: 'B',
       enrichment_status: 'none',
       proposed_date: new Date().toISOString().split('T')[0],
-      metadata: source_schedule_item_id ? { source_schedule_item_id } : null,
+      source_schedule_item_id: source_schedule_item_id ?? null,
     })
     .select()
     .single()

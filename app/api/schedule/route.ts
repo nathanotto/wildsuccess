@@ -77,6 +77,39 @@ export async function POST(req: NextRequest) {
       .update({ status: 'activated', resolved_at: new Date().toISOString() })
       .eq('id', hopper_item_id)
       .eq('user_id', user.id)
+
+    // Copy item_notes (steps + notes) from the most recent prior schedule_item
+    // for this hopper_item, so context carries forward across reschedules
+    const { data: priorItems } = await supabase
+      .from('schedule_items')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('hopper_item_id', hopper_item_id)
+      .eq('status', 'rescheduled')
+      .neq('id', data.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (priorItems && priorItems.length > 0) {
+      const { data: priorNotes } = await supabase
+        .from('item_notes')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('schedule_item_id', priorItems[0].id)
+
+      if (priorNotes && priorNotes.length > 0) {
+        await supabase.from('item_notes').insert(
+          priorNotes.map(n => ({
+            user_id: user.id,
+            schedule_item_id: data.id,
+            note_type: n.note_type,
+            content: n.content,
+            is_completed: n.is_completed,
+            sort_order: n.sort_order,
+          }))
+        )
+      }
+    }
   }
 
   return NextResponse.json(data, { status: 201 })

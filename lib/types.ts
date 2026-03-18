@@ -244,6 +244,7 @@ export interface HopperItem {
   raw_input: string
   source: 'quick_capture' | 'template_proposal' | 'outside_request' | 'planning_function'
   activity_id: string | null
+  source_schedule_item_id: string | null
   status: 'pending' | 'activated' | 'dismissed' | 'ignored' | 'archived'
   proposed_date: string | null
   priority_score: number
@@ -268,6 +269,7 @@ export interface ScheduleItem {
   activity_id: string | null
   hopper_item_id: string | null
   task_suggestion_id: string | null
+  source_schedule_item_id: string | null
   name: string
   description: string | null
   scheduled_date: string

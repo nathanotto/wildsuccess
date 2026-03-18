@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { raw_input } = await req.json()
+  const { raw_input, source_schedule_item_id = null } = await req.json()
   if (!raw_input?.trim()) return NextResponse.json({ error: 'raw_input is required' }, { status: 400 })
 
   const today = new Date().toISOString().split('T')[0]
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       user_id: user.id,
       raw_input: text,
       source: 'quick_capture',
+      source_schedule_item_id,
       status: 'activated',
       priority_score: 0,
       priority_tier: 'normal',
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
     .insert({
       user_id: user.id,
       hopper_item_id: hopperItem.id,
+      source_schedule_item_id,
       name: text,
       scheduled_date: today,
       scheduled_time: null,
