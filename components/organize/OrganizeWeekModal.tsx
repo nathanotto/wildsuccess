@@ -1580,6 +1580,18 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     return `${months[start.getMonth()]} ${start.getDate()} – ${months[end.getMonth()]} ${end.getDate()}, ${start.getFullYear()}`
   }, [weekStart])
 
+  const weekRelativeInfo = useMemo(() => {
+    const now = new Date()
+    const thisMonday = getMondayOf(now)
+    const offset = Math.round((weekStart.getTime() - thisMonday.getTime()) / (7 * 24 * 60 * 60 * 1000))
+    const labels: Record<number, string> = { 0: 'This Week', 1: 'Next Week', 2: '2 Weeks Out', 3: '3 Weeks Out', [-1]: 'Last Week', [-2]: '2 Weeks Ago', [-3]: '3 Weeks Ago' }
+    const label = labels[offset] ?? (offset > 0 ? `${offset} Weeks Out` : `${-offset} Weeks Ago`)
+    const color = offset < 0 ? '#B8443E' : offset === 0 ? '#2D2A26' : '#4B6A82'
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+    const monthPrefix = MONTHS[weekStart.getMonth()]
+    return { label, color, monthPrefix }
+  }, [weekStart])
+
   const allScheduledItems = useMemo(
     () => Object.values(dayBlocks).flat().flatMap(b => b.items),
     [dayBlocks]
@@ -1772,10 +1784,9 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           flexShrink: 0,
           background: '#FAFAF7',
         }}>
-          <span style={{ fontWeight: 700, fontSize: 16, color: '#2D2A26', letterSpacing: '-0.2px' }}>
+          <span style={{ fontWeight: 600, fontSize: 24, color: '#2D2A26', fontFamily: "'Source Sans 3', sans-serif" }}>
             Organize
           </span>
-          <span style={{ color: '#8A857D', fontSize: 13 }}>{weekLabel}</span>
           <div style={{ display: 'flex', gap: 2 }}>
             <button
               onClick={() => setWeekStart(d => addDays(d, -7))}
@@ -1816,6 +1827,16 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                 <span style={{ display: 'inline-block', animation: syncing ? 'spin 0.8s linear infinite' : 'none' }}>↻</span>
                 {syncing ? 'Syncing…' : 'Sync'}
               </button>
+            )}
+          </div>
+          <div style={{ marginLeft: 16, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 24, fontWeight: 600, color: weekRelativeInfo.color, fontFamily: "'Source Sans 3', sans-serif", lineHeight: 1 }}>
+              {weekRelativeInfo.label}
+            </span>
+            {weekRelativeInfo.monthPrefix && (
+              <span style={{ fontSize: 24, fontWeight: 600, color: weekRelativeInfo.color, opacity: 0.6, fontFamily: "'Source Sans 3', sans-serif", lineHeight: 1 }}>
+                {weekRelativeInfo.monthPrefix}
+              </span>
             )}
           </div>
           <div style={{ flex: 1 }} />
