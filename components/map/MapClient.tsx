@@ -60,7 +60,7 @@ export default function MapClient({ userId, userEmail }: Props) {
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 5000)
   }, [])
 
   const fetchAll = useCallback(async () => {

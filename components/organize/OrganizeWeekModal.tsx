@@ -143,10 +143,10 @@ function addDays(d: Date, n: number): Date {
   return dt
 }
 function dateStr(d: Date): string {
-  return d.toISOString().split('T')[0]
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 function todayStr(): string {
-  return new Date().toISOString().split('T')[0]
+  return dateStr(new Date())
 }
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number)
@@ -1259,6 +1259,11 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
   // ── Quick capture ───────────────────────────────────────────────────────────
   const [captureToast, setCaptureToast] = useState<string | null>(null)
+  const [logToast, setLogToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const showLogToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setLogToast({ message, type })
+    setTimeout(() => setLogToast(null), 5000)
+  }
 
   async function handleQuickCapture(e: React.FormEvent) {
     e.preventDefault()
@@ -1277,8 +1282,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
       if (parsed?.outcome === 'logged') {
         // Show toast, do NOT add to hopper
-        setCaptureToast(`Logged: ${parsed.cleanedName}`)
-        setTimeout(() => setCaptureToast(null), 3500)
+        showLogToast(`Logged: ${parsed.cleanedName}`)
         return
       }
 
@@ -1311,7 +1315,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   // ── Log a hopper item ────────────────────────────────────────────────────────
   async function handleLogHopperItem(itemId: string, itemName: string) {
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = dateStr(new Date())
       await fetch('/api/action-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1329,6 +1333,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         body: JSON.stringify({ status: 'archived' }),
       })
       setHopper(prev => prev.filter(h => h.id !== itemId))
+      showLogToast(`Logged: ${itemName}`)
     } catch (err) {
       console.error('Log hopper item error:', err)
     }
@@ -1531,6 +1536,13 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     }))
     setClassifying(null)
 
+    // Fingerprint captures the event's state at suppression time. If Google changes
+    // the event (time or title), the fingerprint won't match and the event reappears.
+    // Series classifications use null = always suppress regardless of changes.
+    const suppressedFingerprint = (effectiveClassification === 'fixed_commitment' || effectiveClassification === 'hidden')
+      ? (matchType === 'event' ? `${event.title}|${event.start_time}|${event.end_time}` : null)
+      : null
+
     try {
       await fetch('/api/calendar/classify', {
         method: 'POST',
@@ -1541,6 +1553,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           classification: effectiveClassification,
           display_label: displayLabel || null,
           time_type: energyLevel,
+          suppressed_fingerprint: suppressedFingerprint,
         }),
       })
 
@@ -1608,21 +1621,10 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   }
 
   async function hideCalEvent(ev: CalEventLocal) {
-    // Optimistically remove from view
-    setCalEvents(prev => prev.map(e => e.id === ev.id
-      ? { ...e, classification: { classification: 'hidden', display_label: null } }
-      : e
-    ))
-    await fetch('/api/calendar/classify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        match_key: ev.external_event_id,
-        match_type: 'event',
-        classification: 'hidden',
-        display_label: null,
-      }),
-    }).catch(() => {/* silent — optimistic update already applied */})
+    // Optimistically remove from view immediately
+    setCalEvents(prev => prev.filter(e => e.id !== ev.id))
+    // Delete the row and save hidden classification so sync won't re-add it
+    fetch(`/api/calendar/events/${ev.id}`, { method: 'DELETE' }).catch(console.error)
   }
 
   function openClassifyDialog(ev: CalEventLocal) {
@@ -2305,8 +2307,19 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
 
               {/* Quick capture */}
               <div style={{ padding: '8px 10px', borderTop: '1px solid #E8E4DC', flexShrink: 0 }}>
-                {captureToast && (
-                  <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 4 }}>{captureToast}</div>
+                {logToast && (
+                  <div style={{
+                    marginBottom: 6,
+                    background: logToast.type === 'error' ? '#FDF5F4' : '#F4FDF7',
+                    border: `1px solid ${logToast.type === 'error' ? '#C4504A40' : '#5A9E6F40'}`,
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: logToast.type === 'error' ? '#C4504A' : '#4A8B5E',
+                  }}>
+                    {logToast.message}
+                  </div>
                 )}
                 <form onSubmit={handleQuickCapture} style={{ display: 'flex', gap: 6 }}>
                   <input
@@ -2420,7 +2433,10 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   const blockLabels = new Set(blocks.map(b => b.label.trim().toLowerCase()))
                   const dayCalEvents = calEvents.filter(ev => {
                     if (ev.is_all_day) return false
+                    // Confirmed events are represented as schedule_item blocks — don't double-render as overlay
                     if (ev.classification?.classification === 'hidden') return false
+                    if (ev.classification?.classification === 'fixed_commitment') return false
+                    if (ev.classification?.classification === 'flexible_commitment') return false
                     const local = new Date(ev.start_time)
                     const evDate = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`
                     if (evDate !== ds) return false

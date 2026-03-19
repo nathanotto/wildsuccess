@@ -83,7 +83,10 @@ interface Props {
 }
 
 // ── Helper utilities ──────────────────────────────────────────────────────────
-function todayStr() { return new Date().toISOString().split('T')[0] }
+function localDateStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function todayStr() { return localDateStr(new Date()) }
 
 function todayLabel() {
   return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -129,7 +132,7 @@ function parseScheduleInfo(text: string): { date: string; time: string; duration
   const lc = text.toLowerCase()
   if (lc.includes('tomorrow')) {
     const d = new Date(); d.setDate(d.getDate() + 1)
-    result.date = d.toISOString().split('T')[0]
+    result.date = localDateStr(d)
   } else if (!lc.includes('today')) {
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
     for (let i = 0; i < dayNames.length; i++) {
@@ -138,7 +141,7 @@ function parseScheduleInfo(text: string): { date: string; time: string; duration
         let diff = i - d.getDay()
         if (diff <= 0) diff += 7
         d.setDate(d.getDate() + diff)
-        result.date = d.toISOString().split('T')[0]
+        result.date = localDateStr(d)
         break
       }
     }

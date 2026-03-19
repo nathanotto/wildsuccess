@@ -70,7 +70,7 @@ function getMondayOf(d: Date): Date {
 }
 
 function dateStr(d: Date): string {
-  return d.toISOString().split('T')[0]
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function addDays(d: Date, n: number): Date {
@@ -90,7 +90,7 @@ function formatTime(t: string | null | undefined): string {
 }
 
 function todayStr(): string {
-  return new Date().toISOString().split('T')[0]
+  return dateStr(new Date())
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────

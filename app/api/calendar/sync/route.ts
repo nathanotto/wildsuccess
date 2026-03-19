@@ -59,6 +59,15 @@ export async function POST(req: NextRequest) {
       .eq('id', conn.id)
   }
 
+  // Load hidden classifications so we can skip those events during sync
+  const { data: hiddenClass } = await supabase
+    .from('calendar_event_classifications')
+    .select('match_key')
+    .eq('user_id', user.id)
+    .eq('classification', 'hidden')
+
+  const hiddenKeys = new Set((hiddenClass ?? []).map(c => c.match_key))
+
   const calendarIds: string[] = conn.calendar_ids?.length > 0 ? conn.calendar_ids : ['primary']
   let totalSynced = 0
 
@@ -82,6 +91,8 @@ export async function POST(req: NextRequest) {
 
     for (const ev of events) {
       if (ev.status === 'cancelled') continue
+      // Skip events the user has explicitly hidden
+      if (hiddenKeys.has(ev.id as string) || hiddenKeys.has(ev.recurringEventId as string)) continue
       const start = ev.start as Record<string, string> | undefined
       const end = ev.end as Record<string, string> | undefined
       const isAllDay = !!start?.date

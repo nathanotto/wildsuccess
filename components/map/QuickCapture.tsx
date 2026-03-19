@@ -24,15 +24,24 @@ export default function QuickCapture({ onCaptured, showToast }: Props) {
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/hopper', {
+      const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_input: text, source: 'quick_capture' }),
+        body: JSON.stringify({ rawInput: text, source: 'map' }),
       })
       if (!res.ok) { showToast('Failed to capture', 'error'); return }
 
-      const preview = text.length > 40 ? text.slice(0, 40) + '…' : text
-      showToast(`Captured: "${preview}"`)
+      const { parsed } = await res.json()
+      const name = parsed?.cleanedName ?? text
+      const label =
+        parsed?.outcome === 'logged'          ? `Logged: ${name}` :
+        parsed?.outcome === 'scheduled_hard'  ? `Booked: ${name}` :
+        parsed?.outcome === 'scheduled_soft'  ? `Penciled in: ${name}` :
+        parsed?.outcome === 'tickler'         ? `Reminder set: ${name}` :
+        parsed?.outcome === 'outside_request' ? `From ${parsed.person}: ${name}` :
+        parsed?.outcome === 'commitment'      ? `Committed: ${name}` :
+                                                `Captured: ${name}`
+      showToast(label)
       setValue('')
       setFocused(false)
       onCaptured()

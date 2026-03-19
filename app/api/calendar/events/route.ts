@@ -30,10 +30,25 @@ export async function GET(req: NextRequest) {
 
   const classMap = new Map((classifications ?? []).map(c => [c.match_key, c]))
 
-  const enriched = (events ?? []).map(ev => ({
-    ...ev,
-    classification: classMap.get(ev.external_series_id ?? '') ?? classMap.get(ev.external_event_id) ?? null,
-  }))
+  const enriched: Record<string, unknown>[] = []
+  for (const ev of (events ?? [])) {
+    const cls = classMap.get(ev.external_series_id ?? '') ?? classMap.get(ev.external_event_id) ?? null
+
+    // Hidden = user explicitly dismissed. Always suppress, no conditions.
+    if (cls?.classification === 'hidden') continue
+
+    // Confirmed = user turned it into a schedule_item. Suppress unless the event
+    // changed in Google (different title/time), in which case reappear as provisional.
+    if (cls?.classification === 'fixed_commitment') {
+      if (!cls.suppressed_fingerprint) continue  // series: always suppress
+      const fp = `${ev.title}|${ev.start_time}|${ev.end_time}`
+      if (fp === cls.suppressed_fingerprint) continue  // unchanged: suppress
+      enriched.push({ ...ev, classification: null })  // changed: reappear as provisional
+      continue
+    }
+
+    enriched.push({ ...ev, classification: cls })
+  }
 
   return NextResponse.json(enriched)
 }

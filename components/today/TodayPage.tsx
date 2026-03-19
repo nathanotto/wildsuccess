@@ -7,7 +7,7 @@ import CaptureInput from '@/components/capture/CaptureInput'
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function toDateStr(d: Date) {
-  return d.toISOString().split('T')[0]
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function addDays(dateStr: string, n: number) {
@@ -431,11 +431,7 @@ export default function TodayPage({ displayName }: Props) {
   // Derived
   const todoItems = items
     .filter(i => !i.scheduled_time)
-    .sort((a, b) => {
-      const so = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9)
-      if (so !== 0) return so
-      return (a.sort_order ?? 0) - (b.sort_order ?? 0)
-    })
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
   const scheduleItems = items
     .filter(i => !!i.scheduled_time)
