@@ -397,6 +397,7 @@ export default function TodayPage({ displayName }: Props) {
   const todayStr = toDateStr(new Date())
   const [selectedDate, setSelectedDate] = useState(todayStr)
   const [items, setItems] = useState<ScheduleItemWithNotes[]>([])
+  const [loggedItems, setLoggedItems] = useState<{ id: string; note: string; metadata: any; created_at: string }[]>([])
   const [nextUp, setNextUp] = useState<ScheduleItemWithNotes | null>(null)
   const [focusItemId, setFocusItemId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -418,6 +419,7 @@ export default function TodayPage({ displayName }: Props) {
       const res = await fetch(`/api/today?date=${date}`)
       const data = await res.json()
       setItems(data.items ?? [])
+      setLoggedItems(data.loggedItems ?? [])
       setNextUp(data.nextUp ?? null)
     } finally {
       setLoading(false)
@@ -451,7 +453,18 @@ export default function TodayPage({ displayName }: Props) {
     .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
     .find(i => (i.scheduled_time ?? '') > nowTime) ?? null : null
 
+  // Filter logged items to only those whose created_at falls on the selected local date
+  const filteredLoggedItems = loggedItems.filter(entry => {
+    const localDate = toDateStr(new Date(entry.created_at))
+    return localDate === selectedDate
+  })
+
   // ─── Mutations ──────────────────────────────────────────────────────────────
+
+  async function handleDeleteLogEntry(id: string) {
+    setLoggedItems(prev => prev.filter(e => e.id !== id))
+    await fetch(`/api/action-log/${id}`, { method: 'DELETE' })
+  }
 
   async function handleStatusChange(id: string, status: string) {
     const res = await fetch(`/api/schedule/${id}/status`, {
@@ -667,11 +680,43 @@ export default function TodayPage({ displayName }: Props) {
               </>
             )}
 
+            {/* Logged items */}
+            {filteredLoggedItems.length > 0 && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ fontSize: 11, color: '#B5B0A8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                  Logged
+                </div>
+                {filteredLoggedItems.map(entry => (
+                  <div key={entry.id} style={{
+                    fontSize: 13, color: '#8A8578', padding: '4px 0',
+                    borderBottom: '1px solid #F8F7F4',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <span style={{ fontSize: 11, color: '#B5B0A8', flexShrink: 0 }}>
+                      {fmtNoteTime(entry.created_at)}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{entry.metadata?.cleanedName ?? entry.note}</span>
+                    <button
+                      onClick={() => handleDeleteLogEntry(entry.id)}
+                      title="Delete"
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: '#B5B0A8', fontSize: 13, padding: '0 4px',
+                        minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                      🗑
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Capture */}
             <div style={{ borderTop: '1px solid #E8E4DC', marginTop: 8 }}>
               <CaptureInput
                 source="today"
                 onItemCreated={item => setItems(prev => [...prev, item])}
+                onLogEntry={() => loadData(selectedDate)}
               />
             </div>
           </>

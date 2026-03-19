@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     const { data } = await supabase.from('action_log').insert({
       user_id: user.id,
       event_type: 'logged',
-      event_date: parsed.date ?? today,
+      event_date: today,
       note: rawInput.trim(),
       metadata: {
         cleanedName: parsed.cleanedName,

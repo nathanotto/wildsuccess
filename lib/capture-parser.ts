@@ -66,9 +66,12 @@ const WORD_NUMBERS: Record<string, number> = {
 }
 
 const BACKWARD_STARTS = [
-  'i just', 'just had', 'just finished', 'just did', 'just went',
+  'log this', 'i just', 'just had', 'just finished', 'just did', 'just went',
   'had ', 'spent ', 'ate ', 'went ', 'took ', 'finished ', 'did ',
   'was ', 'made ', 'gave ', 'got ', 'saw ', 'met ', 'talked ',
+  'i did ', 'i was ', 'i had ', 'i spent ', 'i ate ', 'i went ',
+  'i took ', 'i finished ', 'i made ', 'i gave ', 'i got ', 'i saw ',
+  'i met ', 'i talked ', 'i felt ', 'i slept ', 'i woke ',
 ]
 
 const FORWARD_VERBS = [
@@ -113,6 +116,10 @@ function stripText(text: string, phrase: string): string {
 
 export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new Date()): ParsedCapture {
   let working = rawInput.trim()
+  // Strip "log this" prefix
+  if (working.toLowerCase().startsWith('log this')) {
+    working = working.slice(8).replace(/^[\s:,\-–]+/, '').trim()
+  }
   const rawLower = working.toLowerCase()
 
   // ─── Stage 1: Duration ──────────────────────────────────────────────────────

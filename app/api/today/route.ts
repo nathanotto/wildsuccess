@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const date = sp.get('date') ?? new Date().toISOString().split('T')[0]
 
-  // Fetch schedule_items and time_blocks in parallel
-  const [itemsRes, blocksRes] = await Promise.all([
+  // Fetch schedule_items, time_blocks, and logged entries in parallel
+  const [itemsRes, blocksRes, loggedRes] = await Promise.all([
     supabase
       .from('schedule_items')
       .select('*, item_notes(*)')
@@ -24,6 +24,13 @@ export async function GET(req: NextRequest) {
       .select('id, label, start_time, end_time, source, time_type')
       .eq('user_id', user.id)
       .eq('block_date', date),
+    supabase
+      .from('action_log')
+      .select('id, note, metadata, created_at')
+      .eq('user_id', user.id)
+      .eq('event_type', 'logged')
+      .eq('event_date', date)
+      .order('created_at', { ascending: true }),
   ])
 
   if (itemsRes.error) return NextResponse.json({ error: itemsRes.error.message }, { status: 500 })
@@ -127,5 +134,7 @@ export async function GET(req: NextRequest) {
     nextUp = upcoming.find(i => (i.scheduled_time as string).slice(0, 5) > currentTime) ?? null
   }
 
-  return NextResponse.json({ items, nextUp })
+  const loggedItems = loggedRes.data ?? []
+
+  return NextResponse.json({ items, nextUp, loggedItems })
 }
