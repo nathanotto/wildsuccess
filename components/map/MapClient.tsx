@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile, IntakeQuestion } from '@/lib/types'
 import WildSuccessMapSVG from './WildSuccessMapSVG'
 import LifeMapSVG from './LifeMapSVG'
@@ -35,6 +35,7 @@ export type ModalState =
   | null
 
 export default function MapClient({ userId, userEmail }: Props) {
+  const router = useRouter()
   const [values, setValues] = useState<UserValue[]>([])
   const [domains, setDomains] = useState<LifeDomain[]>([])
   const [outcomes, setOutcomes] = useState<BigOutcome[]>([])
@@ -50,6 +51,7 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [activitiesEditorOpen, setActivitiesEditorOpen] = useState(false)
   const [hopperCount, setHopperCount] = useState(0)
   const [calendarConnected, setCalendarConnected] = useState(false)
+  const [unclosedDays, setUnclosedDays] = useState<string[]>([])
   const searchParams = useSearchParams()
 
   // Intake state
@@ -77,13 +79,25 @@ export default function MapClient({ userId, userEmail }: Props) {
     const [v, d, o, a, p, h, hopper] = await Promise.all([
       vRes.json(), dRes.json(), oRes.json(), aRes.json(), pRes.json(), hRes.json(), hopperRes.json(),
     ])
-    if (Array.isArray(v)) setValues(v)
+    if (Array.isArray(v)) {
+      // Apply heat scores (0.0–1.0 from activity completions) to value scores (1–10 scale)
+      const heatMap = new Map<string, number>()
+      if (h?.heat) for (const { value_id, heat: heatVal } of h.heat) heatMap.set(value_id, heatVal)
+      setValues(v.map((val: UserValue) => {
+        const heat = heatMap.get(val.id)
+        return heat !== undefined ? { ...val, score: Math.round(1 + heat * 9) } : val
+      }))
+    }
     if (Array.isArray(d)) setDomains(d)
     if (Array.isArray(o)) setOutcomes(o)
     if (Array.isArray(a)) setActivities(a)
     if (p && !p.error) setProfile(p)
     if (h && h.overdueActivityIds) setOverdueActivityIds(h.overdueActivityIds)
     if (Array.isArray(hopper)) setHopperCount(hopper.length)
+    // Fetch unclosed days
+    fetch('/api/day-completion?unclosed=true', NC)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setUnclosedDays(d) })
     setLoading(false)
   }, [])
 
@@ -221,6 +235,33 @@ export default function MapClient({ userId, userEmail }: Props) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', padding: '0 16px' }}>
+        {mapMode === 'values' && (
+          <div style={{ width: 220, flexShrink: 0 }}>
+            <TakeActionBox values={values} activities={activities} overdueActivityIds={overdueActivityIds} />
+            {unclosedDays.length > 0 && (
+              <div style={{ paddingTop: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#8A857D', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
+                  Unclosed Days
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {unclosedDays.map(d => (
+                    <button
+                      key={d}
+                      onClick={() => router.push(`/today/complete?date=${d}`)}
+                      style={{
+                        padding: '4px 10px', borderRadius: 8, fontSize: 11, fontFamily: 'inherit',
+                        border: '1px solid #E8E4DC', background: '#FFF', color: '#8A8578',
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {mapMode === 'values' ? (
           <WildSuccessMapSVG
             values={values}
@@ -254,12 +295,6 @@ export default function MapClient({ userId, userEmail }: Props) {
           />
         )}
       </div>
-
-      {mapMode === 'values' && (
-        <div style={{ borderTop: '1px solid #F0EDE6' }}>
-          <TakeActionBox values={values} activities={activities} overdueActivityIds={overdueActivityIds} />
-        </div>
-      )}
 
       {/* Modals */}
       {modal?.type === 'editValue' && (

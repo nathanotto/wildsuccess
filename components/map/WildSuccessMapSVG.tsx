@@ -403,13 +403,18 @@ export default function WildSuccessMapSVG({
         )
       })}
 
-      {/* Always-visible labels for overdue activities */}
-      {visibleActivities.filter(a => overdueActivityIds.includes(a.id)).map(a => {
+      {/* Always-visible labels for all activities */}
+      {visibleActivities.map(a => {
         const ap = activityLayout[a.id]
         if (!ap) return null
-        if (hlActivities.includes(a.id) || selectedActivity?.id === a.id || hoveredNode === a.id) return null
+        // Skip if already showing a brighter label from hover/select/highlight
+        if (hlActivities.includes(a.id) || hlOutcomeActivities.includes(a.id) || selectedActivity?.id === a.id || hoveredNode === a.id) return null
+        const isOverdue = overdueActivityIds.includes(a.id)
         return (
-          <text key={`lbl-${a.id}`} x={ap.x} y={ap.y - 10} textAnchor="middle" fontSize={7.5} fontWeight={600} fill="#C4504A" opacity={0.7}>
+          <text key={`lbl-${a.id}`} x={ap.x} y={ap.y - 10} textAnchor="middle"
+            fontSize={7} fontWeight={isOverdue ? 600 : 400}
+            fill={isOverdue ? '#C4504A' : '#8A8578'} opacity={isOverdue ? 0.7 : 0.45}
+          >
             {a.name}
           </text>
         )

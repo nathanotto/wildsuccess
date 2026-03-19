@@ -57,16 +57,52 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
   const [prepNotes, setPrepNotes] = useState(activity?.prep_notes ?? '')
   const [dependsOnOthers, setDependsOnOthers] = useState(activity?.depends_on_others ?? false)
   const [dependencyNotes, setDependencyNotes] = useState(activity?.dependency_notes ?? '')
+  const [alarmThresholdDays, setAlarmThresholdDays] = useState(activity?.alarm_threshold_days?.toString() ?? '8')
   const [showMore, setShowMore] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
+  const [lastCompletion, setLastCompletion] = useState<string | null>(null)
+  const [logDate, setLogDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
+  const [logSaving, setLogSaving] = useState(false)
 
   useEffect(() => {
     fetch('/api/block-types')
       .then(r => r.ok ? r.json() : [])
       .then(data => setBlockTypes(Array.isArray(data) ? data : []))
+    if (activity?.id) {
+      fetch(`/api/action-log?activity_id=${activity.id}&event_type=completed&limit=1`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) setLastCompletion(data[0].event_date)
+        })
+    }
   }, [])
+
+  async function handleLogCompletion() {
+    if (!activity?.id || !logDate) return
+    setLogSaving(true)
+    try {
+      const res = await fetch('/api/action-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_type: 'completed',
+          activity_id: activity.id,
+          event_date: logDate,
+          note: `Logged retroactively from activity editor`,
+        }),
+      })
+      if (res.ok) {
+        setLastCompletion(logDate)
+      }
+    } finally {
+      setLogSaving(false)
+    }
+  }
 
   function toggleDomainLink(domainId: string, domainName: string) {
     setDomainLinks(prev =>
@@ -109,6 +145,7 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
       target_date: activityType === 'one_time' ? targetDate || null : null,
       status,
       is_preventive: isPreventive,
+      alarm_threshold_days: alarmThresholdDays ? parseInt(alarmThresholdDays) : 8,
       big_outcome_id: bigOutcomeId || null,
       domain_links: domainLinks.map(l => ({ domain_id: l.domain_id })),
       value_links: valueLinks.map(l => ({ value_id: l.value_id, contribution_strength: l.contribution_strength })),
@@ -369,6 +406,52 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
           </button>
           <span style={{ fontSize: 12, color: '#5A5650' }}>Preventive (neglecting it causes harm)</span>
         </div>
+
+        {/* Alarm threshold — only shown for preventive activities */}
+        {isPreventive && (
+          <div style={{ ...rowStyle, paddingLeft: 40 }}>
+            <label style={labelStyle}>Alarm after days without</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="number"
+                min="1"
+                style={{ ...inputStyle, width: 64 }}
+                value={alarmThresholdDays}
+                onChange={e => setAlarmThresholdDays(e.target.value)}
+              />
+              <span style={{ fontSize: 11, color: '#8A857D' }}>days — red dot on map</span>
+            </div>
+          </div>
+        )}
+
+        {/* Last completion + log entry */}
+        {activity?.id && (
+          <div style={rowStyle}>
+            <label style={labelStyle}>Last Completed</label>
+            <div style={{ fontSize: 12, color: '#5A5650', marginBottom: 6 }}>
+              {lastCompletion
+                ? new Date(lastCompletion + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                : 'No record'}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="date"
+                style={{ ...inputStyle, width: 140 }}
+                value={logDate}
+                onChange={e => setLogDate(e.target.value)}
+              />
+              <button
+                onClick={handleLogCompletion}
+                disabled={logSaving}
+                style={{
+                  padding: '5px 12px', borderRadius: 6, border: '1px solid #5A9E6F',
+                  background: '#5A9E6F10', color: '#5A9E6F', fontSize: 11, fontWeight: 600,
+                  cursor: logSaving ? 'default' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                }}
+              >{logSaving ? '...' : 'Log completion'}</button>
+            </div>
+          </div>
+        )}
 
         {/* Status */}
         <div style={rowStyle}>

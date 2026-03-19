@@ -23,34 +23,34 @@ export default function TakeActionBox({ values, activities, overdueActivityIds }
   })
 
   return (
-    <div style={{ padding: '10px 24px 14px', maxWidth: 1200, margin: '0 auto' }}>
-      {suggestions.length > 0 && (
-        <div style={{
-          border: '1.5px solid #E8E4DC', borderRadius: 16, background: '#FFFFFF',
-          padding: '14px 18px', marginBottom: 16,
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#2D2A26', marginBottom: 10 }}>Take Action</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {suggestions.map((s, i) => (
-              <div key={i} style={{
-                padding: '6px 12px', borderRadius: 8,
-                background: s.type === 'overdue' ? '#FDF5F4' : '#F8F7F4',
-                border: `1px solid ${s.type === 'overdue' ? '#C4504A20' : '#E8E4DC'}`,
-                display: 'flex', alignItems: 'center', gap: 6, fontSize: 10,
-              }}>
-                <span>{s.type === 'overdue' ? '📅' : '✦'}</span>
-                <span style={{ fontWeight: 600 }}>{s.text}</span>
-                <span style={{ color: '#8A8578' }}>→ {s.value.name} ({s.value.score}/{s.value.sufficiency_mark})</span>
+    <div style={{ padding: '12px 0' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#8A857D', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10, paddingLeft: 4 }}>
+        Take Action
+      </div>
+      {suggestions.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {suggestions.map((s, i) => (
+            <div key={i} style={{
+              padding: '8px 10px', borderRadius: 8,
+              background: s.type === 'overdue' ? '#FDF5F4' : '#F8F7F4',
+              border: `1px solid ${s.type === 'overdue' ? '#C4504A20' : '#E8E4DC'}`,
+              fontSize: 11, lineHeight: 1.4,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 10 }}>{s.type === 'overdue' ? '📅' : '✦'}</span>
+                <span style={{ fontWeight: 600, color: '#2D2A26' }}>{s.text}</span>
               </div>
-            ))}
-          </div>
+              <div style={{ color: '#8A8578', fontSize: 10, marginTop: 2, paddingLeft: 17 }}>
+                {s.value.name} ({s.value.score}/{s.value.sufficiency_mark})
+              </div>
+            </div>
+          ))}
         </div>
-      )}
-      {suggestions.length === 0 && below.length === 0 && (
-        <div style={{ fontSize: 12, color: '#8A8578', textAlign: 'center', padding: '12px 0' }}>
-          All values at or above sufficiency.
+      ) : below.length === 0 ? (
+        <div style={{ fontSize: 11, color: '#B5B0A8', padding: '8px 4px' }}>
+          All values at sufficiency.
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -77,6 +77,7 @@ export interface Activity {
   dependency_notes: string | null
   duration_range_min: number | null
   duration_range_max: number | null
+  alarm_threshold_days: number
   source: 'template_derived' | 'user_created' | 'outside_request' | 'planning_function'
   completion_mode: 'all' | 'any' | 'sequence'
   archived_at: string | null
