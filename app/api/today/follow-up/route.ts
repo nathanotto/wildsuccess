@@ -6,25 +6,27 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { raw_input, source_schedule_item_id } = await req.json()
-  if (!raw_input?.trim()) return NextResponse.json({ error: 'raw_input is required' }, { status: 400 })
+  const { name, parent_action_item_id = null } = await req.json()
+  if (!name?.trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
-  const { data, error } = await supabase
-    .from('hopper_items')
+  const today = new Date().toISOString().split('T')[0]
+  const text = name.trim()
+
+  const { data: actionItem, error } = await supabase
+    .from('action_items')
     .insert({
       user_id: user.id,
-      raw_input: raw_input.trim(),
-      source: 'quick_capture',
-      status: 'pending',
-      priority_score: 0,
-      priority_tier: 'normal',
-      bounding_type: 'action',
+      name: text,
+      raw_input: text,
+      source: 'follow_up',
+      status: 'candidate',
       time_type: 'B',
+      bounding_type: 'action',
+      emotional_weight: 'normal',
       enrichment_status: 'none',
-      proposed_date: new Date().toISOString().split('T')[0],
-      source_schedule_item_id: source_schedule_item_id ?? null,
+      parent_action_item_id: parent_action_item_id ?? null,
     })
-    .select()
+    .select('*, item_notes(*)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -32,11 +34,10 @@ export async function POST(req: NextRequest) {
   await supabase.from('action_log').insert({
     user_id: user.id,
     event_type: 'captured',
-    hopper_item_id: data.id,
-    schedule_item_id: source_schedule_item_id ?? null,
-    event_date: new Date().toISOString().split('T')[0],
-    note: raw_input.trim(),
+    action_item_id: actionItem.id,
+    event_date: today,
+    note: text,
   })
 
-  return NextResponse.json(data, { status: 201 })
+  return NextResponse.json({ actionItem }, { status: 201 })
 }

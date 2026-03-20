@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   // Get current item
   const { data: current, error: fetchError } = await supabase
-    .from('schedule_items')
+    .from('action_items')
     .select('name')
     .eq('id', id)
     .eq('user_id', user.id)
@@ -27,9 +27,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (oldName === newName) return NextResponse.json({ changed: false })
 
-  // Update the schedule item name
+  // Update the action item name
   const { data: updated, error: updateError } = await supabase
-    .from('schedule_items')
+    .from('action_items')
     .update({ name: newName })
     .eq('id', id)
     .eq('user_id', user.id)
@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     .from('item_notes')
     .insert({
       user_id: user.id,
-      schedule_item_id: id,
+      action_item_id: id,
       note_type: 'step',
       content: oldName,
       is_completed: true,

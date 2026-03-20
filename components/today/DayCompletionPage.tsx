@@ -32,7 +32,7 @@ const MOOD_OPTIONS = [
   { value: 5, label: 'Great', color: '#4A8B5E' },
 ]
 
-interface ScheduleItem {
+interface ActionItemLocal {
   id: string
   name: string
   status: string
@@ -43,7 +43,7 @@ interface ScheduleItem {
 interface ActionLogEntry {
   id: string
   event_type: string
-  schedule_item_id: string | null
+  action_item_id: string | null
   activity_id: string | null
   value_ids: string[] | null
   note: string | null
@@ -66,7 +66,7 @@ export default function DayCompletionPage({ displayName }: Props) {
     return diff >= 3
   })()
 
-  const [items, setItems] = useState<ScheduleItem[]>([])
+  const [items, setItems] = useState<ActionItemLocal[]>([])
   const [logs, setLogs] = useState<ActionLogEntry[]>([])
   const [loggedEntries, setLoggedEntries] = useState<ActionLogEntry[]>([])
   const [values, setValues] = useState<UserValue[]>([])
@@ -134,13 +134,13 @@ export default function DayCompletionPage({ displayName }: Props) {
   const skippedItems = items.filter(i => i.status === 'skipped')
   const otherItems = items.filter(i => i.status !== 'completed' && i.status !== 'skipped')
 
-  // Find action_log entry for a completed schedule_item
+  // Find action_log entry for a completed action_item
   function logForItem(itemId: string) {
-    return logs.find(l => l.schedule_item_id === itemId)
+    return logs.find(l => l.action_item_id === itemId)
   }
 
   // Does this completed item need value tagging?
-  function needsValueTag(item: ScheduleItem) {
+  function needsValueTag(item: ActionItemLocal) {
     if (item.activity_id) return false // Activity provides value links
     const log = logForItem(item.id)
     return !!log // Has a completion log entry we can tag

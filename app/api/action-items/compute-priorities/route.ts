@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-// POST — compute priority_score, priority_tier, and block_type_hint for all pending hopper items
-export async function POST() {
+// POST — compute priority_score and priority_tier for all candidate action_items
+export async function POST(_req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -11,14 +11,13 @@ export async function POST() {
   const threeDaysOut = new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]
   const weekOut = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
 
-  // Fetch pending hopper items with their activity context
+  // Fetch candidate action_items with their activity context
   const { data: items, error } = await supabase
-    .from('hopper_items')
+    .from('action_items')
     .select(`
       id,
       source,
       proposed_date,
-      metadata,
       activity:activities(
         id,
         emotional_weight,
@@ -32,22 +31,12 @@ export async function POST() {
       )
     `)
     .eq('user_id', user.id)
-    .eq('status', 'pending')
+    .eq('status', 'candidate')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!items?.length) return NextResponse.json({ updated: 0 })
 
-  // Fetch block types for hint assignment
-  const { data: blockTypes } = await supabase
-    .from('block_types')
-    .select('id, name, time_type')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-
-  const focusBlockId = blockTypes?.find(bt => bt.name === 'Focus')?.id ?? null
-  const communicateBlockId = blockTypes?.find(bt => bt.name === 'Communicate')?.id ?? null
-  const outingBlockId = blockTypes?.find(bt => bt.name === 'Outing')?.id ?? null
-  const adminBlockId = blockTypes?.find(bt => bt.name === 'Admin')?.id ?? null
+  const LAYER_MULT: Record<string, number> = { safety: 4, security: 3, freedom: 2, opportunity: 1 }
 
   const updates = items.map(item => {
     let score = 0
@@ -64,8 +53,6 @@ export async function POST() {
     }
 
     // Value urgency (30% weight) — items serving underperforming values get boost
-    const LAYER_MULT: Record<string, number> = { safety: 4, security: 3, freedom: 2, opportunity: 1 }
-
     const activity = item.activity as {
       emotional_weight?: string
       time_type?: string
@@ -124,27 +111,19 @@ export async function POST() {
       tier = 'suggested'
     }
 
-    // Block type hint based on energy level and context
-    let blockTypeHint: string | null = null
-    if (activity?.time_type === 'A') blockTypeHint = focusBlockId
-    else if (activity?.time_type === 'C') blockTypeHint = outingBlockId
-    else if (item.source === 'outside_request') blockTypeHint = communicateBlockId
-    else blockTypeHint = adminBlockId
-
     return {
       id: item.id,
       priority_score: Math.round(score * 10) / 10,
       priority_tier: tier,
-      block_type_hint: blockTypeHint,
     }
   })
 
   // Batch update all items
   await Promise.all(
-    updates.map(({ id, priority_score, priority_tier, block_type_hint }) =>
+    updates.map(({ id, priority_score, priority_tier }) =>
       supabase
-        .from('hopper_items')
-        .update({ priority_score, priority_tier, block_type_hint })
+        .from('action_items')
+        .update({ priority_score, priority_tier })
         .eq('id', id)
         .eq('user_id', user.id)
     )

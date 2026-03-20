@@ -9,14 +9,14 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const date = sp.get('date') ?? new Date().toISOString().split('T')[0]
 
-  // Fetch schedule_items, time_blocks, and logged entries in parallel
+  // Fetch action_items, time_blocks, and logged entries in parallel
   const [itemsRes, blocksRes, loggedRes] = await Promise.all([
     supabase
-      .from('schedule_items')
+      .from('action_items')
       .select('*, item_notes(*)')
       .eq('user_id', user.id)
-      .eq('scheduled_date', date)
-      .not('status', 'eq', 'rescheduled')
+      .eq('committed_date', date)
+      .not('status', 'in', '("rescheduled","dismissed","archived")')
       .or(`status.neq.parked,parked_until.lte.${date}`)
       .order('sort_order', { ascending: true }),
     supabase
@@ -40,10 +40,10 @@ export async function GET(req: NextRequest) {
 
   const blockMap = Object.fromEntries(blocks.map(b => [b.id, b]))
 
-  // Build a lookup of which block_ids already have a schedule_item
+  // Build a lookup of which block_ids already have a linked action_item
   const linkedBlockIds = new Set(items.map(i => i.time_block_id).filter(Boolean))
 
-  // Orphaned blocks: no linked schedule_item, not a calendar import, has a label
+  // Orphaned blocks: no linked action_item, not a calendar import, has a label
   const orphanedBlocks = blocks.filter(b =>
     !linkedBlockIds.has(b.id) &&
     b.source !== 'calendar_import' &&
@@ -51,9 +51,8 @@ export async function GET(req: NextRequest) {
   )
 
   if (orphanedBlocks.length > 0) {
-    // For each orphaned block, check if an existing timeless schedule_item matches by name.
-    // If so, link it to the block (update time_block_id + scheduled_time) rather than creating a duplicate.
-    // Otherwise, create a new schedule_item.
+    // For each orphaned block, try to match an existing timeless action_item by name.
+    // If matched, link it. Otherwise, create a new action_item.
     const timelessItems = items.filter(i => !i.time_block_id && !i.scheduled_time)
 
     const toCreate: typeof orphanedBlocks = []
@@ -66,7 +65,7 @@ export async function GET(req: NextRequest) {
       if (match) {
         // Link the existing item to this block
         await supabase
-          .from('schedule_items')
+          .from('action_items')
           .update({
             time_block_id: block.id,
             scheduled_time: block.start_time ?? null,
@@ -87,21 +86,20 @@ export async function GET(req: NextRequest) {
 
     if (toCreate.length > 0) {
       const { data: created } = await supabase
-        .from('schedule_items')
+        .from('action_items')
         .insert(toCreate.map(b => ({
           user_id: user.id,
           name: b.label.trim(),
-          scheduled_date: date,
+          status: 'committed' as const,
+          committed_date: date,
           scheduled_time: b.start_time ?? null,
           scheduled_end_time: b.end_time ?? null,
           time_block_id: b.id,
-          flexibility: 'anytime_today' as const,
-          context: [] as string[],
           time_type: (b.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
-          emotional_weight: 'normal' as const,
           bounding_type: 'action' as const,
-          status: 'active' as const,
+          emotional_weight: 'normal' as const,
           sort_order: 0,
+          enrichment_status: 'none' as const,
         })))
         .select('*, item_notes(*)')
 

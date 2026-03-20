@@ -33,7 +33,7 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
   await supabase.from('action_log').insert({
     user_id: user.id,
     event_type: 'completed',
-    schedule_item_id: note.schedule_item_id,
+    action_item_id: note.action_item_id,
     event_date: new Date().toISOString().split('T')[0],
     metadata: { step_note_id: id, step_content: note.content },
   })

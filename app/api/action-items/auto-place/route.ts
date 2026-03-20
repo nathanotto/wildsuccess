@@ -105,22 +105,22 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { hopper_item_id, week_start, preferred_time: ptOverride, duration_minutes: durOverride, utc_offset_minutes, force } = body
+  const { action_item_id, week_start, preferred_time: ptOverride, duration_minutes: durOverride, utc_offset_minutes, force } = body
   const utcOffMin: number = typeof utc_offset_minutes === 'number' ? utc_offset_minutes : 0
 
-  if (!hopper_item_id || !week_start) {
-    return NextResponse.json({ error: 'hopper_item_id and week_start are required' }, { status: 400 })
+  if (!action_item_id || !week_start) {
+    return NextResponse.json({ error: 'action_item_id and week_start are required' }, { status: 400 })
   }
 
-  // Fetch hopper item
-  const { data: hopperItem } = await supabase
-    .from('hopper_items')
-    .select('id, activity_id, raw_input, time_type')
-    .eq('id', hopper_item_id)
+  // Fetch the action item
+  const { data: actionItem } = await supabase
+    .from('action_items')
+    .select('id, activity_id, name, time_type')
+    .eq('id', action_item_id)
     .eq('user_id', user.id)
     .single()
 
-  if (!hopperItem) return NextResponse.json({ error: 'Hopper item not found' }, { status: 404 })
+  if (!actionItem) return NextResponse.json({ error: 'Action item not found' }, { status: 404 })
 
   // Fetch activity if linked
   let activity: {
@@ -129,16 +129,16 @@ export async function POST(req: NextRequest) {
     time_type: string | null; emotional_weight: string | null
   } | null = null
 
-  if (hopperItem.activity_id) {
+  if (actionItem.activity_id) {
     const { data: act } = await supabase
       .from('activities')
       .select('id, name, preferred_time, preferred_days, frequency, duration_range_min, duration_range_max, time_type, emotional_weight')
-      .eq('id', hopperItem.activity_id)
+      .eq('id', actionItem.activity_id)
       .single()
     activity = act
   }
 
-  // Resolve effective values (override → activity → default)
+  // Resolve effective values (override -> activity -> default)
   const effectivePreferredTime = ptOverride ?? activity?.preferred_time ?? null
   const effectiveDuration = durOverride ?? activity?.duration_range_min ?? DEFAULT_SLOT.defaultDuration
 
@@ -174,27 +174,29 @@ export async function POST(req: NextRequest) {
   const cadenceDays = CADENCE_DAYS[frequency] ?? 1
   const targetDays = cadenceDays <= 1 ? filteredDays : filteredDays.slice(0, 1)
 
-  // Normalize H:MM → HH:MM
+  // Normalize H:MM -> HH:MM
   const normalizedTime = effectivePreferredTime?.replace(/^(\d):/, '0$1:') ?? null
-  // Resolve time slot — exact HH:MM times bypass the named-slot lookup
+  // Resolve time slot -- exact HH:MM times bypass the named-slot lookup
   const isExactTime = /^\d{2}:\d{2}$/.test(normalizedTime ?? '')
   const slot = isExactTime ? null : (TIME_OF_DAY[normalizedTime ?? ''] ?? DEFAULT_SLOT)
   const startTime = isExactTime ? normalizedTime! : slot!.start
 
-  const itemName = activity?.name ?? hopperItem.raw_input
-  const timeType = activity?.time_type ?? hopperItem.time_type ?? 'B'
+  const itemName = activity?.name ?? actionItem.name
+  const timeType = activity?.time_type ?? actionItem.time_type ?? 'B'
   const emotionalWeight = activity?.emotional_weight ?? 'normal'
 
-  // Create a time block + schedule item for each target day
+  // For the first target day, update the existing action_item.
+  // For additional days (daily cadence), create new action_items.
   const created = []
-  for (const day of targetDays) {
-    const scheduledDate = day.toISOString().split('T')[0]
+  for (let i = 0; i < targetDays.length; i++) {
+    const day = targetDays[i]
+    const committedDate = day.toISOString().split('T')[0]
 
-    // Avoid calendar conflicts — find the first open slot >= desired start (unless forced)
+    // Avoid calendar conflicts -- find the first open slot >= desired start (unless forced)
     const desiredStartMin = timeToMin(startTime)
     const availableStartMin = force
       ? desiredStartMin
-      : await findAvailableStart(supabase, user.id, scheduledDate, desiredStartMin, effectiveDuration, utcOffMin)
+      : await findAvailableStart(supabase, user.id, committedDate, desiredStartMin, effectiveDuration, utcOffMin)
     const actualStartTime = minToHHMM(availableStartMin)
     const actualEndTime = addMinutes(actualStartTime, effectiveDuration)
 
@@ -203,7 +205,7 @@ export async function POST(req: NextRequest) {
       .from('time_blocks')
       .insert({
         user_id: user.id,
-        block_date: scheduledDate,
+        block_date: committedDate,
         label: itemName,
         start_time: actualStartTime,
         end_time: actualEndTime,
@@ -217,32 +219,45 @@ export async function POST(req: NextRequest) {
       .single()
     if (!block) continue
 
-    // Create the schedule item inside the block
-    const { data: si } = await supabase
-      .from('schedule_items')
-      .insert({
-        user_id: user.id,
-        activity_id: hopperItem.activity_id ?? null,
-        hopper_item_id: hopper_item_id,
-        time_block_id: block.id,
-        name: itemName,
-        scheduled_date: scheduledDate,
-        time_type: timeType,
-        emotional_weight: emotionalWeight,
-        bounding_type: 'action',
-        status: 'active',
-      })
-      .select()
-      .single()
-    if (si) created.push({ block, item: si })
+    if (i === 0) {
+      // Update the existing action_item
+      const { data: updated } = await supabase
+        .from('action_items')
+        .update({
+          committed_date: committedDate,
+          scheduled_time: actualStartTime,
+          scheduled_end_time: actualEndTime,
+          time_block_id: block.id,
+          status: 'committed',
+          time_type: timeType,
+          emotional_weight: emotionalWeight,
+        })
+        .eq('id', action_item_id)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+      if (updated) created.push({ block, item: updated })
+    } else {
+      // Create additional action_items for extra days
+      const { data: newItem } = await supabase
+        .from('action_items')
+        .insert({
+          user_id: user.id,
+          activity_id: actionItem.activity_id ?? null,
+          time_block_id: block.id,
+          name: itemName,
+          committed_date: committedDate,
+          scheduled_time: actualStartTime,
+          scheduled_end_time: actualEndTime,
+          time_type: timeType,
+          emotional_weight: emotionalWeight,
+          status: 'committed',
+        })
+        .select()
+        .single()
+      if (newItem) created.push({ block, item: newItem })
+    }
   }
-
-  // Mark hopper item as activated
-  await supabase
-    .from('hopper_items')
-    .update({ status: 'activated', resolved_at: new Date().toISOString() })
-    .eq('id', hopper_item_id)
-    .eq('user_id', user.id)
 
   return NextResponse.json({ created })
 }

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ScheduleItemWithNotes, ItemNote } from '@/lib/types'
+import { ActionItemWithNotes, ItemNote } from '@/lib/types'
 import CaptureInput from '@/components/capture/CaptureInput'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ function currentTimeStr() {
 
 const STATUS_ORDER: Record<string, number> = {
   in_progress: 0,
-  active: 1,
+  committed: 1,
   parked: 2,
   completed: 3,
   skipped: 4,
@@ -58,7 +58,7 @@ function Checkbox({ status, onClick }: { status: string; onClick: () => void }) 
     cursor: 'pointer', flexShrink: 0, position: 'relative', overflow: 'hidden',
   }
 
-  if (status === 'active') {
+  if (status === 'committed') {
     return (
       <span style={{ ...base, borderColor: '#B5B0A8', background: 'transparent' }}
         onClick={e => { e.stopPropagation(); onClick() }} />
@@ -101,16 +101,16 @@ function Checkbox({ status, onClick }: { status: string; onClick: () => void }) 
 // ─── FocusView ────────────────────────────────────────────────────────────────
 
 interface FocusViewProps {
-  item: ScheduleItemWithNotes
+  item: ActionItemWithNotes
   onBack: () => void
   onStatusChange: (id: string, status: string) => Promise<void>
   onTitleChange: (id: string, name: string) => Promise<{ oldTitleNote?: ItemNote }>
-  onAddNote: (scheduleItemId: string, noteType: 'note' | 'step', content: string) => Promise<ItemNote>
+  onAddNote: (actionItemId: string, noteType: 'note' | 'step', content: string) => Promise<ItemNote>
   onCompleteStep: (noteId: string) => Promise<void>
   onAddFollowUp: (content: string, sourceId: string) => Promise<void>
   onMoveToTomorrow: (id: string) => Promise<void>
   onMarkDoneAndCapture: (id: string, followUpText: string) => Promise<void>
-  nextUp: ScheduleItemWithNotes | null
+  nextUp: ActionItemWithNotes | null
   isToday: boolean
 }
 
@@ -253,7 +253,7 @@ function FocusView({
             display: 'flex', alignItems: 'flex-start', gap: 8,
             padding: '6px 8px', marginBottom: 2,
           }}>
-            <Checkbox status={s.is_completed ? 'completed' : 'active'} onClick={() => !s.is_completed && handleCheckStep(s.id)} />
+            <Checkbox status={s.is_completed ? 'completed' : 'committed'} onClick={() => !s.is_completed && handleCheckStep(s.id)} />
             <span style={{
               fontSize: 14, flex: 1,
               color: s.is_completed ? '#B5B0A8' : '#2D2A26',
@@ -396,9 +396,9 @@ export default function TodayPage({ displayName }: Props) {
   const router = useRouter()
   const todayStr = toDateStr(new Date())
   const [selectedDate, setSelectedDate] = useState(todayStr)
-  const [items, setItems] = useState<ScheduleItemWithNotes[]>([])
+  const [items, setItems] = useState<ActionItemWithNotes[]>([])
   const [loggedItems, setLoggedItems] = useState<{ id: string; note: string; metadata: any; created_at: string }[]>([])
-  const [nextUp, setNextUp] = useState<ScheduleItemWithNotes | null>(null)
+  const [nextUp, setNextUp] = useState<ActionItemWithNotes | null>(null)
   const [focusItemId, setFocusItemId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [nowTime, setNowTime] = useState(currentTimeStr())
@@ -442,7 +442,7 @@ export default function TodayPage({ displayName }: Props) {
   const stats = {
     done: items.filter(i => i.status === 'completed').length,
     inProgress: items.filter(i => i.status === 'in_progress').length,
-    todo: items.filter(i => i.status === 'active').length,
+    todo: items.filter(i => i.status === 'committed').length,
   }
 
   const focusItem = items.find(i => i.id === focusItemId) ?? null
@@ -467,7 +467,7 @@ export default function TodayPage({ displayName }: Props) {
   }
 
   async function handleStatusChange(id: string, status: string) {
-    const res = await fetch(`/api/schedule/${id}/status`, {
+    const res = await fetch(`/api/action-items/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -483,17 +483,17 @@ export default function TodayPage({ displayName }: Props) {
     }
   }
 
-  async function handleCheckboxCycle(item: ScheduleItemWithNotes) {
+  async function handleCheckboxCycle(item: ActionItemWithNotes) {
     const next =
-      item.status === 'active' ? 'in_progress' :
+      item.status === 'committed' ? 'in_progress' :
         item.status === 'in_progress' ? 'completed' :
-          item.status === 'completed' ? 'active' :
-            item.status === 'parked' ? 'in_progress' : 'active'
+          item.status === 'completed' ? 'committed' :
+            item.status === 'parked' ? 'in_progress' : 'committed'
     await handleStatusChange(item.id, next)
   }
 
   async function handleTitleChange(id: string, name: string) {
-    const res = await fetch(`/api/schedule/${id}/title`, {
+    const res = await fetch(`/api/action-items/${id}/title`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
@@ -505,18 +505,18 @@ export default function TodayPage({ displayName }: Props) {
     return { oldTitleNote: data.oldTitleNote }
   }
 
-  async function handleAddNote(scheduleItemId: string, noteType: 'note' | 'step', content: string): Promise<ItemNote> {
+  async function handleAddNote(actionItemId: string, noteType: 'note' | 'step', content: string): Promise<ItemNote> {
     const res = await fetch('/api/item-notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ schedule_item_id: scheduleItemId, note_type: noteType, content }),
+      body: JSON.stringify({ action_item_id: actionItemId, note_type: noteType, content }),
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.error ?? `Failed to save ${noteType}`)
     }
     const note = await res.json()
-    setItems(prev => prev.map(i => i.id === scheduleItemId
+    setItems(prev => prev.map(i => i.id === actionItemId
       ? { ...i, item_notes: [...(i.item_notes ?? []), note] }
       : i))
     return note
@@ -535,20 +535,20 @@ export default function TodayPage({ displayName }: Props) {
     const res = await fetch('/api/today/capture', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw_input: followUpText, source_schedule_item_id: id }),
+      body: JSON.stringify({ name: followUpText, source_action_item_id: id }),
     })
     const data = await res.json()
-    if (data.scheduleItem) {
-      setItems(prev => [...prev, data.scheduleItem])
+    if (data.actionItem) {
+      setItems(prev => [...prev, data.actionItem])
     }
   }
 
   async function handleMoveToTomorrow(id: string) {
     const tomorrow = addDays(todayStr, 1)
-    const res = await fetch(`/api/schedule/${id}/date`, {
+    const res = await fetch(`/api/action-items/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: tomorrow }),
+      body: JSON.stringify({ committed_date: tomorrow, scheduled_time: null, scheduled_end_time: null, time_block_id: null }),
     })
     if (res.ok) {
       setItems(prev => prev.filter(i => i.id !== id))
@@ -559,7 +559,7 @@ export default function TodayPage({ displayName }: Props) {
     await fetch('/api/today/follow-up', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw_input: content, source_schedule_item_id: sourceId }),
+      body: JSON.stringify({ name: content, parent_action_item_id: sourceId }),
     })
   }
 
@@ -731,7 +731,7 @@ export default function TodayPage({ displayName }: Props) {
 function TodoRow({
   item, onCheckbox, onFocus, onReschedule,
 }: {
-  item: ScheduleItemWithNotes
+  item: ActionItemWithNotes
   onCheckbox: () => void
   onFocus: () => void
   onReschedule: () => void
@@ -801,10 +801,10 @@ function TodoRow({
 // ─── Schedule section renderer ────────────────────────────────────────────────
 
 function renderScheduleItems(
-  items: ScheduleItemWithNotes[],
+  items: ActionItemWithNotes[],
   nowTime: string,
   isToday: boolean,
-  onCheckbox: (item: ScheduleItemWithNotes) => void,
+  onCheckbox: (item: ActionItemWithNotes) => void,
   onFocus: (id: string) => void,
   onReschedule: (id: string, status: string) => void,
 ) {

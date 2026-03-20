@@ -30,22 +30,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   const { id } = await params
 
-  // Before deleting, restore any linked hopper items to pending
-  // (Postgres ON DELETE SET NULL would otherwise orphan schedule items invisibly)
-  const { data: schedItems } = await supabase
-    .from('schedule_items')
-    .select('id, hopper_item_id')
+  // Before deleting, clear time block references on linked action_items (keep them committed)
+  await supabase
+    .from('action_items')
+    .update({ time_block_id: null, scheduled_time: null, scheduled_end_time: null })
     .eq('time_block_id', id)
     .eq('user_id', user.id)
-
-  const hopperIds = [...new Set((schedItems ?? []).map(s => s.hopper_item_id).filter(Boolean))]
-  if (hopperIds.length > 0) {
-    await supabase
-      .from('hopper_items')
-      .update({ status: 'pending', resolved_at: null })
-      .in('id', hopperIds)
-      .eq('user_id', user.id)
-  }
 
   const { error } = await supabase
     .from('time_blocks')

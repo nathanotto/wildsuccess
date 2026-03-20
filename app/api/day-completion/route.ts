@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 // GET /api/day-completion?date=YYYY-MM-DD
-// or GET /api/day-completion?unclosed=true (returns dates with schedule_items but no day_completion, last 14 days)
+// or GET /api/day-completion?unclosed=true (returns dates with committed action_items but no day_completion, last 14 days)
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -28,17 +28,19 @@ export async function GET(req: NextRequest) {
     const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]
     const today = new Date().toISOString().split('T')[0]
 
-    // Get all dates that have schedule_items in the last 14 days (excluding today)
-    const { data: scheduleDates } = await supabase
-      .from('schedule_items')
-      .select('scheduled_date')
+    // Get all dates that have committed action_items in the last 14 days (excluding today)
+    const { data: commitDates } = await supabase
+      .from('action_items')
+      .select('committed_date')
       .eq('user_id', user.id)
-      .gte('scheduled_date', fourteenDaysAgo)
-      .lt('scheduled_date', today)
+      .not('committed_date', 'is', null)
+      .not('status', 'in', '("rescheduled","dismissed","archived")')
+      .gte('committed_date', fourteenDaysAgo)
+      .lt('committed_date', today)
 
-    if (!scheduleDates?.length) return NextResponse.json([])
+    if (!commitDates?.length) return NextResponse.json([])
 
-    const uniqueDates = [...new Set(scheduleDates.map(s => s.scheduled_date))].sort()
+    const uniqueDates = [...new Set(commitDates.map(s => s.committed_date))].sort()
 
     // Get all day_completions in that range
     const { data: completions } = await supabase

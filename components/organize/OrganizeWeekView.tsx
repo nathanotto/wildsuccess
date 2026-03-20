@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { HopperItem, ScheduleItem, TimeBlock, UserValue, LifeDomain, Activity } from '@/lib/types'
+import { ActionItem, TimeBlock, UserValue, LifeDomain, Activity } from '@/lib/types'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
@@ -13,8 +13,7 @@ const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 // ── Local types ────────────────────────────────────────────────────────────────
 interface LocalItem {
   localId: string
-  scheduleItemId?: string
-  hopperItemId?: string
+  actionItemId?: string
   activityId?: string
   name: string
   source: string
@@ -36,6 +35,8 @@ interface LocalBlock {
   label: string
   start: string
   end: string
+  rawStartTime?: string | null
+  rawEndTime?: string | null
   energyLevel: 'A' | 'B' | 'C' | 'D' | '0'
   isHardBlock?: boolean
   items: LocalItem[]
@@ -137,8 +138,8 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
 
     const [blocksRes, schedRes, hopperRes, completedRes] = await Promise.all([
       fetch(`/api/time-blocks?range_start=${rangeStart}&range_end=${rangeEnd}`).catch(() => null),
-      fetch(`/api/schedule?range_start=${rangeStart}&range_end=${rangeEnd}`).catch(() => null),
-      fetch('/api/hopper?status=pending').catch(() => null),
+      fetch(`/api/action-items?range_start=${rangeStart}&range_end=${rangeEnd}`).catch(() => null),
+      fetch('/api/action-items?status=candidate').catch(() => null),
       fetch(`/api/action-log?event_type=completed&range_start=${rangeStart}&range_end=${rangeEnd}`).catch(() => null),
     ])
 
@@ -162,19 +163,20 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
         label: b.label,
         start: b.start_time ? formatTime(b.start_time) : '?',
         end: b.end_time ? formatTime(b.end_time) : '?',
+        rawStartTime: b.start_time ?? null,
+        rawEndTime: b.end_time ?? null,
         energyLevel: b.time_type,
         isHardBlock: b.is_hard,
         items: [],
       })
     })
 
-    // Place schedule items into their blocks
-    const schedItems: ScheduleItem[] = Array.isArray(schedData) ? schedData : []
-    schedItems.forEach((s: ScheduleItem) => {
+    // Place scheduled (committed) action items into their blocks
+    const schedItems: ActionItem[] = Array.isArray(schedData) ? schedData : []
+    schedItems.forEach((s: ActionItem) => {
       const localItem: LocalItem = {
         localId: s.id,
-        scheduleItemId: s.id,
-        hopperItemId: s.hopper_item_id ?? undefined,
+        actionItemId: s.id,
         activityId: s.activity_id ?? undefined,
         name: s.name,
         source: 'template_proposal',
@@ -188,29 +190,30 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
         scheduledTime: s.scheduled_time ? formatTime(s.scheduled_time) : undefined,
         endTime: s.scheduled_end_time ? formatTime(s.scheduled_end_time) : undefined,
       }
-      const tbId = (s as ScheduleItem & { time_block_id?: string }).time_block_id
-      const dayBlocksForDate = newDayBlocks[s.scheduled_date] ?? []
+      const tbId = s.time_block_id
+      if (!s.committed_date) return
+      const dayBlocksForDate = newDayBlocks[s.committed_date] ?? []
       const matchBlock = tbId ? dayBlocksForDate.find(b => b.dbId === tbId) : null
       if (matchBlock) matchBlock.items.push(localItem)
       // If no matching block, skip (week view shows only block-assigned items)
     })
 
-    // Build hopper — all pending items (week view shows them all)
+    // Build hopper — all candidate items (week view shows them all)
     const hopperItems: LocalItem[] = (Array.isArray(hopperData) ? hopperData : [])
-      .map((h: HopperItem & { activity?: Partial<Activity> }) => {
+      .map((h: ActionItem & { activity?: Partial<Activity> }) => {
         const act = h.activity ?? activities.find(a => a.id === h.activity_id)
         const meta = h.metadata as { requestedBy?: string; note?: string } | null
         return {
           localId: h.id,
-          hopperItemId: h.id,
+          actionItemId: h.id,
           activityId: h.activity_id ?? undefined,
-          name: h.raw_input,
+          name: h.name,
           source: h.source,
-          energyLevel: (act?.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
-          emotionalWeight: (act?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
+          energyLevel: (act?.time_type ?? h.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
+          emotionalWeight: (act?.emotional_weight ?? h.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
           durationMin: act?.duration_range_min ?? 15,
           durationMax: act?.duration_range_max ?? 30,
-          flexibility: act?.flexibility ?? 'anytime_this_week',
+          flexibility: act?.flexibility ?? h.flexibility ?? 'anytime_this_week',
           values: [],
           meta: meta ? { requestedBy: meta.requestedBy, note: meta.note } : undefined,
         }
@@ -281,26 +284,16 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
     setDragItem(null)
 
     // Persist
-    const schedDate = dateKey
-    if (dragItem.scheduleItemId) {
-      await fetch(`/api/schedule/${dragItem.scheduleItemId}`, {
+    if (dragItem.actionItemId) {
+      await fetch(`/api/action-items/${dragItem.actionItemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheduled_date: schedDate, time_block_id: targetBlock.dbId }),
-      })
-    } else if (dragItem.hopperItemId) {
-      await fetch('/api/schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          hopper_item_id: dragItem.hopperItemId,
-          activity_id: dragItem.activityId ?? null,
-          name: dragItem.name,
-          scheduled_date: schedDate,
+          committed_date: dateKey,
           time_block_id: targetBlock.dbId,
-          flexibility: dragItem.flexibility,
-          time_type: dragItem.energyLevel,
-          emotional_weight: dragItem.emotionalWeight,
+          scheduled_time: targetBlock.rawStartTime ?? null,
+          scheduled_end_time: targetBlock.rawEndTime ?? null,
+          status: 'committed',
         }),
       })
     }
@@ -313,8 +306,13 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
     setDragOver(null)
     setDragItem(null)
 
-    if (dragItem.scheduleItemId) await fetch(`/api/schedule/${dragItem.scheduleItemId}`, { method: 'DELETE' })
-    if (dragItem.hopperItemId) await fetch(`/api/hopper/${dragItem.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pending', resolved_at: null }) })
+    if (dragItem.actionItemId) {
+      await fetch(`/api/action-items/${dragItem.actionItemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'candidate', committed_date: null, scheduled_time: null, time_block_id: null }),
+      })
+    }
   }
 
   const returnToHopper = async (item: LocalItem, dateKey: string, blockId: string) => {
@@ -327,18 +325,23 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
     }))
     setHopper(h => [item, ...h])
 
-    if (item.scheduleItemId) await fetch(`/api/schedule/${item.scheduleItemId}`, { method: 'DELETE' })
-    if (item.hopperItemId) await fetch(`/api/hopper/${item.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pending', resolved_at: null }) })
+    if (item.actionItemId) {
+      await fetch(`/api/action-items/${item.actionItemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'candidate', committed_date: null, scheduled_time: null, time_block_id: null }),
+      })
+    }
   }
 
   const dismissHopper = (localId: string) => {
     const item = hopper.find(h => h.localId === localId)
     setHopper(h => h.filter(i => i.localId !== localId))
-    if (item?.hopperItemId) {
-      fetch(`/api/hopper/${item.hopperItemId}`, {
+    if (item?.actionItemId) {
+      fetch(`/api/action-items/${item.actionItemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'dismissed', resolved_at: new Date().toISOString() }),
+        body: JSON.stringify({ status: 'dismissed' }),
       })
     }
   }
@@ -346,15 +349,15 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
   const captureItem = async () => {
     if (!captureInput.trim() || savingCapture) return
     setSavingCapture(true)
-    const res = await fetch('/api/hopper', {
+    const res = await fetch('/api/action-items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw_input: captureInput.trim(), source: 'quick_capture' }),
+      body: JSON.stringify({ name: captureInput.trim(), source: 'quick_capture', status: 'candidate' }),
     })
     if (res.ok) {
       const newItem = await res.json()
       const localItem: LocalItem = {
-        localId: newItem.id, hopperItemId: newItem.id, name: newItem.raw_input,
+        localId: newItem.id, actionItemId: newItem.id, name: newItem.name,
         source: 'quick_capture', energyLevel: 'B', emotionalWeight: 'normal',
         durationMin: 15, durationMax: 30, flexibility: 'anytime_this_week', values: [],
       }

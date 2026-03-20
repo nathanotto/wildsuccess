@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
-// POST /api/schedule/commit — commit all active schedule_items for a given date
+// POST /api/action-items/commit — commit all uncommitted action_items for a given date
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -12,13 +12,13 @@ export async function POST(req: NextRequest) {
 
   const now = new Date().toISOString()
 
-  // Fetch active uncommitted items for this date
+  // Fetch uncommitted action_items for this date
   const { data: items, error: fetchErr } = await supabase
-    .from('schedule_items')
-    .select('id, activity_id, hopper_item_id')
+    .from('action_items')
+    .select('id, activity_id')
     .eq('user_id', user.id)
-    .eq('scheduled_date', date)
-    .eq('status', 'active')
+    .eq('committed_date', date)
+    .not('status', 'in', '("committed","completed","in_progress")')
     .is('committed_at', null)
 
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
@@ -26,10 +26,10 @@ export async function POST(req: NextRequest) {
 
   const ids = items.map(i => i.id)
 
-  // Set committed_at on all items
+  // Set committed_at and status on all items
   const { error: updateErr } = await supabase
-    .from('schedule_items')
-    .update({ committed_at: now })
+    .from('action_items')
+    .update({ committed_at: now, status: 'committed' })
     .in('id', ids)
     .eq('user_id', user.id)
 
@@ -39,9 +39,8 @@ export async function POST(req: NextRequest) {
   const logRows = items.map(item => ({
     user_id: user.id,
     event_type: 'committed' as const,
-    schedule_item_id: item.id,
+    action_item_id: item.id,
     activity_id: item.activity_id ?? null,
-    hopper_item_id: item.hopper_item_id ?? null,
     event_date: date,
   }))
   await supabase.from('action_log').insert(logRows)

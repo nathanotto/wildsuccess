@@ -71,11 +71,9 @@ export async function POST(req: NextRequest) {
 
   const parsed = parseCapture(rawInput.trim(), ctx, now)
 
-  let hopperItem = null
-  let scheduleItem = null
+  let actionItem = null
   let logEntry = null
 
-  // For /today source: plain captures also get a schedule_item for today
   const isToday = source === 'today'
 
   if (parsed.outcome === 'logged') {
@@ -95,128 +93,144 @@ export async function POST(req: NextRequest) {
     }).select().single()
     logEntry = data
 
-  } else if (parsed.outcome === 'captured' || parsed.outcome === 'captured_dated') {
-    const proposedDate = parsed.date ?? (isToday ? today : null)
-    const { data: hi } = await supabase.from('hopper_items').insert({
-      user_id: user.id,
-      raw_input: rawInput.trim(),
-      source: 'quick_capture',
-      status: isToday ? 'activated' : 'pending',
-      priority_score: 0,
-      priority_tier: 'normal',
-      bounding_type: 'action',
-      time_type: parsed.timeType ?? 'B',
-      enrichment_status: 'none',
-      proposed_date: proposedDate,
-      resolved_at: isToday ? now.toISOString() : null,
-    }).select().single()
-    hopperItem = hi
-
-    // For /today: also create a schedule_item so it appears on today's list
-    if (isToday && hi && (!parsed.date || parsed.date === today)) {
-      const { data: si } = await supabase.from('schedule_items').insert({
-        user_id: user.id,
-        hopper_item_id: hi.id,
-        name: parsed.cleanedName,
-        scheduled_date: today,
-        scheduled_time: null,
-        flexibility: 'anytime_today',
-        context: [],
-        time_type: parsed.timeType ?? 'B',
-        emotional_weight: 'normal',
-        bounding_type: 'action',
-        status: 'active',
-        sort_order: 9999,
-      }).select('*, item_notes(*)').single()
-      scheduleItem = si
-
-      await supabase.from('action_log').insert({
-        user_id: user.id,
-        event_type: 'captured',
-        hopper_item_id: hi.id,
-        schedule_item_id: si?.id ?? null,
-        event_date: today,
-        note: rawInput.trim(),
-      })
-    }
-
-  } else if (parsed.outcome === 'scheduled_soft' || parsed.outcome === 'scheduled_hard') {
-    const { data: si } = await supabase.from('schedule_items').insert({
+  } else if (parsed.outcome === 'captured') {
+    const isCommitted = isToday
+    const { data } = await supabase.from('action_items').insert({
       user_id: user.id,
       name: parsed.cleanedName,
-      scheduled_date: parsed.date ?? today,
+      raw_input: rawInput.trim(),
+      source: 'quick_capture',
+      status: isCommitted ? 'committed' : 'candidate',
+      committed_date: isCommitted ? today : null,
+      time_type: parsed.timeType ?? 'B',
+      bounding_type: 'action',
+      emotional_weight: 'normal',
+      sort_order: isCommitted ? 9999 : 0,
+      enrichment_status: 'none',
+      activity_id: parsed.activityMatch?.id ?? null,
+      task_suggestion_id: null,
+    }).select('*, item_notes(*)').single()
+    actionItem = data
+
+    await supabase.from('action_log').insert({
+      user_id: user.id,
+      event_type: 'captured',
+      action_item_id: data?.id ?? null,
+      event_date: today,
+      note: rawInput.trim(),
+    })
+
+  } else if (parsed.outcome === 'captured_dated') {
+    const isCommitted = isToday && parsed.date === today
+    const { data } = await supabase.from('action_items').insert({
+      user_id: user.id,
+      name: parsed.cleanedName,
+      raw_input: rawInput.trim(),
+      source: 'quick_capture',
+      status: isCommitted ? 'committed' : 'candidate',
+      proposed_date: isCommitted ? null : (parsed.date ?? null),
+      committed_date: isCommitted ? today : null,
+      time_type: parsed.timeType ?? 'B',
+      bounding_type: 'action',
+      emotional_weight: 'normal',
+      sort_order: isCommitted ? 9999 : 0,
+      enrichment_status: 'none',
+      activity_id: parsed.activityMatch?.id ?? null,
+      task_suggestion_id: null,
+    }).select('*, item_notes(*)').single()
+    actionItem = data
+
+    await supabase.from('action_log').insert({
+      user_id: user.id,
+      event_type: 'captured',
+      action_item_id: data?.id ?? null,
+      event_date: today,
+      note: rawInput.trim(),
+    })
+
+  } else if (parsed.outcome === 'scheduled_soft' || parsed.outcome === 'scheduled_hard') {
+    const isHard = parsed.outcome === 'scheduled_hard'
+    const { data } = await supabase.from('action_items').insert({
+      user_id: user.id,
+      name: parsed.cleanedName,
+      raw_input: rawInput.trim(),
+      source: 'quick_capture',
+      status: 'committed',
+      committed_date: parsed.date ?? today,
       scheduled_time: parsed.time ?? null,
       scheduled_end_time: parsed.endTime ?? null,
-      flexibility: parsed.outcome === 'scheduled_hard' ? 'hard_scheduled' : 'soft_scheduled',
-      context: [],
+      flexibility: isHard ? 'hard_scheduled' : 'soft_scheduled',
+      item_type: isHard ? 'appointment' : 'task',
       time_type: parsed.timeType ?? 'B',
-      emotional_weight: 'normal',
       bounding_type: 'action',
-      status: 'active',
+      emotional_weight: 'normal',
       sort_order: 0,
+      enrichment_status: 'none',
+      activity_id: parsed.activityMatch?.id ?? null,
+      task_suggestion_id: null,
     }).select('*, item_notes(*)').single()
-    scheduleItem = si
+    actionItem = data
 
     await supabase.from('action_log').insert({
       user_id: user.id,
       event_type: 'scheduled',
-      schedule_item_id: si?.id ?? null,
+      action_item_id: data?.id ?? null,
       event_date: today,
       note: rawInput.trim(),
     })
 
   } else if (parsed.outcome === 'tickler') {
-    const { data: hi } = await supabase.from('hopper_items').insert({
+    const { data } = await supabase.from('action_items').insert({
       user_id: user.id,
+      name: parsed.cleanedName,
       raw_input: rawInput.trim(),
       source: 'quick_capture',
-      status: 'pending',
-      priority_score: 0,
-      priority_tier: 'normal',
-      bounding_type: 'action',
+      status: 'candidate',
+      item_type: 'tickler',
+      proposed_date: parsed.date ?? null,
       time_type: parsed.timeType ?? 'B',
+      bounding_type: 'action',
+      emotional_weight: 'normal',
       enrichment_status: 'none',
-      proposed_date: parsed.date,
-      metadata: { isTickler: true },
-    }).select().single()
-    hopperItem = hi
+    }).select('*, item_notes(*)').single()
+    actionItem = data
 
-  } else if (parsed.outcome === 'outside_request' || parsed.outcome === 'commitment') {
-    const { data: hi } = await supabase.from('hopper_items').insert({
+  } else if (parsed.outcome === 'outside_request') {
+    const isCommitted = isToday
+    const { data } = await supabase.from('action_items').insert({
       user_id: user.id,
+      name: parsed.cleanedName,
       raw_input: rawInput.trim(),
       source: 'outside_request',
-      status: isToday ? 'activated' : 'pending',
-      priority_score: 0,
-      priority_tier: 'normal',
-      bounding_type: 'action',
+      status: isCommitted ? 'committed' : 'candidate',
+      item_type: 'outside_request',
+      committed_date: isCommitted ? today : null,
+      proposed_date: isCommitted ? null : (parsed.date ?? null),
+      person_id: parsed.person?.id ?? null,
       time_type: parsed.timeType ?? 'B',
+      bounding_type: 'action',
+      emotional_weight: 'normal',
+      sort_order: isCommitted ? 9999 : 0,
       enrichment_status: 'none',
-      proposed_date: parsed.date ?? null,
-      resolved_at: isToday ? now.toISOString() : null,
-      metadata: parsed.outcome === 'commitment'
-        ? { isCommitment: true, committedTo: parsed.person?.name, person_id: parsed.person?.id }
-        : { requestedBy: parsed.person?.name, person_id: parsed.person?.id },
-    }).select().single()
-    hopperItem = hi
+    }).select('*, item_notes(*)').single()
+    actionItem = data
 
-    if (isToday && hi) {
-      const { data: si } = await supabase.from('schedule_items').insert({
-        user_id: user.id,
-        hopper_item_id: hi.id,
-        name: parsed.cleanedName,
-        scheduled_date: today,
-        scheduled_time: parsed.time ?? null,
-        flexibility: 'anytime_today',
-        context: [],
-        time_type: parsed.timeType ?? 'B',
-        emotional_weight: 'normal',
-        bounding_type: 'action',
-        status: 'active',
-        sort_order: 9999,
-      }).select('*, item_notes(*)').single()
-      scheduleItem = si
-    }
+  } else if (parsed.outcome === 'commitment') {
+    const { data } = await supabase.from('action_items').insert({
+      user_id: user.id,
+      name: parsed.cleanedName,
+      raw_input: rawInput.trim(),
+      source: 'quick_capture',
+      status: 'committed',
+      item_type: 'commitment',
+      committed_date: today,
+      committed_to_person_id: parsed.person?.id ?? null,
+      time_type: parsed.timeType ?? 'B',
+      bounding_type: 'action',
+      emotional_weight: 'normal',
+      enrichment_status: 'none',
+    }).select('*, item_notes(*)').single()
+    actionItem = data
   }
 
   // Increment mention count for matched person
@@ -234,5 +248,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ parsed, hopperItem, scheduleItem, logEntry }, { status: 201 })
+  return NextResponse.json({ parsed, actionItem, logEntry }, { status: 201 })
 }

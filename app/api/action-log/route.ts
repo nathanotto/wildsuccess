@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { event_type, schedule_item_id, hopper_item_id, activity_id, task_suggestion_id, event_date, note, metadata, value_ids } = body
+  const { event_type, action_item_id, activity_id, task_suggestion_id, event_date, note, metadata, value_ids } = body
 
   if (!event_type || !event_date) {
     return NextResponse.json({ error: 'event_type and event_date are required' }, { status: 400 })
@@ -48,8 +48,7 @@ export async function POST(req: NextRequest) {
     .insert({
       user_id: user.id,
       event_type,
-      schedule_item_id: schedule_item_id ?? null,
-      hopper_item_id: hopper_item_id ?? null,
+      action_item_id: action_item_id ?? null,
       activity_id: activity_id ?? null,
       task_suggestion_id: task_suggestion_id ?? null,
       event_date,

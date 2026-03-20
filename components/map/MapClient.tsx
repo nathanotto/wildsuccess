@@ -74,7 +74,7 @@ export default function MapClient({ userId, userEmail }: Props) {
       fetch('/api/activities', NC),
       fetch('/api/profile', NC),
       fetch('/api/map/heat', NC),
-      fetch('/api/hopper?status=pending', NC),
+      fetch('/api/action-items?status=candidate', NC),
     ])
     const [v, d, o, a, p, h, hopper] = await Promise.all([
       vRes.json(), dRes.json(), oRes.json(), aRes.json(), pRes.json(), hRes.json(), hopperRes.json(),

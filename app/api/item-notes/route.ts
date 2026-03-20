@@ -6,14 +6,14 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const scheduleItemId = req.nextUrl.searchParams.get('schedule_item_id')
-  if (!scheduleItemId) return NextResponse.json({ error: 'schedule_item_id is required' }, { status: 400 })
+  const actionItemId = req.nextUrl.searchParams.get('action_item_id')
+  if (!actionItemId) return NextResponse.json({ error: 'action_item_id is required' }, { status: 400 })
 
   const { data, error } = await supabase
     .from('item_notes')
     .select('*')
     .eq('user_id', user.id)
-    .eq('schedule_item_id', scheduleItemId)
+    .eq('action_item_id', actionItemId)
     .order('note_type', { ascending: true }) // notes grouped, steps by sort_order
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
@@ -27,9 +27,9 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { schedule_item_id, note_type, content, sort_order = 0 } = await req.json()
-  if (!schedule_item_id || !note_type || !content?.trim()) {
-    return NextResponse.json({ error: 'schedule_item_id, note_type, and content are required' }, { status: 400 })
+  const { action_item_id, note_type, content, sort_order = 0 } = await req.json()
+  if (!action_item_id || !note_type || !content?.trim()) {
+    return NextResponse.json({ error: 'action_item_id, note_type, and content are required' }, { status: 400 })
   }
   if (!['note', 'step'].includes(note_type)) {
     return NextResponse.json({ error: 'note_type must be note or step' }, { status: 400 })
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     .from('item_notes')
     .insert({
       user_id: user.id,
-      schedule_item_id,
+      action_item_id,
       note_type,
       content: content.trim(),
       is_completed: false,

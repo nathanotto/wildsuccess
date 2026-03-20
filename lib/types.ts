@@ -167,9 +167,8 @@ export interface TimeBlock {
 export interface ActionLog {
   id: string
   user_id: string
-  event_type: 'proposed' | 'scheduled' | 'committed' | 'rescheduled' | 'removed' | 'completed' | 'skipped' | 'captured' | 'dismissed' | 'reopened' | 'parked' | 'in_progress'
-  schedule_item_id: string | null
-  hopper_item_id: string | null
+  event_type: 'proposed' | 'scheduled' | 'committed' | 'rescheduled' | 'removed' | 'completed' | 'skipped' | 'captured' | 'dismissed' | 'reopened' | 'parked' | 'in_progress' | 'logged'
+  action_item_id: string | null
   activity_id: string | null
   task_suggestion_id: string | null
   event_date: string
@@ -239,63 +238,56 @@ export interface IntakeResponse {
   updated_at: string
 }
 
-export interface HopperItem {
+export interface ActionItem {
   id: string
   user_id: string
-  raw_input: string
-  source: 'quick_capture' | 'template_proposal' | 'outside_request' | 'planning_function'
-  activity_id: string | null
-  source_schedule_item_id: string | null
-  status: 'pending' | 'activated' | 'dismissed' | 'ignored' | 'archived'
+  name: string
+  raw_input: string | null
+  description: string | null
+  source: 'quick_capture' | 'template_proposal' | 'outside_request' | 'planning_function' | 'calendar_import' | 'follow_up'
+  item_type: 'task' | 'appointment' | 'commitment' | 'outside_request' | 'tickler' | 'log_entry'
+  status: 'candidate' | 'committed' | 'in_progress' | 'completed' | 'parked' | 'skipped' | 'rescheduled' | 'dismissed' | 'archived'
   proposed_date: string | null
-  priority_score: number
-  priority_tier: 'urgent' | 'normal' | 'suggested'
-  block_type_hint: string | null
+  committed_date: string | null
+  scheduled_time: string | null
+  scheduled_end_time: string | null
+  parked_until: string | null
   bounding_type: 'time' | 'action' | 'outcome' | 'unbounded'
   time_type: 'A' | 'B' | 'C' | 'D' | '0'
+  flexibility: 'hard_scheduled' | 'soft_scheduled' | 'anytime_today' | 'anytime_this_week'
+  emotional_weight: 'light' | 'normal' | 'heavy'
+  context: string[]
+  activity_id: string | null
+  task_suggestion_id: string | null
+  big_outcome_id: string | null
+  time_block_id: string | null
+  parent_action_item_id: string | null
+  person_id: string | null
+  priority_score: number
+  priority_tier: 'urgent' | 'normal' | 'suggested'
+  sort_order: number
   enrichment_status: 'none' | 'pending' | 'enriched' | 'confirmed' | 'declined'
   enrichment_data: Record<string, unknown> | null
   enriched_at: string | null
   confirmed_at: string | null
+  last_proposed_at: string | null
+  consecutive_dismissals: number
+  committed_at: string | null
+  committed_to_person_id: string | null
+  completed_at: string | null
+  completion_note: string | null
+  actual_duration_minutes: number | null
+  feelings: string[] | null
   metadata: Record<string, unknown> | null
   created_at: string
   updated_at: string
-  resolved_at: string | null
   activity?: Partial<Activity>
-}
-
-export interface ScheduleItem {
-  id: string
-  user_id: string
-  activity_id: string | null
-  hopper_item_id: string | null
-  task_suggestion_id: string | null
-  source_schedule_item_id: string | null
-  name: string
-  description: string | null
-  scheduled_date: string
-  scheduled_time: string | null
-  scheduled_end_time: string | null
-  flexibility: 'hard_scheduled' | 'soft_scheduled' | 'anytime_today'
-  context: string[]
-  time_type: 'A' | 'B' | 'C' | 'D' | '0'
-  emotional_weight: 'light' | 'normal' | 'heavy'
-  bounding_type: 'time' | 'action' | 'outcome' | 'unbounded'
-  committed_at: string | null
-  sort_order: number
-  status: 'active' | 'in_progress' | 'completed' | 'skipped' | 'rescheduled' | 'parked'
-  parked_until: string | null
-  completion_note: string | null
-  actual_duration_minutes: number | null
-  completed_at: string | null
-  created_at: string
-  updated_at: string
 }
 
 export interface ItemNote {
   id: string
   user_id: string
-  schedule_item_id: string
+  action_item_id: string
   note_type: 'note' | 'step'
   content: string
   is_completed: boolean
@@ -304,7 +296,7 @@ export interface ItemNote {
   updated_at: string
 }
 
-export interface ScheduleItemWithNotes extends ScheduleItem {
+export interface ActionItemWithNotes extends ActionItem {
   item_notes?: ItemNote[]
 }
 

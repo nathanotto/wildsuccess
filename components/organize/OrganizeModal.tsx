@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { HopperItem, ScheduleItem, TimeBlock, UserValue, LifeDomain, Activity } from '@/lib/types'
+import { ActionItem, TimeBlock, UserValue, LifeDomain, Activity } from '@/lib/types'
 import OrganizeWeekView from './OrganizeWeekView'
 import TimeTemplateEditor from './TimeTemplateEditor'
 
@@ -25,8 +25,7 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 // ── Local types ───────────────────────────────────────────────────────────────
 interface LocalItem {
   localId: string
-  scheduleItemId?: string
-  hopperItemId?: string
+  actionItemId?: string
   activityId?: string
   name: string
   source: string
@@ -48,6 +47,8 @@ interface LocalBlock {
   label: string
   start: string
   end: string
+  rawStartTime?: string | null
+  rawEndTime?: string | null
   energyLevel: 'A' | 'B' | 'C'
   isHardBlock?: boolean
   items: LocalItem[]
@@ -55,7 +56,7 @@ interface LocalBlock {
 
 interface HopperEditState {
   localId: string
-  hopperItemId?: string
+  actionItemId?: string
   mode: 'menu' | 'ask-later' | 'schedule'
   name: string
   askLaterDate: string
@@ -67,8 +68,7 @@ interface HopperEditState {
 
 interface SchedEditState {
   localId: string
-  scheduleItemId?: string
-  hopperItemId?: string
+  actionItemId?: string
   name: string
   schedTime: string
   blockId: string
@@ -217,15 +217,15 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     const today = todayStr()
     // Propose due activities into hopper before loading (fire-and-forget is fine,
     // but we await so new proposals appear immediately in the hopper fetch below)
-    await fetch('/api/hopper/propose', {
+    await fetch('/api/action-items/propose', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target_date: today }),
     }).catch(() => {}) // non-fatal if it fails
 
     const [hopperRes, schedRes, blocksRes] = await Promise.all([
-      fetch('/api/hopper?status=pending'),
-      fetch(`/api/schedule?date=${today}`),
+      fetch('/api/action-items?status=candidate'),
+      fetch(`/api/action-items?committed_date=${today}`),
       fetch(`/api/time-blocks?date=${today}`).catch(() => ({ ok: false, json: async () => [] })),
     ])
     const [hopperData, schedData, blocksData] = await Promise.all([
@@ -234,27 +234,27 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
       (blocksRes as Response).ok ? (blocksRes as Response).json() : [],
     ])
 
-    const hopperItems: LocalItem[] = (Array.isArray(hopperData) ? hopperData : []).map((h: HopperItem) => {
-      const act = h.activity as Activity | undefined
-      const meta = h.metadata as { requestedBy?: string; note?: string } | null
+    const hopperItems: LocalItem[] = (Array.isArray(hopperData) ? hopperData : []).map((item: ActionItem) => {
+      const act = item.activity as Partial<Activity> | undefined
+      const meta = item.metadata as { requestedBy?: string; note?: string } | null
       return {
-        localId: h.id,
-        hopperItemId: h.id,
-        activityId: h.activity_id ?? undefined,
-        name: h.raw_input,
-        source: h.source,
-        energyLevel: (act?.time_type ?? 'B') as 'A' | 'B' | 'C',
-        emotionalWeight: (act?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
+        localId: item.id,
+        actionItemId: item.id,
+        activityId: item.activity_id ?? undefined,
+        name: item.name,
+        source: item.source,
+        energyLevel: (item.time_type ?? act?.time_type ?? 'B') as 'A' | 'B' | 'C',
+        emotionalWeight: (item.emotional_weight ?? act?.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
         durationMin: act?.duration_range_min ?? 15,
         durationMax: act?.duration_range_max ?? 30,
-        flexibility: act?.flexibility ?? 'anytime_today',
+        flexibility: item.flexibility ?? act?.flexibility ?? 'anytime_today',
         values: [],
         meta: meta ? { requestedBy: meta.requestedBy, note: meta.note } : undefined,
       }
     })
 
     const dbBlocks: TimeBlock[] = Array.isArray(blocksData) ? blocksData : []
-    const schedItems: ScheduleItem[] = Array.isArray(schedData) ? schedData : []
+    const schedItems: ActionItem[] = Array.isArray(schedData) ? schedData : []
 
     let localBlocks: LocalBlock[]
     if (dbBlocks.length > 0) {
@@ -262,6 +262,8 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
         localId: b.id, dbId: b.id, label: b.label,
         start: b.start_time ? formatTime(b.start_time) : '?',
         end: b.end_time ? formatTime(b.end_time) : '?',
+        rawStartTime: b.start_time ?? null,
+        rawEndTime: b.end_time ?? null,
         energyLevel: b.time_type as 'A' | 'B' | 'C',
         isHardBlock: b.is_hard, items: [],
       }))
@@ -272,20 +274,21 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     }
 
     const unscheduled: LocalItem[] = []
-    schedItems.forEach((s: ScheduleItem) => {
+    schedItems.forEach((s: ActionItem) => {
+      const act = s.activity as Partial<Activity> | undefined
       const localItem: LocalItem = {
-        localId: s.id, scheduleItemId: s.id,
-        hopperItemId: s.hopper_item_id ?? undefined,
+        localId: s.id, actionItemId: s.id,
         activityId: s.activity_id ?? undefined,
-        name: s.name, source: 'template_proposal',
-        energyLevel: s.time_type as 'A' | 'B' | 'C',
-        emotionalWeight: s.emotional_weight as 'light' | 'normal' | 'heavy',
-        durationMin: 15, durationMax: 30, flexibility: s.flexibility, values: [],
+        name: s.name, source: s.source,
+        energyLevel: (s.time_type ?? 'B') as 'A' | 'B' | 'C',
+        emotionalWeight: (s.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
+        durationMin: act?.duration_range_min ?? 15, durationMax: act?.duration_range_max ?? 30,
+        flexibility: s.flexibility, values: [],
         isHard: s.flexibility === 'hard_scheduled',
         scheduledTime: s.scheduled_time ? formatTime(s.scheduled_time) : undefined,
         endTime: s.scheduled_end_time ? formatTime(s.scheduled_end_time) : undefined,
       }
-      const tbId = (s as ScheduleItem & { time_block_id?: string }).time_block_id
+      const tbId = s.time_block_id
       const matchBlock = tbId ? localBlocks.find(b => b.dbId === tbId) : null
       if (matchBlock) matchBlock.items.push(localItem)
       else unscheduled.push(localItem)
@@ -326,10 +329,10 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     removeFromSource(dragItem)
     setTimeBlocks(bs => bs.map(b => b.localId === bid ? { ...b, items: [...b.items, dragItem!] } : b))
     setDragOver(null); setDragItem(null)
-    if (dragItem.fromSection === 'hopper' && dragItem.hopperItemId) {
-      await fetch('/api/schedule', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: dragItem.name, hopper_item_id: dragItem.hopperItemId, activity_id: dragItem.activityId ?? null, scheduled_date: todayStr(), flexibility: dragItem.flexibility, time_type: dragItem.energyLevel, emotional_weight: dragItem.emotionalWeight, time_block_id: block?.dbId ?? null }),
+    if (dragItem.fromSection === 'hopper' && dragItem.actionItemId) {
+      await fetch(`/api/action-items/${dragItem.actionItemId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'committed', committed_date: todayStr(), scheduled_time: block?.rawStartTime ?? null, scheduled_end_time: block?.rawEndTime ?? null, time_block_id: block?.dbId ?? null }),
       })
     }
   }
@@ -339,10 +342,10 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     removeFromSource(dragItem)
     setUnscheduledTasks(t => [...t, dragItem!])
     setDragOver(null); setDragItem(null)
-    if (dragItem.fromSection === 'hopper' && dragItem.hopperItemId) {
-      await fetch('/api/schedule', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: dragItem.name, hopper_item_id: dragItem.hopperItemId, activity_id: dragItem.activityId ?? null, scheduled_date: todayStr(), flexibility: 'anytime_today', time_type: dragItem.energyLevel, emotional_weight: dragItem.emotionalWeight }),
+    if (dragItem.fromSection === 'hopper' && dragItem.actionItemId) {
+      await fetch(`/api/action-items/${dragItem.actionItemId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'committed', committed_date: todayStr(), flexibility: 'anytime_today', time_block_id: null }),
       })
     }
   }
@@ -352,8 +355,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     removeFromSource(dragItem)
     setHopper(h => [dragItem!, ...h])
     setDragOver(null); setDragItem(null)
-    if (dragItem.scheduleItemId) await fetch(`/api/schedule/${dragItem.scheduleItemId}`, { method: 'DELETE' })
-    if (dragItem.hopperItemId) await fetch(`/api/hopper/${dragItem.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pending', resolved_at: null }) })
+    if (dragItem.actionItemId) await fetch(`/api/action-items/${dragItem.actionItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'candidate', committed_date: null, scheduled_time: null, scheduled_end_time: null, time_block_id: null }) })
   }
 
   const returnToHopper = async (item: LocalItem, from: string) => {
@@ -364,13 +366,12 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
       setTimeBlocks(bs => bs.map(b => b.localId === bid ? { ...b, items: b.items.filter(i => i.localId !== item.localId) } : b))
     }
     setHopper(h => [item, ...h])
-    if (item.scheduleItemId) await fetch(`/api/schedule/${item.scheduleItemId}`, { method: 'DELETE' })
-    if (item.hopperItemId) await fetch(`/api/hopper/${item.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pending', resolved_at: null }) })
+    if (item.actionItemId) await fetch(`/api/action-items/${item.actionItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'candidate', committed_date: null, scheduled_time: null, scheduled_end_time: null, time_block_id: null }) })
   }
 
   const dismissHopper = async (id: string) => {
     setHopper(h => h.filter(i => i.localId !== id))
-    await fetch(`/api/hopper/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'dismissed', resolved_at: new Date().toISOString() }) })
+    await fetch(`/api/action-items/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'dismissed' }) })
   }
 
   // ── Hopper editing ────────────────────────────────────────────────────────
@@ -379,7 +380,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     setSchedEdit(null)
     setHopperEdit({
       localId: item.localId,
-      hopperItemId: item.hopperItemId,
+      actionItemId: item.actionItemId,
       mode: 'menu',
       name: item.name,
       askLaterDate: '',
@@ -395,16 +396,16 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     const trimmed = hopperEdit.name.trim()
     if (!trimmed) return
     setHopper(h => h.map(i => i.localId === hopperEdit.localId ? { ...i, name: trimmed } : i))
-    if (hopperEdit.hopperItemId) {
-      await fetch(`/api/hopper/${hopperEdit.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_input: trimmed }) })
+    if (hopperEdit.actionItemId) {
+      await fetch(`/api/action-items/${hopperEdit.actionItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: trimmed }) })
     }
   }
 
   const snoozeHopper = async () => {
     if (!hopperEdit || !hopperEdit.askLaterDate) return
     setHopper(h => h.filter(i => i.localId !== hopperEdit.localId))
-    if (hopperEdit.hopperItemId) {
-      await fetch(`/api/hopper/${hopperEdit.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposed_date: hopperEdit.askLaterDate }) })
+    if (hopperEdit.actionItemId) {
+      await fetch(`/api/action-items/${hopperEdit.actionItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposed_date: hopperEdit.askLaterDate }) })
     }
     setHopperEdit(null)
   }
@@ -428,32 +429,19 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     }
 
     // Persist
-    if (hopperEdit.hopperItemId) {
-      if (hopperEdit.name.trim() && hopperEdit.name.trim() !== item.name) {
-        await fetch(`/api/hopper/${hopperEdit.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_input: hopperEdit.name.trim() }) })
-      }
-      const res = await fetch('/api/schedule', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+    if (hopperEdit.actionItemId) {
+      await fetch(`/api/action-items/${hopperEdit.actionItemId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: hopperEdit.name.trim() || item.name,
-          hopper_item_id: hopperEdit.hopperItemId,
-          activity_id: item.activityId ?? null,
-          scheduled_date: hopperEdit.schedDate,
+          status: 'committed',
+          committed_date: hopperEdit.schedDate,
           scheduled_time: hopperEdit.schedTime || null,
           scheduled_end_time: hopperEdit.schedTime ? computeEndTime(hopperEdit.schedTime, hopperEdit.schedDuration) : null,
           flexibility: hopperEdit.schedTime ? 'soft_scheduled' : 'anytime_today',
-          time_type: item.energyLevel,
-          emotional_weight: item.emotionalWeight,
           time_block_id: block?.dbId ?? null,
         }),
       })
-      if (res.ok) {
-        const data = await res.json()
-        // Update the local item with real schedule ID
-        const updateItem = (items: LocalItem[]) => items.map(i => i.localId === item.localId ? { ...i, scheduleItemId: data.id } : i)
-        if (block) setTimeBlocks(bs => bs.map(b => b.localId === block.localId ? { ...b, items: updateItem(b.items) } : b))
-        else setUnscheduledTasks(updateItem)
-      }
     }
     setHopperEdit(null)
   }
@@ -464,8 +452,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     setHopperEdit(null)
     setSchedEdit({
       localId: item.localId,
-      scheduleItemId: item.scheduleItemId,
-      hopperItemId: item.hopperItemId,
+      actionItemId: item.actionItemId,
       name: item.name,
       schedTime: item.scheduledTime ? toInputTime(item.scheduledTime) : '',
       blockId: currentBlockId,
@@ -505,9 +492,9 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     }
 
     // Persist
-    if (schedEdit.scheduleItemId) {
+    if (schedEdit.actionItemId) {
       const block = newBlockId !== 'unscheduled' ? timeBlocks.find(b => b.localId === newBlockId) : null
-      await fetch(`/api/schedule/${schedEdit.scheduleItemId}`, {
+      await fetch(`/api/action-items/${schedEdit.actionItemId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: trimmed,
@@ -525,8 +512,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
       const bid = from.startsWith('block-') ? from.replace('block-', '') : from
       setTimeBlocks(bs => bs.map(b => b.localId === bid ? { ...b, items: b.items.filter(i => i.localId !== item.localId) } : b))
     }
-    if (item.scheduleItemId) await fetch(`/api/schedule/${item.scheduleItemId}`, { method: 'DELETE' })
-    if (item.hopperItemId) await fetch(`/api/hopper/${item.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pending', resolved_at: null }) })
+    if (item.actionItemId) await fetch(`/api/action-items/${item.actionItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'candidate', committed_date: null, scheduled_time: null, scheduled_end_time: null, time_block_id: null }) })
     setSchedEdit(null)
   }
 
@@ -552,10 +538,10 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     const today = todayStr()
     const item: LocalItem = { localId: 'new-' + Date.now(), name, source: 'quick_capture', energyLevel: block?.energyLevel ?? 'B', emotionalWeight: 'normal', durationMin: 15, durationMax: 30, flexibility: 'anytime_today', values: [] }
     setTimeBlocks(bs => bs.map(b => b.localId === blockId ? { ...b, items: [...b.items, item] } : b))
-    const hr = await fetch('/api/hopper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_input: name, source: 'quick_capture', proposed_date: today }) })
-    if (hr.ok) {
-      const h = await hr.json()
-      await fetch('/api/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, hopper_item_id: h.id, scheduled_date: today, flexibility: 'anytime_today', time_type: block?.energyLevel ?? 'B', emotional_weight: 'normal', time_block_id: block?.dbId ?? null }) })
+    const res = await fetch('/api/action-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, source: 'quick_capture', status: 'committed', committed_date: today, flexibility: 'anytime_today', time_type: block?.energyLevel ?? 'B', emotional_weight: 'normal', time_block_id: block?.dbId ?? null }) })
+    if (res.ok) {
+      const data = await res.json()
+      setTimeBlocks(bs => bs.map(b => b.localId === blockId ? { ...b, items: b.items.map(i => i.localId === item.localId ? { ...i, localId: data.id, actionItemId: data.id } : i) } : b))
     }
   }
 
@@ -563,15 +549,15 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     const today = todayStr()
     const item: LocalItem = { localId: 'new-' + Date.now(), name, source: 'quick_capture', energyLevel: 'B', emotionalWeight: 'normal', durationMin: 15, durationMax: 30, flexibility: 'anytime_today', values: [] }
     setUnscheduledTasks(t => [...t, item])
-    const hr = await fetch('/api/hopper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_input: name, source: 'quick_capture', proposed_date: today }) })
-    if (hr.ok) { const h = await hr.json(); await fetch('/api/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, hopper_item_id: h.id, scheduled_date: today, flexibility: 'anytime_today', time_type: 'B', emotional_weight: 'normal' }) }) }
+    const res = await fetch('/api/action-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, source: 'quick_capture', status: 'committed', committed_date: today, flexibility: 'anytime_today', time_type: 'B', emotional_weight: 'normal' }) })
+    if (res.ok) { const data = await res.json(); setUnscheduledTasks(t => t.map(i => i.localId === item.localId ? { ...i, localId: data.id, actionItemId: data.id } : i)) }
   }
 
   const captureToHopper = async (name: string) => {
     const item: LocalItem = { localId: 'hc-' + Date.now(), name, source: 'quick_capture', energyLevel: 'B', emotionalWeight: 'normal', durationMin: 15, durationMax: 30, flexibility: 'anytime_today', values: [] }
     setHopper(h => [item, ...h])
-    const res = await fetch('/api/hopper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw_input: name, source: 'quick_capture' }) })
-    if (res.ok) { const data = await res.json(); setHopper(h => h.map(i => i.localId === item.localId ? { ...i, localId: data.id, hopperItemId: data.id } : i)) }
+    const res = await fetch('/api/action-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, source: 'quick_capture', status: 'candidate' }) })
+    if (res.ok) { const data = await res.json(); setHopper(h => h.map(i => i.localId === item.localId ? { ...i, localId: data.id, actionItemId: data.id } : i)) }
   }
 
   // ── Add time block ────────────────────────────────────────────────────────
@@ -597,9 +583,9 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     const today = todayStr()
     const allItems = allSched()
     await Promise.all(allItems.map(async item => {
-      if (!item.scheduleItemId) return
-      const status = completions[item.localId] === 'done' ? 'completed' : completions[item.localId] === 'skipped' ? 'skipped' : 'active'
-      if (status !== 'active') await fetch(`/api/schedule/${item.scheduleItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+      if (!item.actionItemId) return
+      const status = completions[item.localId] === 'done' ? 'completed' : completions[item.localId] === 'skipped' ? 'skipped' : 'committed'
+      if (status !== 'committed') await fetch(`/api/action-items/${item.actionItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     }))
     await fetch('/api/day-reflection', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reflection_date: today, plan_status: 'closed', mood_energy: moodEnergy, journal_note: reflection || null }) })
     setSaving(false)

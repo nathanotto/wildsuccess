@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ScheduleItemWithNotes } from '@/lib/types'
+import { ActionItemWithNotes } from '@/lib/types'
 import type { ParsedCapture } from '@/lib/capture-parser'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ function outcomeLabel(parsed: ParsedCapture): string {
 interface Props {
   source: 'today' | 'organize' | 'map'
   placeholder?: string
-  onItemCreated?: (item: ScheduleItemWithNotes) => void
+  onItemCreated?: (item: ActionItemWithNotes) => void
   onLogEntry?: () => void
   inputStyle?: React.CSSProperties
   wrapperStyle?: React.CSSProperties
@@ -146,7 +146,7 @@ export default function CaptureInput({
       const parsed: ParsedCapture = data.parsed
 
       // Add item to parent state
-      if (data.scheduleItem && onItemCreated) onItemCreated(data.scheduleItem)
+      if (data.actionItem && onItemCreated) onItemCreated(data.actionItem)
       if (data.logEntry && onLogEntry) onLogEntry()
 
       // UI feedback — logged items always get a toast (user narrated something, needs acknowledgment)
