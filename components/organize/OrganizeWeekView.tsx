@@ -313,13 +313,8 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
     setDragOver(null)
     setDragItem(null)
 
-    if (dragItem.scheduleItemId) {
-      await fetch(`/api/schedule/${dragItem.scheduleItemId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ time_block_id: null }),
-      })
-    }
+    if (dragItem.scheduleItemId) await fetch(`/api/schedule/${dragItem.scheduleItemId}`, { method: 'DELETE' })
+    if (dragItem.hopperItemId) await fetch(`/api/hopper/${dragItem.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pending', resolved_at: null }) })
   }
 
   const returnToHopper = async (item: LocalItem, dateKey: string, blockId: string) => {
@@ -332,13 +327,8 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
     }))
     setHopper(h => [item, ...h])
 
-    if (item.scheduleItemId) {
-      await fetch(`/api/schedule/${item.scheduleItemId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ time_block_id: null }),
-      })
-    }
+    if (item.scheduleItemId) await fetch(`/api/schedule/${item.scheduleItemId}`, { method: 'DELETE' })
+    if (item.hopperItemId) await fetch(`/api/hopper/${item.hopperItemId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'pending', resolved_at: null }) })
   }
 
   const dismissHopper = (localId: string) => {
