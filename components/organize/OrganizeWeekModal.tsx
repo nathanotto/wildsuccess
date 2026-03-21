@@ -2404,7 +2404,6 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   const blockLabels = new Set(blocks.map(b => b.label.trim().toLowerCase()))
                   const dayCalEvents = calEvents.filter(ev => {
                     if (ev.is_all_day) return false
-                    // Confirmed events are represented as action_item blocks — don't double-render as overlay
                     if (ev.classification?.classification === 'hidden') return false
                     if (ev.classification?.classification === 'fixed_commitment') return false
                     if (ev.classification?.classification === 'flexible_commitment') return false

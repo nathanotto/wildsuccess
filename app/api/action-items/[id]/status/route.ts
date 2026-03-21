@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const today = now.toISOString().split('T')[0]
   const update: Record<string, unknown> = { status }
 
-  const isReopening = status === 'committed' && current.status === 'completed'
+  const isReopening = status === 'committed' && (current.status === 'completed' || current.status === 'skipped')
 
   // ── Status-specific field updates ──
 

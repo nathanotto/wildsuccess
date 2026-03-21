@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { match_key, match_type, classification, display_label, time_type, life_domain_id, notes, suppressed_fingerprint } = body
+  const { match_key, match_type, classification, display_label, time_type, notes, suppressed_fingerprint } = body
 
   if (!match_key || !match_type || !classification) {
     return NextResponse.json({ error: 'match_key, match_type, and classification are required' }, { status: 400 })
@@ -37,7 +37,6 @@ export async function POST(req: NextRequest) {
       classification,
       display_label: display_label ?? null,
       time_type: time_type ?? null,
-      life_domain_id: life_domain_id ?? null,
       notes: notes ?? null,
       suppressed_fingerprint: suppressed_fingerprint ?? null,
     }, { onConflict: 'user_id,match_key' })

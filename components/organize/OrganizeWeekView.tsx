@@ -98,6 +98,7 @@ function todayStr(): string {
 export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplate, values, domains: _domains, activities }: Props) {
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()))
   const [dayBlocks, setDayBlocks] = useState<Record<string, LocalBlock[]>>({})
+  const [committedItems, setCommittedItems] = useState<Record<string, LocalItem[]>>({})
   const [hopper, setHopper] = useState<LocalItem[]>([])
   const [completed, setCompleted] = useState<CompletedItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -171,15 +172,22 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
       })
     })
 
-    // Place scheduled (committed) action items into their blocks
+    // Place committed action items into blocks or committed section
     const schedItems: ActionItem[] = Array.isArray(schedData) ? schedData : []
+    const newCommittedItems: Record<string, LocalItem[]> = {}
+    dates.forEach(d => { newCommittedItems[d] = [] })
+
     schedItems.forEach((s: ActionItem) => {
+      if (!s.committed_date) return
+      // Skip non-active statuses
+      if (s.status === 'rescheduled' || s.status === 'dismissed' || s.status === 'archived') return
+
       const localItem: LocalItem = {
         localId: s.id,
         actionItemId: s.id,
         activityId: s.activity_id ?? undefined,
         name: s.name,
-        source: 'template_proposal',
+        source: s.source ?? 'template_proposal',
         energyLevel: s.time_type as 'A' | 'B' | 'C' | 'D' | '0',
         emotionalWeight: s.emotional_weight as 'light' | 'normal' | 'heavy',
         durationMin: 15,
@@ -191,11 +199,14 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
         endTime: s.scheduled_end_time ? formatTime(s.scheduled_end_time) : undefined,
       }
       const tbId = s.time_block_id
-      if (!s.committed_date) return
       const dayBlocksForDate = newDayBlocks[s.committed_date] ?? []
       const matchBlock = tbId ? dayBlocksForDate.find(b => b.dbId === tbId) : null
-      if (matchBlock) matchBlock.items.push(localItem)
-      // If no matching block, skip (week view shows only block-assigned items)
+      if (matchBlock) {
+        matchBlock.items.push(localItem)
+      } else if (!s.scheduled_time && newCommittedItems[s.committed_date]) {
+        // Committed but unscheduled — show in committed section
+        newCommittedItems[s.committed_date].push(localItem)
+      }
     })
 
     // Build hopper — all candidate items (week view shows them all)
@@ -237,6 +248,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
     }
 
     setDayBlocks(newDayBlocks)
+    setCommittedItems(newCommittedItems)
     setHopper(hopperItems)
     setCompleted(completedItems)
     setLoading(false)
@@ -262,6 +274,9 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
           b.localId === blockId ? { ...b, items: b.items.filter(i => i.localId !== item.localId) } : b
         ),
       }))
+    } else if (item.fromSection?.startsWith('committed-')) {
+      const dateKey = item.fromSection.replace('committed-', '')
+      setCommittedItems(ci => ({ ...ci, [dateKey]: (ci[dateKey] ?? []).filter(i => i.localId !== item.localId) }))
     }
   }
 
@@ -334,6 +349,48 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
     }
   }
 
+  const dropOnCommitted = async (dateKey: string) => {
+    if (!dragItem || dragItem.isHard) return
+    removeFromSource(dragItem)
+    setCommittedItems(ci => ({ ...ci, [dateKey]: [...(ci[dateKey] ?? []), dragItem] }))
+    setDragOver(null)
+    setDragItem(null)
+
+    if (dragItem.actionItemId) {
+      await fetch(`/api/action-items/${dragItem.actionItemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ committed_date: dateKey, scheduled_time: null, scheduled_end_time: null, time_block_id: null, status: 'committed' }),
+      })
+    }
+  }
+
+  const returnCommittedToHopper = async (item: LocalItem, dateKey: string) => {
+    setCommittedItems(ci => ({ ...ci, [dateKey]: (ci[dateKey] ?? []).filter(i => i.localId !== item.localId) }))
+    setHopper(h => [item, ...h])
+
+    if (item.actionItemId) {
+      await fetch(`/api/action-items/${item.actionItemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'candidate', committed_date: null, scheduled_time: null, time_block_id: null }),
+      })
+    }
+  }
+
+  const commitFromHopper = async (item: LocalItem, dateKey: string) => {
+    setHopper(h => h.filter(i => i.localId !== item.localId))
+    setCommittedItems(ci => ({ ...ci, [dateKey]: [...(ci[dateKey] ?? []), item] }))
+
+    if (item.actionItemId) {
+      await fetch(`/api/action-items/${item.actionItemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ committed_date: dateKey, status: 'committed' }),
+      })
+    }
+  }
+
   const dismissHopper = (localId: string) => {
     const item = hopper.find(h => h.localId === localId)
     setHopper(h => h.filter(i => i.localId !== localId))
@@ -376,7 +433,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
   const dayItemCounts: Record<string, number> = {}
   weekDates.forEach(d => {
     const ds = dateStr(d)
-    dayItemCounts[ds] = (dayBlocks[ds] ?? []).reduce((s, b) => s + b.items.length, 0)
+    dayItemCounts[ds] = (dayBlocks[ds] ?? []).reduce((s, b) => s + b.items.length, 0) + (committedItems[ds] ?? []).length
   })
   const maxDayCount = Math.max(...Object.values(dayItemCounts), 1)
 
@@ -587,6 +644,49 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                         )}
                       </div>
                     ))}
+
+                    {/* Committed (unscheduled) section */}
+                    <div
+                      onDragOver={e => { e.preventDefault(); setDragOver(`committed-${ds}`) }}
+                      onDragLeave={() => setDragOver(null)}
+                      onDrop={() => dropOnCommitted(ds)}
+                      style={{
+                        marginTop: 4, borderRadius: 6, minHeight: 28,
+                        border: '1px dashed',
+                        borderColor: dragOver === `committed-${ds}` ? '#4B82AF' : (committedItems[ds] ?? []).length > 0 ? '#E8E4DC' : '#F0EDE8',
+                        background: dragOver === `committed-${ds}` ? '#4B82AF08' : 'transparent',
+                        transition: 'all 0.12s',
+                      }}
+                    >
+                      {(committedItems[ds] ?? []).length > 0 && (
+                        <div style={{ padding: '3px 8px', fontSize: 9, color: '#8A857D', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                          Committed
+                        </div>
+                      )}
+                      {(committedItems[ds] ?? []).map(item => (
+                        <div key={item.localId}
+                          draggable
+                          onDragStart={e => { e.stopPropagation(); handleDragStart(item, `committed-${ds}`) }}
+                          onDragEnd={handleDragEnd}
+                          style={{
+                            padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4,
+                            cursor: 'grab', borderBottom: '1px solid #F5F3EF',
+                          }}
+                        >
+                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: EC[item.energyLevel], flexShrink: 0 }} />
+                          <span style={{ fontSize: 10, fontWeight: 500, color: '#2D2A26', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.name}
+                          </span>
+                          <button onClick={e => { e.stopPropagation(); returnCommittedToHopper(item, ds) }}
+                            style={{ width: 14, height: 14, borderRadius: 3, border: '1px solid #E8E4DC', background: 'transparent', cursor: 'pointer', fontSize: 8, color: '#C4BFB4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>←</button>
+                        </div>
+                      ))}
+                      {(committedItems[ds] ?? []).length === 0 && (
+                        <div style={{ padding: '6px 8px', textAlign: 'center', color: '#D0CBC3', fontSize: 9, fontStyle: 'italic' }}>
+                          {dragItem ? 'Commit here' : ''}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })}

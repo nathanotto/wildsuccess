@@ -91,6 +91,14 @@ function Checkbox({ status, onClick }: { status: string; onClick: () => void }) 
       </span>
     )
   }
+  if (status === 'skipped') {
+    return (
+      <span style={{ ...base, borderColor: '#B5B0A8', background: 'transparent', color: '#B5B0A8', fontSize: 10, fontWeight: 700 }}
+        onClick={e => { e.stopPropagation(); onClick() }}>
+        ✕
+      </span>
+    )
+  }
   // fallback
   return (
     <span style={{ ...base, borderColor: '#B5B0A8' }}
@@ -110,12 +118,13 @@ interface FocusViewProps {
   onAddFollowUp: (content: string, sourceId: string) => Promise<void>
   onMoveToTomorrow: (id: string) => Promise<void>
   onMarkDoneAndCapture: (id: string, followUpText: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
   nextUp: ActionItemWithNotes | null
   isToday: boolean
 }
 
 function FocusView({
-  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onMoveToTomorrow, onMarkDoneAndCapture, nextUp, isToday,
+  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onMoveToTomorrow, onMarkDoneAndCapture, onDelete, nextUp, isToday,
 }: FocusViewProps) {
   const [title, setTitle] = useState(item.name)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -362,6 +371,16 @@ function FocusView({
           style={actionBtnStyle}>
           ↺ Send back to hopper
         </button>
+        <button
+          onClick={() => onStatusChange(item.id, 'skipped').then(onBack)}
+          style={actionBtnStyle}>
+          ✕ Skip and dismiss
+        </button>
+        <button
+          onClick={() => { if (window.confirm('Delete this item permanently?')) onDelete(item.id).then(onBack) }}
+          style={{ ...actionBtnStyle, color: '#C4725A' }}>
+          ⌫ Delete like it never happened
+        </button>
       </div>
 
       {/* Next up reminder */}
@@ -385,11 +404,152 @@ const actionBtnStyle: React.CSSProperties = {
   fontSize: 12, color: '#8A8578', textAlign: 'left', padding: 0,
 }
 
+const menuItemStyle: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px',
+  background: 'none', border: 'none', borderBottom: '1px solid #F0EDE6',
+  cursor: 'pointer', fontSize: 13, color: '#2D2A26', fontFamily: 'inherit',
+}
+
+// ─── CompletedDayView ─────────────────────────────────────────────────────────
+
+const MOOD_LABELS: Record<number, { label: string; color: string }> = {
+  1: { label: 'Drained', color: '#C4504A' },
+  2: { label: 'Tough', color: '#D4885A' },
+  3: { label: 'Okay', color: '#B5B0A8' },
+  4: { label: 'Good', color: '#6BA07A' },
+  5: { label: 'Great', color: '#4A8B5E' },
+}
+
+function CompletedDayView({
+  items, loggedItems, dayCompletion, onReopen,
+}: {
+  items: ActionItemWithNotes[]
+  loggedItems: { id: string; note: string; metadata: any; created_at: string }[]
+  dayCompletion: DayCompletion
+  onReopen: () => void
+}) {
+  const completedItems = items.filter(i => i.status === 'completed')
+  const skippedItems = items.filter(i => i.status === 'skipped')
+  const otherItems = items.filter(i => i.status !== 'completed' && i.status !== 'skipped')
+
+  const mood = dayCompletion.mood ? MOOD_LABELS[dayCompletion.mood] : null
+
+  const sectionHead: React.CSSProperties = {
+    fontSize: 11, color: '#B5B0A8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: 20,
+  }
+
+  return (
+    <div style={{ paddingBottom: 60 }}>
+      {/* Day closed header */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#8A857D' }}>Day closed</span>
+        {mood && <span style={{ fontSize: 12, color: mood.color }}>{mood.label}</span>}
+        <span style={{ flex: 1 }} />
+        <button onClick={onReopen} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 12, color: '#B5B0A8', padding: 0,
+        }}>
+          Reopen this day
+        </button>
+      </div>
+
+      {/* Completed items */}
+      {completedItems.length > 0 && (
+        <div>
+          <div style={sectionHead}>Done</div>
+          {completedItems.map(item => (
+            <div key={item.id} style={{ padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 14, height: 14, borderRadius: 2, background: '#8A857D', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'white', fontSize: 10 }}>✓</span>
+              <span style={{ fontSize: 14, color: '#8A857D', textDecoration: 'line-through' }}>{item.name}</span>
+              {item.scheduled_time && <span style={{ fontSize: 11, color: '#B5B0A8', marginLeft: 'auto' }}>{fmtTime(item.scheduled_time)}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Skipped items */}
+      {skippedItems.length > 0 && (
+        <div>
+          <div style={sectionHead}>Skipped</div>
+          {skippedItems.map(item => (
+            <div key={item.id} style={{ padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 14, height: 14, borderRadius: 2, border: '1.5px solid #B5B0A8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#B5B0A8', fontSize: 10, fontWeight: 700 }}>✕</span>
+              <span style={{ fontSize: 14, color: '#B5B0A8' }}>{item.name}</span>
+              {item.scheduled_time && <span style={{ fontSize: 11, color: '#B5B0A8', marginLeft: 'auto' }}>{fmtTime(item.scheduled_time)}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Remaining (parked, in_progress, committed — leftovers) */}
+      {otherItems.length > 0 && (
+        <div>
+          <div style={sectionHead}>Incomplete</div>
+          {otherItems.map(item => (
+            <div key={item.id} style={{ padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 14, height: 14, borderRadius: 2, border: '1.5px solid #B5B0A8', flexShrink: 0 }} />
+              <span style={{ fontSize: 14, color: '#B5B0A8' }}>{item.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Logged items */}
+      {loggedItems.length > 0 && (
+        <div>
+          <div style={sectionHead}>Logged</div>
+          {loggedItems.map(entry => (
+            <div key={entry.id} style={{ padding: '3px 0', display: 'flex', gap: 8, fontSize: 13, color: '#8A8578' }}>
+              <span style={{ fontSize: 11, color: '#B5B0A8', flexShrink: 0 }}>{fmtNoteTime(entry.created_at)}</span>
+              <span>{entry.metadata?.cleanedName ?? entry.note}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Reflection */}
+      {(dayCompletion.wins || dayCompletion.friction || dayCompletion.journal) && (
+        <div style={{ marginTop: 24, borderTop: '1px solid #F0EDE6', paddingTop: 16 }}>
+          {dayCompletion.wins && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={sectionHead}>Wins</div>
+              <div style={{ fontSize: 13, color: '#2D2A26', whiteSpace: 'pre-wrap' }}>{dayCompletion.wins}</div>
+            </div>
+          )}
+          {dayCompletion.friction && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={sectionHead}>Friction</div>
+              <div style={{ fontSize: 13, color: '#2D2A26', whiteSpace: 'pre-wrap' }}>{dayCompletion.friction}</div>
+            </div>
+          )}
+          {dayCompletion.journal && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={sectionHead}>Journal</div>
+              <div style={{ fontSize: 13, color: '#2D2A26', whiteSpace: 'pre-wrap' }}>{dayCompletion.journal}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+    </div>
+  )
+}
+
 // ─── Main TodayPage ───────────────────────────────────────────────────────────
 
 interface Props {
   userId: string
   displayName: string
+}
+
+interface DayCompletion {
+  id: string
+  completion_date: string
+  mood: number | null
+  wins: string | null
+  friction: string | null
+  journal: string | null
+  completed_at: string
 }
 
 export default function TodayPage({ displayName }: Props) {
@@ -399,6 +559,8 @@ export default function TodayPage({ displayName }: Props) {
   const [items, setItems] = useState<ActionItemWithNotes[]>([])
   const [loggedItems, setLoggedItems] = useState<{ id: string; note: string; metadata: any; created_at: string }[]>([])
   const [nextUp, setNextUp] = useState<ActionItemWithNotes | null>(null)
+  const [dayCompletion, setDayCompletion] = useState<DayCompletion | null>(null)
+  const [reopened, setReopened] = useState(false)
   const [focusItemId, setFocusItemId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [nowTime, setNowTime] = useState(currentTimeStr())
@@ -415,12 +577,18 @@ export default function TodayPage({ displayName }: Props) {
 
   const loadData = useCallback(async (date: string) => {
     setLoading(true)
+    setReopened(false)
     try {
-      const res = await fetch(`/api/today?date=${date}`)
-      const data = await res.json()
+      const [todayRes, dcRes] = await Promise.all([
+        fetch(`/api/today?date=${date}`),
+        fetch(`/api/day-completion?date=${date}`),
+      ])
+      const data = await todayRes.json()
+      const dcData = await dcRes.json()
       setItems(data.items ?? [])
       setLoggedItems(data.loggedItems ?? [])
       setNextUp(data.nextUp ?? null)
+      setDayCompletion(dcData?.id ? dcData : null)
     } finally {
       setLoading(false)
     }
@@ -430,19 +598,20 @@ export default function TodayPage({ displayName }: Props) {
     loadData(selectedDate)
   }, [selectedDate, loadData])
 
-  // Derived
+  // Derived — skipped scheduled items float up to the todo section
   const todoItems = items
-    .filter(i => !i.scheduled_time)
+    .filter(i => !i.scheduled_time || i.status === 'skipped')
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
   const scheduleItems = items
-    .filter(i => !!i.scheduled_time)
+    .filter(i => !!i.scheduled_time && i.status !== 'skipped')
     .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
 
   const stats = {
     done: items.filter(i => i.status === 'completed').length,
     inProgress: items.filter(i => i.status === 'in_progress').length,
     todo: items.filter(i => i.status === 'committed').length,
+    skipped: items.filter(i => i.status === 'skipped').length,
   }
 
   const focusItem = items.find(i => i.id === focusItemId) ?? null
@@ -467,6 +636,14 @@ export default function TodayPage({ displayName }: Props) {
   }
 
   async function handleStatusChange(id: string, status: string) {
+    // Optimistic update — move item between sections instantly
+    setItems(prev => {
+      if (status === 'rescheduled') {
+        return prev.filter(i => i.id !== id)
+      }
+      return prev.map(i => i.id === id ? { ...i, status: status as ActionItemWithNotes['status'] } : i)
+    })
+
     const res = await fetch(`/api/action-items/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -474,12 +651,8 @@ export default function TodayPage({ displayName }: Props) {
     })
     const data = await res.json()
     if (data.item) {
-      setItems(prev => {
-        if (status === 'rescheduled') {
-          return prev.filter(i => i.id !== id)
-        }
-        return prev.map(i => i.id === id ? { ...i, ...data.item } : i)
-      })
+      // Reconcile with server response
+      setItems(prev => prev.map(i => i.id === id ? { ...i, ...data.item } : i))
     }
   }
 
@@ -488,7 +661,8 @@ export default function TodayPage({ displayName }: Props) {
       item.status === 'committed' ? 'in_progress' :
         item.status === 'in_progress' ? 'completed' :
           item.status === 'completed' ? 'committed' :
-            item.status === 'parked' ? 'in_progress' : 'committed'
+            item.status === 'parked' ? 'in_progress' :
+              item.status === 'skipped' ? 'committed' : 'committed'
     await handleStatusChange(item.id, next)
   }
 
@@ -563,6 +737,13 @@ export default function TodayPage({ displayName }: Props) {
     })
   }
 
+  async function handleDelete(id: string) {
+    const res = await fetch(`/api/action-items/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setItems(prev => prev.filter(i => i.id !== id))
+    }
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const pageStyle: React.CSSProperties = {
@@ -597,6 +778,7 @@ export default function TodayPage({ displayName }: Props) {
             onAddFollowUp={handleAddFollowUp}
             onMoveToTomorrow={handleMoveToTomorrow}
             onMarkDoneAndCapture={handleMarkDoneAndCapture}
+            onDelete={handleDelete}
             nextUp={nextUp}
             isToday={isToday}
           />
@@ -633,22 +815,29 @@ export default function TodayPage({ displayName }: Props) {
               </span>
             </div>
 
-            {/* Next up */}
-            {listNextUp && (
-              <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 4 }}>
-                Next up: {listNextUp.name}{listNextUp.scheduled_time ? ` at ${fmtTime(listNextUp.scheduled_time)}` : ''}
-              </div>
-            )}
-
-            {/* Stats */}
-            <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 12 }}>
-              {stats.done} done · {stats.inProgress} in progress · {stats.todo} to-do
-            </div>
-
             {loading ? (
               <div style={{ fontSize: 12, color: '#B5B0A8', paddingTop: 20 }}>Loading…</div>
+            ) : dayCompletion && !reopened ? (
+              <CompletedDayView
+                items={items}
+                loggedItems={filteredLoggedItems}
+                dayCompletion={dayCompletion}
+                onReopen={() => setReopened(true)}
+              />
             ) : (
               <>
+                {/* Next up */}
+                {listNextUp && (
+                  <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 4 }}>
+                    Next up: {listNextUp.name}{listNextUp.scheduled_time ? ` at ${fmtTime(listNextUp.scheduled_time)}` : ''}
+                  </div>
+                )}
+
+                {/* Stats */}
+                <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 12 }}>
+                  {stats.done} done · {stats.inProgress} in progress · {stats.todo} to-do{stats.skipped > 0 ? ` · ${stats.skipped} skipped` : ''}
+                </div>
+
                 {/* To-do section */}
                 {todoItems.length > 0 && (
                   <div style={{ marginBottom: 24 }}>
@@ -659,6 +848,7 @@ export default function TodayPage({ displayName }: Props) {
                         onCheckbox={() => handleCheckboxCycle(item)}
                         onFocus={() => setFocusItemId(item.id)}
                         onReschedule={() => handleStatusChange(item.id, 'rescheduled')}
+                        onSkip={() => handleStatusChange(item.id, 'skipped')}
                       />
                     ))}
                   </div>
@@ -677,48 +867,17 @@ export default function TodayPage({ displayName }: Props) {
                     Nothing scheduled for this day.
                   </div>
                 )}
+
+                {/* Capture */}
+                <div style={{ borderTop: '1px solid #E8E4DC', marginTop: 8 }}>
+                  <CaptureInput
+                    source="today"
+                    onItemCreated={item => setItems(prev => [...prev, item])}
+                    onLogEntry={() => loadData(selectedDate)}
+                  />
+                </div>
               </>
             )}
-
-            {/* Logged items */}
-            {filteredLoggedItems.length > 0 && (
-              <div style={{ marginTop: 24 }}>
-                <div style={{ fontSize: 11, color: '#B5B0A8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-                  Logged
-                </div>
-                {filteredLoggedItems.map(entry => (
-                  <div key={entry.id} style={{
-                    fontSize: 13, color: '#8A8578', padding: '4px 0',
-                    borderBottom: '1px solid #F8F7F4',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}>
-                    <span style={{ fontSize: 11, color: '#B5B0A8', flexShrink: 0 }}>
-                      {fmtNoteTime(entry.created_at)}
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>{entry.metadata?.cleanedName ?? entry.note}</span>
-                    <button
-                      onClick={() => handleDeleteLogEntry(entry.id)}
-                      title="Delete"
-                      style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        color: '#B5B0A8', fontSize: 13, padding: '0 4px',
-                        minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                      🗑
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Capture */}
-            <div style={{ borderTop: '1px solid #E8E4DC', marginTop: 8 }}>
-              <CaptureInput
-                source="today"
-                onItemCreated={item => setItems(prev => [...prev, item])}
-                onLogEntry={() => loadData(selectedDate)}
-              />
-            </div>
           </>
         )}
       </div>
@@ -729,16 +888,20 @@ export default function TodayPage({ displayName }: Props) {
 // ─── TodoRow ─────────────────────────────────────────────────────────────────
 
 function TodoRow({
-  item, onCheckbox, onFocus, onReschedule,
+  item, onCheckbox, onFocus, onReschedule, onSkip,
 }: {
   item: ActionItemWithNotes
   onCheckbox: () => void
   onFocus: () => void
   onReschedule: () => void
+  onSkip: () => void
 }) {
+  const [showMenu, setShowMenu] = useState(false)
+  const menuOpenedAt = useRef(0)
   const isCompleted = item.status === 'completed'
   const isParked = item.status === 'parked'
-  const muted = isCompleted || isParked
+  const isSkipped = item.status === 'skipped'
+  const muted = isCompleted || isParked || isSkipped
 
   const steps = (item.item_notes ?? [])
     .filter(n => n.note_type === 'step')
@@ -763,16 +926,35 @@ function TodoRow({
             {item.name}
           </span>
         </div>
-        <button
-          onClick={e => { e.stopPropagation(); onReschedule() }}
-          title="Send back to hopper"
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: '#8A857D', fontSize: 16, padding: '0 4px',
-            minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-          ↺
-        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={e => { e.stopPropagation(); setShowMenu(!showMenu) }}
+            title="Skip or send back"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#8A857D', fontSize: 16, padding: '0 4px',
+              minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+            ↺
+          </button>
+          {showMenu && (
+            <>
+              <div onClick={e => { e.stopPropagation(); setShowMenu(false) }} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', zIndex: 51,
+                background: '#FFFFFF', border: '1px solid #E8E4DC', borderRadius: 6,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 160, overflow: 'hidden',
+              }}>
+                <button onClick={e => { e.stopPropagation(); setShowMenu(false); onSkip() }} style={menuItemStyle}>
+                  ✕ Didn&apos;t happen
+                </button>
+                <button onClick={e => { e.stopPropagation(); setShowMenu(false); onReschedule() }} style={menuItemStyle}>
+                  ↺ Send to hopper
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
       {steps.length > 0 && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
@@ -798,6 +980,76 @@ function TodoRow({
   )
 }
 
+// ─── ScheduleRow ──────────────────────────────────────────────────────────────
+
+function ScheduleRow({ item, onCheckbox, onFocus, onReschedule, onSkip }: {
+  item: ActionItemWithNotes
+  onCheckbox: () => void
+  onFocus: () => void
+  onReschedule: () => void
+  onSkip: () => void
+}) {
+  const [showMenu, setShowMenu] = useState(false)
+  const isCompleted = item.status === 'completed'
+  const isParked = item.status === 'parked'
+  const isSkipped = item.status === 'skipped'
+  const muted = isCompleted || isParked || isSkipped
+
+  return (
+    <div
+      onClick={onFocus}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 8,
+        padding: '5px 0', cursor: 'pointer', userSelect: 'none',
+        borderBottom: '1px solid #F8F7F4',
+      }}
+    >
+      <span style={{ fontSize: 12, color: '#8A8578', width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 1 }}>
+        {item.scheduled_time ? fmtTime(item.scheduled_time) : ''}
+      </span>
+      <Checkbox status={item.status} onClick={onCheckbox} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{
+          fontSize: 14,
+          color: muted ? '#B5B0A8' : '#2D2A26',
+          textDecoration: isCompleted ? 'line-through' : 'none',
+        }}>
+          {item.name}
+        </span>
+      </div>
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={e => { e.stopPropagation(); setShowMenu(!showMenu) }}
+          title="Skip or send back"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#8A857D', fontSize: 16, padding: '0 4px',
+            minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+          ↺
+        </button>
+        {showMenu && (
+          <>
+            <div onClick={e => { e.stopPropagation(); setShowMenu(false) }} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+            <div style={{
+              position: 'absolute', right: 0, top: '100%', zIndex: 51,
+              background: '#FFFFFF', border: '1px solid #E8E4DC', borderRadius: 6,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 160, overflow: 'hidden',
+            }}>
+              <button onClick={e => { e.stopPropagation(); setShowMenu(false); onSkip() }} style={menuItemStyle}>
+                ✕ Didn&apos;t happen
+              </button>
+              <button onClick={e => { e.stopPropagation(); setShowMenu(false); onReschedule() }} style={menuItemStyle}>
+                ↺ Send to hopper
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Schedule section renderer ────────────────────────────────────────────────
 
 function renderScheduleItems(
@@ -806,7 +1058,7 @@ function renderScheduleItems(
   isToday: boolean,
   onCheckbox: (item: ActionItemWithNotes) => void,
   onFocus: (id: string) => void,
-  onReschedule: (id: string, status: string) => void,
+  onStatusChange: (id: string, status: string) => void,
 ) {
   const result: React.ReactNode[] = []
   let nowLineInserted = false
@@ -830,44 +1082,15 @@ function renderScheduleItems(
       )
     }
 
-    const isCompleted = item.status === 'completed'
-    const isParked = item.status === 'parked'
-    const muted = isCompleted || isParked
-
     result.push(
-      <div
+      <ScheduleRow
         key={item.id}
-        onClick={() => onFocus(item.id)}
-        style={{
-          display: 'flex', alignItems: 'flex-start', gap: 8,
-          padding: '5px 0', cursor: 'pointer', userSelect: 'none',
-          borderBottom: '1px solid #F8F7F4',
-        }}
-      >
-        <span style={{ fontSize: 12, color: '#8A8578', width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 1 }}>
-          {item.scheduled_time ? fmtTime(item.scheduled_time) : ''}
-        </span>
-        <Checkbox status={item.status} onClick={() => onCheckbox(item)} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{
-            fontSize: 14,
-            color: muted ? '#B5B0A8' : '#2D2A26',
-            textDecoration: isCompleted ? 'line-through' : 'none',
-          }}>
-            {item.name}
-          </span>
-        </div>
-        <button
-          onClick={e => { e.stopPropagation(); onReschedule(item.id, 'rescheduled') }}
-          title="Send back to hopper"
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: '#8A857D', fontSize: 16, padding: '0 4px',
-            minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-          ↺
-        </button>
-      </div>
+        item={item}
+        onCheckbox={() => onCheckbox(item)}
+        onFocus={() => onFocus(item.id)}
+        onReschedule={() => onStatusChange(item.id, 'rescheduled')}
+        onSkip={() => onStatusChange(item.id, 'skipped')}
+      />
     )
   }
 
