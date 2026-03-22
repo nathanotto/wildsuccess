@@ -116,8 +116,9 @@ function stripText(text: string, phrase: string): string {
 
 export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new Date()): ParsedCapture {
   let working = rawInput.trim()
+  const explicitLog = working.toLowerCase().startsWith('log this')
   // Strip "log this" prefix
-  if (working.toLowerCase().startsWith('log this')) {
+  if (explicitLog) {
     working = working.slice(8).replace(/^[\s:,\-–]+/, '').trim()
   }
   const rawLower = working.toLowerCase()
@@ -260,8 +261,8 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
   }
 
   // ─── Stage 4: Direction ─────────────────────────────────────────────────────
-  let direction: 'forward' | 'backward' = 'forward'
-  let directionCertain = false
+  let direction: 'forward' | 'backward' = explicitLog ? 'backward' : 'forward'
+  let directionCertain = explicitLog
 
   const startsBackward = BACKWARD_STARTS.some(s => rawLower.startsWith(s))
   const hasJustEarly = /\bjust\b/.test(rawLower.slice(0, Math.ceil(rawLower.length / 2)))
@@ -355,7 +356,7 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
   // ─── Outcome ─────────────────────────────────────────────────────────────────
   let outcome: ParsedCapture['outcome']
 
-  if (direction === 'backward') {
+  if (explicitLog || direction === 'backward') {
     outcome = 'logged'
   } else if (isOutsideRequest) {
     outcome = 'outside_request'

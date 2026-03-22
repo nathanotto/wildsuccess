@@ -47,6 +47,15 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
+
+  // Fetch the item first to check for linked time_block
+  const { data: item } = await supabase
+    .from('action_items')
+    .select('time_block_id')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
+
   const { error } = await supabase
     .from('action_items')
     .delete()
@@ -54,5 +63,15 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     .eq('user_id', user.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Delete the linked time_block so /today's orphan reconciliation doesn't recreate the item
+  if (item?.time_block_id) {
+    await supabase
+      .from('time_blocks')
+      .delete()
+      .eq('id', item.time_block_id)
+      .eq('user_id', user.id)
+  }
+
   return NextResponse.json({ ok: true })
 }

@@ -106,6 +106,149 @@ function Checkbox({ status, onClick }: { status: string; onClick: () => void }) 
   )
 }
 
+// ─── Schedule helpers ─────────────────────────────────────────────────────────
+
+function parseQuickTime(input: string): string | null {
+  if (!input.trim()) return null
+  const s = input.trim().toLowerCase().replace(/\s+/g, '')
+  // "230p" → "14:30", "9a" → "09:00", "12" → "12:00", "14:30" → "14:30", "2:30pm" → "14:30"
+  const m = s.match(/^(\d{1,2}):?(\d{2})?\s*(a|am|p|pm)?$/)
+  if (!m) return null
+  let h = parseInt(m[1])
+  const min = m[2] ? parseInt(m[2]) : 0
+  const ampm = m[3]
+  if (ampm?.startsWith('p') && h < 12) h += 12
+  if (ampm?.startsWith('a') && h === 12) h = 0
+  if (h > 23 || min > 59) return null
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+}
+
+function addMinutesHHMM(hhmm: string, mins: number): string {
+  const [h, m] = hhmm.split(':').map(Number)
+  const total = h * 60 + m + mins
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+function generateTimePills(isToday: boolean): { label: string; value: string }[] {
+  const pills: { label: string; value: string }[] = []
+  const now = new Date()
+  let startHour: number
+
+  if (isToday) {
+    const mins = now.getMinutes()
+    const roundedMin = Math.ceil(mins / 5) * 5
+    const nowH = roundedMin >= 60 ? now.getHours() + 1 : now.getHours()
+    const nowM = roundedMin >= 60 ? 0 : roundedMin
+    pills.push({ label: 'Now', value: `${String(nowH).padStart(2, '0')}:${String(nowM).padStart(2, '0')}` })
+    // Start hourly pills from the next full hour after "Now"
+    startHour = nowH + 1
+  } else {
+    startHour = 8
+  }
+
+  for (let h = startHour; h < Math.min(startHour + 6, 22); h++) {
+    if (h > 23) break
+    const ampm = h < 12 ? 'a' : 'p'
+    const display = h === 0 ? 12 : h > 12 ? h - 12 : h
+    pills.push({ label: `${display}${ampm}`, value: `${String(h).padStart(2, '0')}:00` })
+  }
+
+  return pills
+}
+
+const DURATION_PILLS = [
+  { label: '15m', value: 15 },
+  { label: '30m', value: 30 },
+  { label: '1h', value: 60 },
+  { label: '2h', value: 120 },
+]
+
+function InlineScheduler({ isToday, pickedTime, onPickTime, customTime, onCustomTimeChange, onConfirm, onCancel }: {
+  isToday: boolean
+  pickedTime: string | null
+  onPickTime: (t: string) => void
+  customTime: string
+  onCustomTimeChange: (v: string) => void
+  onConfirm: (duration: number | null) => void
+  onCancel: () => void
+}) {
+  const [pickedDuration, setPickedDuration] = useState<number | null>(null)
+  const timePills = generateTimePills(isToday)
+  const resolvedTime = pickedTime || parseQuickTime(customTime)
+
+  const pillStyle = (active: boolean): React.CSSProperties => ({
+    padding: '6px 12px', borderRadius: 4, border: '1px solid',
+    borderColor: active ? '#4B82AF' : '#E8E4DC',
+    background: active ? '#4B82AF' : '#FFFFFF',
+    color: active ? '#FFFFFF' : '#2D2A26',
+    fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+    fontWeight: active ? 600 : 400,
+  })
+
+  // Summary of what will be scheduled
+  const summary = resolvedTime
+    ? `${fmtTime(resolvedTime)}${pickedDuration ? ` – ${fmtTime(addMinutesHHMM(resolvedTime, pickedDuration))} (${pickedDuration >= 60 ? `${pickedDuration / 60}h` : `${pickedDuration}m`})` : ''}`
+    : null
+
+  return (
+    <div style={{ marginTop: 20, padding: '12px 0' }}>
+      <div style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+        Schedule
+      </div>
+
+      {/* Time pills */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        {timePills.map(p => (
+          <button key={p.value} onClick={() => { onPickTime(p.value); onCustomTimeChange('') }}
+            style={pillStyle(pickedTime === p.value)}>
+            {p.label}
+          </button>
+        ))}
+        <input
+          value={customTime}
+          onChange={e => { onCustomTimeChange(e.target.value); onPickTime('') }}
+          placeholder="or type 2:30p"
+          style={{
+            width: 80, padding: '6px 8px', borderRadius: 4,
+            border: `1px solid ${customTime && parseQuickTime(customTime) ? '#4B82AF' : '#E8E4DC'}`,
+            fontSize: 13, color: '#2D2A26', fontFamily: 'inherit',
+            outline: 'none', background: '#FFFFFF',
+          }}
+          onKeyDown={e => { if (e.key === 'Enter' && resolvedTime) onConfirm(pickedDuration) }}
+        />
+      </div>
+
+      {/* Duration pills — show after time is picked */}
+      {resolvedTime && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          {DURATION_PILLS.map(d => (
+            <button key={d.value} onClick={() => setPickedDuration(pickedDuration === d.value ? null : d.value)}
+              style={pillStyle(pickedDuration === d.value)}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Confirm / cancel */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
+        {resolvedTime && (
+          <button onClick={() => onConfirm(pickedDuration)} style={{
+            padding: '8px 20px', borderRadius: 4, border: 'none',
+            background: '#4B82AF', color: '#FFFFFF',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            Schedule{summary ? ` at ${summary}` : ''}
+          </button>
+        )}
+        <button onClick={onCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#B5B0A8', padding: 0, fontFamily: 'inherit' }}>
+          cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── FocusView ────────────────────────────────────────────────────────────────
 
 interface FocusViewProps {
@@ -119,12 +262,14 @@ interface FocusViewProps {
   onMoveToTomorrow: (id: string) => Promise<void>
   onMarkDoneAndCapture: (id: string, followUpText: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onSchedule: (id: string, time: string, endTime: string | null) => Promise<void>
+  onUnschedule: (id: string) => Promise<void>
   nextUp: ActionItemWithNotes | null
   isToday: boolean
 }
 
 function FocusView({
-  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onMoveToTomorrow, onMarkDoneAndCapture, onDelete, nextUp, isToday,
+  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onMoveToTomorrow, onMarkDoneAndCapture, onDelete, onSchedule, onUnschedule, nextUp, isToday,
 }: FocusViewProps) {
   const [title, setTitle] = useState(item.name)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -135,6 +280,9 @@ function FocusView({
   const [followUpInput, setFollowUpInput] = useState('')
   const [captureFollowUp, setCaptureFollowUp] = useState('')
   const [showCaptureFollowUp, setShowCaptureFollowUp] = useState(false)
+  const [showScheduler, setShowScheduler] = useState(false)
+  const [pickedTime, setPickedTime] = useState<string | null>(null)
+  const [customTime, setCustomTime] = useState('')
   const [saving, setSaving] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
 
@@ -230,7 +378,7 @@ function FocusView({
           <div
             onClick={() => setEditingTitle(true)}
             style={{ fontSize: 16, fontWeight: 600, color: '#2D2A26', cursor: 'text', padding: '4px 0' }}>
-            {title}
+            {title}{item.scheduled_time ? ` — ${fmtTime(item.scheduled_time)}${item.scheduled_end_time ? `–${fmtTime(item.scheduled_end_time)}` : ''}` : ''}
           </div>
         )}
         {wasTitle && (
@@ -329,6 +477,35 @@ function FocusView({
         </div>
       )}
 
+      {/* Inline scheduler */}
+      {showScheduler ? (
+        <InlineScheduler
+          isToday={isToday}
+          pickedTime={pickedTime}
+          onPickTime={setPickedTime}
+          customTime={customTime}
+          onCustomTimeChange={setCustomTime}
+          onConfirm={async (duration) => {
+            const time = pickedTime || parseQuickTime(customTime)
+            if (!time) return
+            const endTime = duration ? addMinutesHHMM(time, duration) : null
+            await onSchedule(item.id, time, endTime)
+            setShowScheduler(false)
+            setPickedTime(null)
+            setCustomTime('')
+          }}
+          onCancel={() => { setShowScheduler(false); setPickedTime(null); setCustomTime('') }}
+        />
+      ) : (
+        <button onClick={() => {
+          // Pre-select current time if already scheduled
+          if (item.scheduled_time) setPickedTime(item.scheduled_time.slice(0, 5))
+          setShowScheduler(true)
+        }} style={{ ...actionBtnStyle, marginTop: 28 }}>
+          ⏱ {item.scheduled_time ? 'Reschedule' : 'Schedule this item'}
+        </button>
+      )}
+
       {/* Bottom actions */}
       <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button
@@ -366,11 +543,19 @@ function FocusView({
             → Mark done and capture follow-up
           </button>
         )}
-        <button
-          onClick={() => onStatusChange(item.id, 'rescheduled').then(onBack)}
-          style={actionBtnStyle}>
-          ↺ Send back to hopper
-        </button>
+        {item.scheduled_time ? (
+          <button
+            onClick={() => onUnschedule(item.id).then(onBack)}
+            style={actionBtnStyle}>
+            ↺ Unschedule
+          </button>
+        ) : (
+          <button
+            onClick={() => onStatusChange(item.id, 'rescheduled').then(onBack)}
+            style={actionBtnStyle}>
+            ↺ Send back to hopper
+          </button>
+        )}
         <button
           onClick={() => onStatusChange(item.id, 'skipped').then(onBack)}
           style={actionBtnStyle}>
@@ -636,12 +821,15 @@ export default function TodayPage({ displayName }: Props) {
   }
 
   async function handleStatusChange(id: string, status: string) {
-    // Optimistic update — move item between sections instantly
+    // Optimistic update — preserve all existing fields, only change status
     setItems(prev => {
       if (status === 'rescheduled') {
         return prev.filter(i => i.id !== id)
       }
-      return prev.map(i => i.id === id ? { ...i, status: status as ActionItemWithNotes['status'] } : i)
+      return prev.map(i => {
+        if (i.id !== id) return i
+        return { ...i, status: status as ActionItemWithNotes['status'] }
+      })
     })
 
     const res = await fetch(`/api/action-items/${id}/status`, {
@@ -651,8 +839,12 @@ export default function TodayPage({ displayName }: Props) {
     })
     const data = await res.json()
     if (data.item) {
-      // Reconcile with server response
-      setItems(prev => prev.map(i => i.id === id ? { ...i, ...data.item } : i))
+      // Reconcile — keep local item_notes since the status route doesn't return them
+      setItems(prev => prev.map(i => {
+        if (i.id !== id) return i
+        const { item_notes, ...serverFields } = data.item
+        return { ...i, ...serverFields, item_notes: item_notes ?? i.item_notes }
+      }))
     }
   }
 
@@ -737,10 +929,75 @@ export default function TodayPage({ displayName }: Props) {
     })
   }
 
+  async function handleUnschedule(id: string) {
+    const item = items.find(i => i.id === id)
+
+    // Optimistic update — move to todo section immediately
+    setItems(prev => prev.map(i => i.id === id
+      ? { ...i, scheduled_time: null, scheduled_end_time: null, time_block_id: null }
+      : i))
+
+    // Delete the linked time_block
+    if (item?.time_block_id) {
+      await fetch(`/api/time-blocks/${item.time_block_id}`, { method: 'DELETE' })
+    }
+
+    // Clear schedule fields on the action_item, keep committed_date
+    await fetch(`/api/action-items/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_time: null, scheduled_end_time: null, time_block_id: null }),
+    })
+  }
+
   async function handleDelete(id: string) {
     const res = await fetch(`/api/action-items/${id}`, { method: 'DELETE' })
     if (res.ok) {
       setItems(prev => prev.filter(i => i.id !== id))
+    }
+  }
+
+  async function handleSchedule(id: string, time: string, endTime: string | null) {
+    // Optimistic update — move to schedule section immediately
+    setItems(prev => prev.map(i => i.id === id
+      ? { ...i, scheduled_time: time, scheduled_end_time: endTime }
+      : i))
+
+    // Close focus view — item now appears in the schedule section
+    setFocusItemId(null)
+
+    // Find the item to get its name and committed_date for the time_block
+    const item = items.find(i => i.id === id)
+    const blockDate = item?.committed_date ?? selectedDate
+
+    // Create a time_block so OWM treats this as a normal, movable scheduled item
+    const tbRes = await fetch('/api/time-blocks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        block_date: blockDate,
+        label: item?.name ?? '',
+        start_time: time,
+        end_time: endTime,
+        time_type: item?.time_type ?? 'B',
+        source: 'manual',
+      }),
+    })
+    const timeBlock = tbRes.ok ? await tbRes.json() : null
+
+    // Update the action_item with scheduled_time and the new time_block_id
+    const update: Record<string, unknown> = { scheduled_time: time }
+    if (endTime) update.scheduled_end_time = endTime
+    if (timeBlock?.id) update.time_block_id = timeBlock.id
+
+    const res = await fetch(`/api/action-items/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setItems(prev => prev.map(i => i.id === id ? { ...i, ...data, item_notes: i.item_notes } : i))
     }
   }
 
@@ -779,6 +1036,8 @@ export default function TodayPage({ displayName }: Props) {
             onMoveToTomorrow={handleMoveToTomorrow}
             onMarkDoneAndCapture={handleMarkDoneAndCapture}
             onDelete={handleDelete}
+            onSchedule={handleSchedule}
+            onUnschedule={handleUnschedule}
             nextUp={nextUp}
             isToday={isToday}
           />
@@ -865,6 +1124,37 @@ export default function TodayPage({ displayName }: Props) {
                 {todoItems.length === 0 && scheduleItems.length === 0 && (
                   <div style={{ fontSize: 12, color: '#B5B0A8', paddingTop: 20 }}>
                     Nothing scheduled for this day.
+                  </div>
+                )}
+
+                {/* Logged items */}
+                {filteredLoggedItems.length > 0 && (
+                  <div style={{ marginTop: 24 }}>
+                    <div style={{ fontSize: 11, color: '#B5B0A8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                      Logged
+                    </div>
+                    {filteredLoggedItems.map(entry => (
+                      <div key={entry.id} style={{
+                        fontSize: 13, color: '#8A8578', padding: '4px 0',
+                        borderBottom: '1px solid #F8F7F4',
+                        display: 'flex', alignItems: 'center', gap: 8,
+                      }}>
+                        <span style={{ fontSize: 11, color: '#B5B0A8', flexShrink: 0 }}>
+                          {fmtNoteTime(entry.created_at)}
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0 }}>{entry.metadata?.cleanedName ?? entry.note}</span>
+                        <button
+                          onClick={() => handleDeleteLogEntry(entry.id)}
+                          title="Delete"
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: '#B5B0A8', fontSize: 13, padding: '0 4px',
+                            minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                          🗑
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
 
