@@ -1026,6 +1026,30 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     }
   }
 
+  // ── Time-shift a hopper item to a future date ───────────────────────────────
+  async function timeShiftItem(id: string, newDate: string) {
+    setExitingHopperIds(prev => new Set([...prev, id]))
+    await fetch(`/api/action-items/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proposed_date: newDate }),
+    })
+    setTimeout(() => {
+      setHopper(prev => prev.filter(h => h.id !== id))
+      setExitingHopperIds(prev => { const s = new Set(prev); s.delete(id); return s })
+    }, 360)
+  }
+
+  // ── Permanently delete a hopper item ───────────────────────────────────────
+  async function deleteHopperItem(id: string) {
+    setExitingHopperIds(prev => new Set([...prev, id]))
+    await fetch(`/api/action-items/${id}`, { method: 'DELETE' })
+    setTimeout(() => {
+      setHopper(prev => prev.filter(h => h.id !== id))
+      setExitingHopperIds(prev => { const s = new Set(prev); s.delete(id); return s })
+    }, 360)
+  }
+
   // ── Delete block ────────────────────────────────────────────────────────────
   async function deleteBlock(blockId: string, ds: string) {
     try {
@@ -2169,41 +2193,15 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   </div>
                 )}
 
-                {/* Urgent tier */}
-                {urgentHopper.length > 0 && (
+                {/* This Week — merged urgent + normal */}
+                {(urgentHopper.length > 0 || normalHopper.length > 0) && (
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: '#C4725A', letterSpacing: 1, marginBottom: 4, paddingLeft: 4 }}>
-                      URGENT
-                    </div>
-                    {urgentHopper.map(item => (
-                      <HopperItemCard
-                        key={item.id}
-                        item={item}
-                        onDismiss={() => dismissHopperItem(item.id)}
-                        onDragStart={() => setDraggingHopperItem(item)}
-                        onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
-                        onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
-                        onDoubleClick={() => item.activity_id ? openActivityEditor(item.activity_id) : undefined}
-                        onMakeActivity={!item.activity_id ? () => { setEditingActivityPrefillName(item.name); setEditingActivityId('new') } : undefined}
-                        onAutoPlace={item.source === 'template_proposal' ? (overrides) => handleAutoPlace(item.id, overrides) : undefined}
-                        dragging={draggingHopperItem?.id === item.id}
-                        armed={hopperDuplicateArmed === item.id}
-                        isExiting={exitingHopperIds.has(item.id)}
-                        isReturning={returningHopperIds.has(item.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Normal tier */}
-                {normalHopper.length > 0 && (
-                  <div style={{ marginBottom: 8 }}>
-                    {urgentHopper.length > 0 && (
+                    {suggestedHopper.length > 0 && (
                       <div style={{ fontSize: 9, fontWeight: 700, color: '#8A857D', letterSpacing: 1, marginBottom: 4, paddingLeft: 4 }}>
-                        TO DO
+                        THIS WEEK
                       </div>
                     )}
-                    {normalHopper.map(item => (
+                    {[...urgentHopper, ...normalHopper].map(item => (
                       <HopperItemCard
                         key={item.id}
                         item={item}
@@ -2214,7 +2212,9 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
                         onDoubleClick={() => item.activity_id ? openActivityEditor(item.activity_id) : undefined}
                         onMakeActivity={!item.activity_id ? () => { setEditingActivityPrefillName(item.name); setEditingActivityId('new') } : undefined}
-                        onAutoPlace={item.source === 'template_proposal' ? (overrides) => handleAutoPlace(item.id, overrides) : undefined}
+                        onAutoPlace={(overrides, force) => handleAutoPlace(item.id, overrides, force)}
+                        onTimeShift={(date) => timeShiftItem(item.id, date)}
+                        onDelete={() => deleteHopperItem(item.id)}
                         dragging={draggingHopperItem?.id === item.id}
                         armed={hopperDuplicateArmed === item.id}
                         isExiting={exitingHopperIds.has(item.id)}
@@ -2235,6 +2235,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         key={item.id}
                         item={item}
                         onDismiss={() => dismissHopperItem(item.id)}
+                        isVirtual={item.id.startsWith('activity:')}
                         onDragStart={() => setDraggingHopperItem(item)}
                         onDragEnd={() => { setDraggingHopperItem(null); setHopperDuplicateArmed(null) }}
                         onContextMenu={e => { e.preventDefault(); setHopperDuplicateArmed(prev => prev === item.id ? null : item.id) }}
@@ -2242,7 +2243,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                           const actId = item.id.startsWith('activity:') ? item.id.slice('activity:'.length) : item.activity_id
                           if (actId) openActivityEditor(actId)
                         }}
-                        onAutoPlace={(overrides) => handleAutoPlace(item.id, overrides)}
+                        onAutoPlace={(overrides, force) => handleAutoPlace(item.id, overrides, force)}
                         dragging={draggingHopperItem?.id === item.id}
                         armed={hopperDuplicateArmed === item.id}
                         isExiting={exitingHopperIds.has(item.id)}
@@ -2252,27 +2253,9 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                   </div>
                 )}
 
-                {/* Dismissed this week */}
+                {/* Skipped this week — collapsed by default */}
                 {weekDismissed.length > 0 && (
-                  <div style={{ marginBottom: 8, marginTop: 4 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: '#D0CBC3', letterSpacing: 1, marginBottom: 4, paddingLeft: 4 }}>
-                      SKIPPED THIS WEEK
-                    </div>
-                    {weekDismissed.map(item => (
-                      <HopperItemCard
-                        key={item.id}
-                        item={item}
-                        onDismiss={() => {}}
-                        onRevive={() => reviveHopperItem(item)}
-                        onDragStart={() => {}}
-                        onDragEnd={() => {}}
-                        onContextMenu={e => e.preventDefault()}
-                        onDoubleClick={() => item.activity_id ? openActivityEditor(item.activity_id) : undefined}
-                        dragging={false}
-                        muted
-                      />
-                    ))}
-                  </div>
+                  <SkippedSection weekDismissed={weekDismissed} onRevive={reviveHopperItem} onOpenActivity={openActivityEditor} />
                 )}
               </div>
 
@@ -3271,6 +3254,42 @@ const SOURCE_COLORS: Record<string, string> = {
   planning_function: '#9E6A82',
 }
 
+function SkippedSection({ weekDismissed, onRevive, onOpenActivity }: {
+  weekDismissed: CandidateItemLocal[]
+  onRevive: (item: CandidateItemLocal) => void
+  onOpenActivity: (id: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div style={{ marginBottom: 8, marginTop: 4 }}>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          fontSize: 9, fontWeight: 700, color: '#D0CBC3', letterSpacing: 1, marginBottom: 4, paddingLeft: 4,
+          background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4,
+        }}
+      >
+        <span style={{ fontSize: 8, transition: 'transform 0.15s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}>▶</span>
+        SKIPPED ({weekDismissed.length})
+      </button>
+      {expanded && weekDismissed.map(item => (
+        <HopperItemCard
+          key={item.id}
+          item={item}
+          onDismiss={() => {}}
+          onRevive={() => onRevive(item)}
+          onDragStart={() => {}}
+          onDragEnd={() => {}}
+          onContextMenu={e => e.preventDefault()}
+          onDoubleClick={() => item.activity_id ? onOpenActivity(item.activity_id) : undefined}
+          dragging={false}
+          muted
+        />
+      ))}
+    </div>
+  )
+}
+
 interface HopperItemCardProps {
   item: CandidateItemLocal
   onDismiss: () => void
@@ -3282,6 +3301,9 @@ interface HopperItemCardProps {
   onDoubleClick: () => void
   onMakeActivity?: () => void
   onAutoPlace?: (overrides?: { preferred_time: string; duration_minutes: number }, force?: boolean) => void
+  onTimeShift?: (date: string) => void
+  onDelete?: () => void
+  isVirtual?: boolean
   dragging: boolean
   armed?: boolean
   muted?: boolean
@@ -3293,12 +3315,29 @@ const FREQ_LABELS: Record<string, string> = {
   daily: 'Daily', weekly: 'Weekly', biweekly: 'Biweekly',
   monthly: 'Monthly', quarterly: 'Quarterly', annual: 'Annual',
 }
+
+const LATER_OPTIONS = [
+  { label: 'Next week', getDate: () => {
+    const d = new Date(); const day = d.getDay(); d.setDate(d.getDate() + (day === 0 ? 1 : 8 - day))
+    return d.toISOString().split('T')[0]
+  }},
+  { label: '2 weeks', getDate: () => {
+    const d = new Date(); const day = d.getDay(); d.setDate(d.getDate() + (day === 0 ? 8 : 15 - day))
+    return d.toISOString().split('T')[0]
+  }},
+  { label: 'Next month', getDate: () => {
+    const d = new Date(); d.setMonth(d.getMonth() + 1, 1)
+    return d.toISOString().split('T')[0]
+  }},
+]
 const TIME_OPTIONS = ['morning', 'afternoon', 'evening'] as const
 const TIME_LABELS: Record<string, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
 const DUR_OPTIONS = [15, 30, 45, 60, 90]
 
-const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onLog, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
+const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onLog, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, onTimeShift, onDelete, isVirtual, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
   const [showScheduleForm, setShowScheduleForm] = useState(false)
+  const [showLaterMenu, setShowLaterMenu] = useState(false)
+  const [showOverflow, setShowOverflow] = useState(false)
   const [formTime, setFormTime] = useState<string>(() => item.preferred_time ?? 'morning')
   const [formDur, setFormDur] = useState<number>(() => {
     if (item.duration_min && item.duration_min > 0) {
@@ -3307,20 +3346,16 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
     return 30
   })
 
-  const borderColor: Record<string, string> = { urgent: '#C4725A40', normal: '#E8E4DC', suggested: '#E8E4DC' }
   const leftBorderColor: Record<string, string> = { urgent: '#C4725A', normal: '#D0CBC3', suggested: '#7BAF7B' }
   const bgColor: Record<string, string> = { urgent: '#FDF8F5', normal: '#FFFFFF', suggested: '#FFFFFF' }
-
-  function handleScheduleClick(e: React.MouseEvent) {
-    e.stopPropagation()
-    setShowScheduleForm(f => !f)
-  }
 
   function handleScheduleConfirm(e: React.MouseEvent, force = false) {
     e.stopPropagation()
     onAutoPlace?.({ preferred_time: formTime, duration_minutes: formDur }, force)
     setShowScheduleForm(false)
   }
+
+  const actionLink: React.CSSProperties = { fontSize: 9, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }
 
   return (
     <div
@@ -3333,10 +3368,10 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
         display: 'flex',
         alignItems: 'flex-start',
         gap: 6,
-        padding: '6px 8px',
-        marginBottom: 4,
-        borderRadius: 8,
-        border: armed ? '1.5px dashed #4B82AF' : `1px solid ${borderColor[item.priority_tier]}`,
+        padding: '5px 8px',
+        marginBottom: 3,
+        borderRadius: 6,
+        border: armed ? '1.5px dashed #4B82AF' : '1px solid #E8E4DC',
         borderLeft: armed ? '3px dashed #4B82AF' : `3px solid ${leftBorderColor[item.priority_tier]}`,
         background: armed ? '#4B82AF08' : bgColor[item.priority_tier],
         cursor: 'grab',
@@ -3348,20 +3383,10 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
       }}
     >
       {armed && (
-        <div style={{
-          position: 'absolute', top: 2, right: 2,
-          fontSize: 8, color: '#4B82AF', fontWeight: 700, lineHeight: 1,
-        }}>✦ drag to place</div>
+        <div style={{ position: 'absolute', top: 2, right: 2, fontSize: 8, color: '#4B82AF', fontWeight: 700, lineHeight: 1 }}>✦ drag to place</div>
       )}
       {/* Energy dot */}
-      <span style={{
-        width: 7,
-        height: 7,
-        borderRadius: '50%',
-        background: EC[item.time_type],
-        flexShrink: 0,
-        marginTop: 3,
-      }} />
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: EC[item.time_type], flexShrink: 0, marginTop: 3 }} />
 
       {/* Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -3373,155 +3398,140 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
           wordBreak: 'break-word',
         }}>
           {item.name}
-          {item.emotional_weight === 'heavy' && (
-            <span style={{ color: '#C4725A', marginLeft: 3, fontSize: 8 }}>◆</span>
-          )}
+          {item.emotional_weight === 'heavy' && <span style={{ color: '#C4725A', marginLeft: 3, fontSize: 8 }}>◆</span>}
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-          {onMakeActivity && (
-            <button
-              onClick={e => { e.stopPropagation(); onMakeActivity() }}
-              style={{ fontSize: 9, color: '#5A9E6F', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-            >+ Make Activity</button>
-          )}
-          {onLog && (
-            <button
-              onClick={e => { e.stopPropagation(); onLog() }}
-              style={{ fontSize: 9, color: '#8A8578', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-            >← Log this</button>
-          )}
-        </div>
-        {onAutoPlace && (
-          <div style={{ marginTop: 3 }}>
-            <button
-              onClick={handleScheduleClick}
-              style={{
-                fontSize: 9, fontWeight: 600,
-                color: '#4B82AF',
-                background: '#4B82AF12',
-                border: '1px solid #4B82AF40',
-                borderRadius: 4, padding: '2px 7px',
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              → Schedule…
+
+        {/* Actions row */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center' }}>
+          {onAutoPlace && (
+            <button onClick={e => { e.stopPropagation(); setShowScheduleForm(f => !f); setShowLaterMenu(false) }}
+              style={{ ...actionLink, color: '#4B82AF', fontWeight: 600 }}>
+              Schedule
             </button>
-            {showScheduleForm && (
-              <div
-                onClick={e => e.stopPropagation()}
-                style={{ marginTop: 5, display: 'flex', flexDirection: 'column', gap: 4 }}
-              >
-                {/* Time row — named slots or exact HH:MM */}
-                <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {TIME_OPTIONS.map(t => (
-                    <button key={t} onClick={() => setFormTime(t)} style={{
-                      fontSize: 9, padding: '2px 7px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-                      background: formTime === t ? '#4B82AF' : '#F5F3EF',
-                      color: formTime === t ? '#FFF' : '#5A5650',
-                      border: `1px solid ${formTime === t ? '#4B82AF' : 'transparent'}`,
-                      fontWeight: formTime === t ? 600 : 400,
-                    }}>{TIME_LABELS[t]}</button>
-                  ))}
-                  <input
-                    type="text"
-                    placeholder="HH:MM"
-                    value={TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) ? '' : formTime}
-                    onChange={e => setFormTime(e.target.value)}
-                    style={{
-                      fontSize: 9, padding: '2px 6px', borderRadius: 10, width: 52,
-                      border: `1px solid ${!TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) && formTime ? '#4B82AF' : '#E0DDD6'}`,
-                      background: !TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) && formTime ? '#4B82AF12' : '#F5F3EF',
-                      fontFamily: 'inherit', outline: 'none',
-                    }}
-                  />
-                </div>
-                {/* Duration row + confirm */}
-                <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                  {DUR_OPTIONS.map(d => (
-                    <button key={d} onClick={() => setFormDur(d)} style={{
-                      fontSize: 9, padding: '2px 6px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-                      background: formDur === d ? '#4B82AF' : '#F5F3EF',
-                      color: formDur === d ? '#FFF' : '#5A5650',
-                      border: `1px solid ${formDur === d ? '#4B82AF' : 'transparent'}`,
-                      fontWeight: formDur === d ? 600 : 400,
-                    }}>{d}m</button>
-                  ))}
-                  <button
-                    onClick={handleScheduleConfirm}
-                    style={{
-                      marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '2px 9px', borderRadius: 10,
-                      background: '#5A9E6F', color: '#FFF', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    }}
-                  >Go →</button>
-                  <button
-                    onClick={e => handleScheduleConfirm(e, true)}
-                    title="Place at this exact time, ignoring calendar conflicts"
-                    style={{
-                      fontSize: 9, fontWeight: 500, padding: '2px 7px', borderRadius: 10,
-                      background: 'transparent', color: '#B5B0A8',
-                      border: '1px solid #E0DDD6', cursor: 'pointer', fontFamily: 'inherit',
-                    }}
-                  >Force</button>
-                </div>
-              </div>
-            )}
+          )}
+          {onTimeShift && !isVirtual && (
+            <div style={{ position: 'relative' }}>
+              <button onClick={e => { e.stopPropagation(); setShowLaterMenu(l => !l); setShowScheduleForm(false) }}
+                style={{ ...actionLink, color: '#8A8578' }}>
+                Later…
+              </button>
+              {showLaterMenu && (
+                <>
+                  <div onClick={e => { e.stopPropagation(); setShowLaterMenu(false) }} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                  <div onClick={e => e.stopPropagation()} style={{
+                    position: 'absolute', left: 0, top: '100%', zIndex: 101, marginTop: 2,
+                    background: '#FFFFFF', border: '1px solid #E8E4DC', borderRadius: 6,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 130, overflow: 'hidden',
+                  }}>
+                    {LATER_OPTIONS.map(opt => (
+                      <button key={opt.label} onClick={() => { setShowLaterMenu(false); onTimeShift(opt.getDate()) }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', borderBottom: '1px solid #F0EDE6', cursor: 'pointer', fontSize: 11, color: '#2D2A26', fontFamily: 'inherit' }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {isVirtual && !onRevive && (
+            <button onClick={e => { e.stopPropagation(); onDismiss() }}
+              style={{ ...actionLink, color: '#B5B0A8' }}>
+              Skip
+            </button>
+          )}
+          {onRevive && (
+            <button onClick={e => { e.stopPropagation(); onRevive() }}
+              style={{ ...actionLink, color: '#8A857D' }}>
+              Revive
+            </button>
+          )}
+          {/* Overflow menu for secondary actions */}
+          {!onRevive && !isVirtual && (
+            <div style={{ position: 'relative', marginLeft: 'auto' }}>
+              <button onClick={e => { e.stopPropagation(); setShowOverflow(o => !o) }}
+                style={{ ...actionLink, color: '#C4BFB4', fontSize: 12, padding: '0 2px' }}>
+                ···
+              </button>
+              {showOverflow && (
+                <>
+                  <div onClick={e => { e.stopPropagation(); setShowOverflow(false) }} style={{ position: 'fixed', inset: 0, zIndex: 100 }} />
+                  <div onClick={e => e.stopPropagation()} style={{
+                    position: 'absolute', right: 0, top: '100%', zIndex: 101, marginTop: 2,
+                    background: '#FFFFFF', border: '1px solid #E8E4DC', borderRadius: 6,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 140, overflow: 'hidden',
+                  }}>
+                    {onLog && (
+                      <button onClick={() => { setShowOverflow(false); onLog() }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', borderBottom: '1px solid #F0EDE6', cursor: 'pointer', fontSize: 11, color: '#2D2A26', fontFamily: 'inherit' }}>
+                        Log as done
+                      </button>
+                    )}
+                    {onMakeActivity && (
+                      <button onClick={() => { setShowOverflow(false); onMakeActivity() }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', borderBottom: '1px solid #F0EDE6', cursor: 'pointer', fontSize: 11, color: '#2D2A26', fontFamily: 'inherit' }}>
+                        Make Activity
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button onClick={() => { setShowOverflow(false); onDelete() }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#C4725A', fontFamily: 'inherit' }}>
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Schedule form (inline, expands below) */}
+        {showScheduleForm && onAutoPlace && (
+          <div onClick={e => e.stopPropagation()} style={{ marginTop: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+              {TIME_OPTIONS.map(t => (
+                <button key={t} onClick={() => setFormTime(t)} style={{
+                  fontSize: 9, padding: '2px 7px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                  background: formTime === t ? '#4B82AF' : '#F5F3EF',
+                  color: formTime === t ? '#FFF' : '#5A5650',
+                  border: `1px solid ${formTime === t ? '#4B82AF' : 'transparent'}`,
+                  fontWeight: formTime === t ? 600 : 400,
+                }}>{TIME_LABELS[t]}</button>
+              ))}
+              <input type="text" placeholder="HH:MM"
+                value={TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) ? '' : formTime}
+                onChange={e => setFormTime(e.target.value)}
+                style={{
+                  fontSize: 9, padding: '2px 6px', borderRadius: 10, width: 52,
+                  border: `1px solid ${!TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) && formTime ? '#4B82AF' : '#E0DDD6'}`,
+                  background: !TIME_OPTIONS.includes(formTime as typeof TIME_OPTIONS[number]) && formTime ? '#4B82AF12' : '#F5F3EF',
+                  fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+              {DUR_OPTIONS.map(d => (
+                <button key={d} onClick={() => setFormDur(d)} style={{
+                  fontSize: 9, padding: '2px 6px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                  background: formDur === d ? '#4B82AF' : '#F5F3EF',
+                  color: formDur === d ? '#FFF' : '#5A5650',
+                  border: `1px solid ${formDur === d ? '#4B82AF' : 'transparent'}`,
+                  fontWeight: formDur === d ? 600 : 400,
+                }}>{d}m</button>
+              ))}
+              <button onClick={handleScheduleConfirm} style={{
+                marginLeft: 'auto', fontSize: 9, fontWeight: 700, padding: '2px 9px', borderRadius: 10,
+                background: '#5A9E6F', color: '#FFF', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              }}>Go →</button>
+              <button onClick={e => handleScheduleConfirm(e, true)} title="Place at this exact time, ignoring calendar conflicts" style={{
+                fontSize: 9, fontWeight: 500, padding: '2px 7px', borderRadius: 10,
+                background: 'transparent', color: '#B5B0A8', border: '1px solid #E0DDD6', cursor: 'pointer', fontFamily: 'inherit',
+              }}>Force</button>
+            </div>
           </div>
         )}
-        <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
-          <span style={{
-            fontSize: 8,
-            background: (SOURCE_COLORS[item.source] ?? '#8A857D') + '15',
-            color: SOURCE_COLORS[item.source] ?? '#8A857D',
-            borderRadius: 4,
-            padding: '1px 4px',
-            fontWeight: 500,
-          }}>
-            {SOURCE_ICONS[item.source] ?? '○'} {SOURCE_LABELS[item.source] ?? item.source}
-          </span>
-          {item.frequency && FREQ_LABELS[item.frequency] && (
-            <span style={{ fontSize: 8, color: '#8A857D', background: '#F0EDE8', borderRadius: 4, padding: '1px 4px' }}>
-              {FREQ_LABELS[item.frequency]}
-            </span>
-          )}
-          {item.duration_min > 0 && (
-            <span style={{ fontSize: 8, color: '#B5B0A8' }}>
-              {item.duration_min === item.duration_max
-                ? `${item.duration_min}m`
-                : `${item.duration_min}–${item.duration_max}m`}
-            </span>
-          )}
-          {item.meta?.requestedBy && (
-            <span style={{ fontSize: 8, color: '#8A857D', fontStyle: 'italic' }}>
-              by {item.meta.requestedBy}
-            </span>
-          )}
-        </div>
       </div>
-
-      {/* Dismiss / Revive */}
-      {onRevive ? (
-        <button
-          onClick={e => { e.stopPropagation(); onRevive() }}
-          style={{
-            height: 14, borderRadius: 4, border: 'none', background: 'transparent',
-            cursor: 'pointer', fontSize: 9, color: '#8A857D',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0, padding: '0 2px', lineHeight: 1, marginTop: 1,
-          }}
-          title="Revive — show again this week"
-        >↺</button>
-      ) : (
-        <button
-          onClick={e => { e.stopPropagation(); onDismiss() }}
-          style={{
-            width: 14, height: 14, borderRadius: 4, border: 'none', background: 'transparent',
-            cursor: 'pointer', fontSize: 10, color: '#D0CBC3',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0, padding: 0, lineHeight: 1, marginTop: 1,
-          }}
-          title="Dismiss for this week"
-        >×</button>
-      )}
     </div>
   )
 })
