@@ -1,8 +1,75 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ActionItemWithNotes, ItemNote } from '@/lib/types'
 import CaptureInput from '@/components/capture/CaptureInput'
+
+// ─── Hopper types & constants ────────────────────────────────────────────────
+
+const CADENCE_DAYS: Record<string, number> = {
+  daily: 1, weekly: 7, biweekly: 14, monthly: 30, quarterly: 90, annual: 365,
+}
+
+interface HopperItem {
+  id: string
+  name: string
+  source: string
+  time_type: string
+  emotional_weight: string
+  priority_tier: string
+  priority_score: number
+  activity_id?: string | null
+  activity?: {
+    time_type?: string
+    emotional_weight?: string
+    duration_range_min?: number | null
+    duration_range_max?: number | null
+    preferred_time?: string | null
+    frequency?: string | null
+  } | null
+}
+
+interface SuggestedItem {
+  id: string // 'activity:${activityId}'
+  name: string
+  time_type: string
+  emotional_weight: string
+  activity_id: string
+  preferred_time: string | null
+  frequency: string | null
+  duration_min: number
+  duration_max: number
+}
+
+interface SuggestedData {
+  activities: Array<{
+    id: string; name: string; time_type: string; emotional_weight: string
+    frequency: string | null; duration_range_min: number | null; duration_range_max: number | null
+    preferred_time: string | null; is_active: boolean
+  }>
+  coverage: Array<{ activity_id: string; committed_date: string }>
+  dismissedActivityIds: string[]
+  weekStart: string
+}
+
+const LATER_OPTIONS = [
+  { label: 'Next week', getDate: () => {
+    const d = new Date(); const day = d.getDay(); d.setDate(d.getDate() + (day === 0 ? 1 : 8 - day))
+    return d.toISOString().split('T')[0]
+  }},
+  { label: '2 weeks', getDate: () => {
+    const d = new Date(); const day = d.getDay(); d.setDate(d.getDate() + (day === 0 ? 8 : 15 - day))
+    return d.toISOString().split('T')[0]
+  }},
+  { label: 'Next month', getDate: () => {
+    const d = new Date(); d.setMonth(d.getMonth() + 1, 1)
+    return d.toISOString().split('T')[0]
+  }},
+]
+
+const SCHEDULE_TIME_OPTIONS = ['morning', 'afternoon', 'evening'] as const
+const SCHEDULE_TIME_LABELS: Record<string, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
+const SCHEDULE_DUR_OPTIONS = [15, 30, 45, 60, 90]
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -749,6 +816,9 @@ export default function TodayPage({ displayName }: Props) {
   const [focusItemId, setFocusItemId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [nowTime, setNowTime] = useState(currentTimeStr())
+  const [hopperItems, setHopperItems] = useState<HopperItem[]>([])
+  const [suggestedData, setSuggestedData] = useState<SuggestedData | null>(null)
+  const [dismissedVirtualIds, setDismissedVirtualIds] = useState<Set<string>>(new Set())
 
   const isToday = selectedDate === todayStr
   const isYesterday = selectedDate === addDays(todayStr, -1)
@@ -774,6 +844,9 @@ export default function TodayPage({ displayName }: Props) {
       setLoggedItems(data.loggedItems ?? [])
       setNextUp(data.nextUp ?? null)
       setDayCompletion(dcData?.id ? dcData : null)
+      setHopperItems(data.hopperItems ?? [])
+      setSuggestedData(data.suggestedData ?? null)
+      setDismissedVirtualIds(new Set())
     } finally {
       setLoading(false)
     }
@@ -812,6 +885,73 @@ export default function TodayPage({ displayName }: Props) {
     const localDate = toDateStr(new Date(entry.created_at))
     return localDate === selectedDate
   })
+
+  // ─── Hopper: This Week + Suggested ───────────────────────────────────────────
+
+  const showHopperSections = selectedDate >= todayStr
+
+  // Normalize hopper items (apply activity fields)
+  const normalizedHopper: HopperItem[] = useMemo(() =>
+    hopperItems.map(h => ({
+      ...h,
+      time_type: h.activity?.time_type ?? h.time_type ?? 'B',
+      emotional_weight: h.activity?.emotional_weight ?? h.emotional_weight ?? 'normal',
+    }))
+  , [hopperItems])
+
+  // Compute suggested items from activities + coverage (same logic as OrganizeWeekModal)
+  const suggestedItems: SuggestedItem[] = useMemo(() => {
+    if (!suggestedData) return []
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+
+    // Build coverage map
+    const coverageMap: Record<string, Date[]> = {}
+    for (const { activity_id, committed_date } of suggestedData.coverage) {
+      if (!coverageMap[activity_id]) coverageMap[activity_id] = []
+      coverageMap[activity_id].push(new Date(committed_date + 'T00:00:00'))
+    }
+
+    // Also count committed items in current view
+    for (const item of items) {
+      const aid = (item as ActionItemWithNotes & { activity_id?: string }).activity_id
+      if (!aid) continue
+      if (!coverageMap[aid]) coverageMap[aid] = []
+      coverageMap[aid].push(new Date())
+    }
+
+    // Activities already in the hopper shouldn't appear in Suggested
+    const hopperActivityIds = new Set(hopperItems.filter(h => h.activity_id).map(h => h.activity_id!))
+    const dismissedSet = new Set(suggestedData.dismissedActivityIds)
+
+    return suggestedData.activities
+      .filter(a => a.frequency && CADENCE_DAYS[a.frequency])
+      .filter(a => !hopperActivityIds.has(a.id))
+      .filter(a => !dismissedSet.has(a.id) && !dismissedVirtualIds.has(a.id))
+      .filter(a => {
+        const cadenceDays = CADENCE_DAYS[a.frequency!]
+        const windowMs = cadenceDays * 24 * 60 * 60 * 1000
+        const dates = coverageMap[a.id] ?? []
+        return !dates.some(d => Math.abs(d.getTime() - today.getTime()) <= windowMs)
+      })
+      .map(a => ({
+        id: `activity:${a.id}`,
+        name: a.name,
+        time_type: a.time_type,
+        emotional_weight: a.emotional_weight,
+        activity_id: a.id,
+        preferred_time: a.preferred_time,
+        frequency: a.frequency,
+        duration_min: a.duration_range_min ?? 30,
+        duration_max: a.duration_range_max ?? 60,
+      }))
+      .sort((a, b) => {
+        const PT_ORDER: Record<string, number> = { morning: 0, afternoon: 1, evening: 2 }
+        const ao = a.preferred_time ? (PT_ORDER[a.preferred_time] ?? 3) : 3
+        const bo = b.preferred_time ? (PT_ORDER[b.preferred_time] ?? 3) : 3
+        if (ao !== bo) return ao - bo
+        return a.name.localeCompare(b.name)
+      })
+  }, [suggestedData, items, hopperItems, dismissedVirtualIds])
 
   // ─── Mutations ──────────────────────────────────────────────────────────────
 
@@ -1001,6 +1141,141 @@ export default function TodayPage({ displayName }: Props) {
     }
   }
 
+  // ─── Hopper mutations ────────────────────────────────────────────────────────
+
+  async function handleCommitHopper(itemId: string) {
+    // Optimistic: remove from hopper
+    setHopperItems(prev => prev.filter(h => h.id !== itemId))
+
+    await fetch(`/api/action-items/${itemId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'committed', committed_date: selectedDate }),
+    })
+    // Reload to get the item in the committed list
+    loadData(selectedDate)
+  }
+
+  async function handleCommitSuggested(virtualId: string) {
+    const activityId = virtualId.slice('activity:'.length)
+    const activity = suggestedData?.activities.find(a => a.id === activityId)
+    // Optimistic: hide from suggested
+    setDismissedVirtualIds(prev => new Set([...prev, activityId]))
+
+    const createRes = await fetch('/api/action-items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: activity?.name ?? activityId,
+        source: 'template_proposal',
+        activity_id: activityId,
+        status: 'committed',
+        committed_date: selectedDate,
+        committed_at: new Date().toISOString(),
+      }),
+    })
+    if (createRes.ok) {
+      loadData(selectedDate)
+    }
+  }
+
+  async function handleAutoPlaceHopper(itemId: string, overrides: { preferred_time: string; duration_minutes: number }, force: boolean) {
+    let actionItemId = itemId
+
+    // Virtual items need a DB record first
+    if (itemId.startsWith('activity:')) {
+      const activityId = itemId.slice('activity:'.length)
+      const activity = suggestedData?.activities.find(a => a.id === activityId)
+      setDismissedVirtualIds(prev => new Set([...prev, activityId]))
+
+      const createRes = await fetch('/api/action-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: activity?.name ?? activityId,
+          source: 'template_proposal',
+          activity_id: activityId,
+          status: 'candidate',
+        }),
+      })
+      if (!createRes.ok) return
+      const newItem = await createRes.json()
+      actionItemId = newItem.id
+    } else {
+      setHopperItems(prev => prev.filter(h => h.id !== itemId))
+    }
+
+    // Compute week_start (Monday of the selected date's week)
+    const d = new Date(selectedDate + 'T12:00:00')
+    const day = d.getDay()
+    const daysToMon = day === 0 ? 6 : day - 1
+    const monday = new Date(d); monday.setDate(monday.getDate() - daysToMon)
+    const weekStart = toDateStr(monday)
+
+    await fetch('/api/action-items/auto-place', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action_item_id: actionItemId, week_start: weekStart, utc_offset_minutes: new Date().getTimezoneOffset(), force, ...overrides }),
+    })
+    loadData(selectedDate)
+  }
+
+  async function handlePostponeHopper(id: string, newDate: string) {
+    setHopperItems(prev => prev.filter(h => h.id !== id))
+    await fetch(`/api/action-items/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proposed_date: newDate }),
+    })
+  }
+
+  async function handleDismissHopper(id: string) {
+    if (id.startsWith('activity:')) {
+      const activityId = id.slice('activity:'.length)
+      const activity = suggestedData?.activities.find(a => a.id === activityId)
+      setDismissedVirtualIds(prev => new Set([...prev, activityId]))
+      // Persist the dismissal
+      fetch('/api/action-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: activity?.name ?? activityId,
+          source: 'template_proposal',
+          activity_id: activityId,
+          status: 'dismissed',
+          metadata: { dismissed_week: suggestedData?.weekStart },
+        }),
+      })
+    } else {
+      setHopperItems(prev => prev.filter(h => h.id !== id))
+      await fetch(`/api/action-items/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'dismissed', resolved_at: new Date().toISOString() }),
+      })
+    }
+  }
+
+  async function handleLogHopper(id: string, name: string) {
+    setHopperItems(prev => prev.filter(h => h.id !== id))
+    await fetch('/api/action-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_type: 'logged', event_date: selectedDate, note: name, action_item_id: id }),
+    })
+    await fetch(`/api/action-items/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'archived' }),
+    })
+    loadData(selectedDate)
+  }
+
+  async function handleDeleteHopper(id: string) {
+    setHopperItems(prev => prev.filter(h => h.id !== id))
+    await fetch(`/api/action-items/${id}`, { method: 'DELETE' })
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const pageStyle: React.CSSProperties = {
@@ -1074,6 +1349,13 @@ export default function TodayPage({ displayName }: Props) {
               </span>
             </div>
 
+            {/* Capture */}
+            <CaptureInput
+              source="today"
+              onItemCreated={item => setItems(prev => [...prev, item])}
+              onLogEntry={() => loadData(selectedDate)}
+            />
+
             {loading ? (
               <div style={{ fontSize: 12, color: '#B5B0A8', paddingTop: 20 }}>Loading…</div>
             ) : dayCompletion && !reopened ? (
@@ -1127,6 +1409,69 @@ export default function TodayPage({ displayName }: Props) {
                   </div>
                 )}
 
+                {/* This Week + Suggested hopper sections */}
+                {showHopperSections && (normalizedHopper.length > 0 || suggestedItems.length > 0) && (
+                  <div style={{ marginTop: 24 }}>
+                    {normalizedHopper.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 11, color: '#B5B0A8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                          This Week
+                        </div>
+                        {normalizedHopper.slice(0, 5).map(item => (
+                          <HopperRow
+                            key={item.id}
+                            item={item}
+                            isVirtual={false}
+                            onCommit={() => handleCommitHopper(item.id)}
+                            onAutoPlace={(overrides, force) => handleAutoPlaceHopper(item.id, overrides, force)}
+                            onTimeShift={(date) => handlePostponeHopper(item.id, date)}
+                            onDismiss={() => handleDismissHopper(item.id)}
+                            onLog={() => handleLogHopper(item.id, item.name)}
+                            onDelete={() => handleDeleteHopper(item.id)}
+                          />
+                        ))}
+                        {normalizedHopper.length > 5 && (
+                          <div style={{ fontSize: 11, color: '#B5B0A8', padding: '4px 0' }}>
+                            +{normalizedHopper.length - 5} more in hopper
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {suggestedItems.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 11, color: '#B5B0A8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, marginTop: normalizedHopper.length > 0 ? 16 : 0 }}>
+                          Suggested
+                        </div>
+                        {suggestedItems.slice(0, 5).map(item => (
+                          <HopperRow
+                            key={item.id}
+                            item={{
+                              id: item.id,
+                              name: item.name,
+                              source: 'template_proposal',
+                              time_type: item.time_type,
+                              emotional_weight: item.emotional_weight,
+                              priority_tier: 'suggested',
+                              priority_score: 0,
+                              activity_id: item.activity_id,
+                            }}
+                            isVirtual={true}
+                            onCommit={() => handleCommitSuggested(item.id)}
+                            onAutoPlace={(overrides, force) => handleAutoPlaceHopper(item.id, overrides, force)}
+                            onDismiss={() => handleDismissHopper(item.id)}
+                          />
+                        ))}
+                        {suggestedItems.length > 5 && (
+                          <div style={{ fontSize: 11, color: '#B5B0A8', padding: '4px 0' }}>
+                            +{suggestedItems.length - 5} more suggested
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {/* Logged items */}
                 {filteredLoggedItems.length > 0 && (
                   <div style={{ marginTop: 24 }}>
@@ -1158,14 +1503,6 @@ export default function TodayPage({ displayName }: Props) {
                   </div>
                 )}
 
-                {/* Capture */}
-                <div style={{ borderTop: '1px solid #E8E4DC', marginTop: 8 }}>
-                  <CaptureInput
-                    source="today"
-                    onItemCreated={item => setItems(prev => [...prev, item])}
-                    onLogEntry={() => loadData(selectedDate)}
-                  />
-                </div>
               </>
             )}
           </>
@@ -1399,4 +1736,146 @@ function renderScheduleItems(
   }
 
   return result
+}
+
+// ─── HopperRow ───────────────────────────────────────────────────────────────
+// Minimal style matching TodoRow — plain row, single menu button, no cards
+
+function HopperRow({ item, isVirtual, onCommit, onAutoPlace, onTimeShift, onDismiss, onLog, onDelete }: {
+  item: HopperItem
+  isVirtual: boolean
+  onCommit: () => void
+  onAutoPlace?: (overrides: { preferred_time: string; duration_minutes: number }, force: boolean) => void
+  onTimeShift?: (date: string) => void
+  onDismiss: () => void
+  onLog?: () => void
+  onDelete?: () => void
+}) {
+  const [showMenu, setShowMenu] = useState(false)
+  const [showScheduleForm, setShowScheduleForm] = useState(false)
+  const [formTime, setFormTime] = useState('morning')
+  const [formDur, setFormDur] = useState(30)
+
+  return (
+    <div style={{
+      padding: '5px 0', userSelect: 'none',
+      borderBottom: '1px solid #F8F7F4',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        {/* Empty checkbox-sized spacer to align with TodoRow */}
+        <span style={{
+          width: 14, height: 14, flexShrink: 0,
+          border: '1.5px dashed #D0CBC3', borderRadius: 2,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer',
+        }} onClick={e => { e.stopPropagation(); onCommit() }} title="Add to today" />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 14, color: '#8A8578' }}>
+            {item.name}
+          </span>
+        </div>
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={e => { e.stopPropagation(); setShowMenu(!showMenu) }}
+            title="Actions"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#B5B0A8', fontSize: 16, padding: '0 4px',
+              minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+            ···
+          </button>
+          {showMenu && (
+            <>
+              <div onClick={e => { e.stopPropagation(); setShowMenu(false) }} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', zIndex: 51,
+                background: '#FFFFFF', border: '1px solid #E8E4DC', borderRadius: 6,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 160, overflow: 'hidden',
+              }}>
+                <button onClick={e => { e.stopPropagation(); setShowMenu(false); onCommit() }} style={menuItemStyle}>
+                  + Add to today
+                </button>
+                {onAutoPlace && (
+                  <button onClick={e => { e.stopPropagation(); setShowMenu(false); setShowScheduleForm(true) }} style={menuItemStyle}>
+                    ⏱ Schedule
+                  </button>
+                )}
+                {onTimeShift && !isVirtual && (
+                  <>
+                    {LATER_OPTIONS.map(opt => (
+                      <button key={opt.label} onClick={e => { e.stopPropagation(); setShowMenu(false); onTimeShift(opt.getDate()) }} style={menuItemStyle}>
+                        → {opt.label}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {isVirtual && (
+                  <button onClick={e => { e.stopPropagation(); setShowMenu(false); onDismiss() }} style={menuItemStyle}>
+                    ✕ Skip this week
+                  </button>
+                )}
+                {!isVirtual && onLog && (
+                  <button onClick={e => { e.stopPropagation(); setShowMenu(false); onLog() }} style={menuItemStyle}>
+                    ✓ Log as done
+                  </button>
+                )}
+                {!isVirtual && onDelete && (
+                  <button onClick={e => { e.stopPropagation(); setShowMenu(false); onDelete() }} style={{ ...menuItemStyle, color: '#C4725A', borderBottom: 'none' }}>
+                    Delete
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Inline schedule form — expands below the row */}
+      {showScheduleForm && onAutoPlace && (
+        <div onClick={e => e.stopPropagation()} style={{ paddingLeft: 22, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+            {SCHEDULE_TIME_OPTIONS.map(t => (
+              <button key={t} onClick={() => setFormTime(t)} style={{
+                fontSize: 10, padding: '2px 8px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                background: formTime === t ? '#4B82AF' : '#F5F3EF',
+                color: formTime === t ? '#FFF' : '#5A5650',
+                border: `1px solid ${formTime === t ? '#4B82AF' : 'transparent'}`,
+                fontWeight: formTime === t ? 600 : 400,
+              }}>{SCHEDULE_TIME_LABELS[t]}</button>
+            ))}
+            <input type="text" placeholder="HH:MM"
+              value={SCHEDULE_TIME_OPTIONS.includes(formTime as typeof SCHEDULE_TIME_OPTIONS[number]) ? '' : formTime}
+              onChange={e => setFormTime(e.target.value)}
+              style={{
+                fontSize: 10, padding: '2px 6px', borderRadius: 10, width: 52,
+                border: `1px solid ${!SCHEDULE_TIME_OPTIONS.includes(formTime as typeof SCHEDULE_TIME_OPTIONS[number]) && formTime ? '#4B82AF' : '#E0DDD6'}`,
+                background: !SCHEDULE_TIME_OPTIONS.includes(formTime as typeof SCHEDULE_TIME_OPTIONS[number]) && formTime ? '#4B82AF12' : '#F5F3EF',
+                fontFamily: 'inherit', outline: 'none',
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+            {SCHEDULE_DUR_OPTIONS.map(d => (
+              <button key={d} onClick={() => setFormDur(d)} style={{
+                fontSize: 10, padding: '2px 7px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                background: formDur === d ? '#4B82AF' : '#F5F3EF',
+                color: formDur === d ? '#FFF' : '#5A5650',
+                border: `1px solid ${formDur === d ? '#4B82AF' : 'transparent'}`,
+                fontWeight: formDur === d ? 600 : 400,
+              }}>{d}m</button>
+            ))}
+            <button onClick={e => { e.stopPropagation(); onAutoPlace({ preferred_time: formTime, duration_minutes: formDur }, false); setShowScheduleForm(false) }} style={{
+              marginLeft: 'auto', fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 10,
+              background: '#5A9E6F', color: '#FFF', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            }}>Go →</button>
+            <button onClick={() => setShowScheduleForm(false)} style={{
+              fontSize: 10, padding: '2px 7px', borderRadius: 10,
+              background: 'transparent', color: '#B5B0A8', border: '1px solid #E0DDD6', cursor: 'pointer', fontFamily: 'inherit',
+            }}>cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

@@ -8,9 +8,23 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams
   const date = sp.get('date') ?? new Date().toISOString().split('T')[0]
+  const todayDate = new Date().toISOString().split('T')[0]
+  const showHopper = date >= todayDate // only for today + future
 
-  // Fetch action_items, time_blocks, and logged entries in parallel
-  const [itemsRes, blocksRes, loggedRes] = await Promise.all([
+  // Compute end-of-week (Sunday) for hopper query
+  const reqDate = new Date(date + 'T12:00:00')
+  const dayOfWeek = reqDate.getDay() // 0=Sun
+  const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
+  const weekEnd = new Date(reqDate); weekEnd.setDate(weekEnd.getDate() + daysToSunday)
+  const weekEndStr = weekEnd.toISOString().split('T')[0]
+
+  // Compute start-of-week (Monday) for dismissed_week matching
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  const weekStart = new Date(reqDate); weekStart.setDate(weekStart.getDate() - daysToMonday)
+  const weekStartStr = weekStart.toISOString().split('T')[0]
+
+  // Fetch action_items, time_blocks, logged entries, and hopper data in parallel
+  const [itemsRes, blocksRes, loggedRes, ...hopperResults] = await Promise.all([
     supabase
       .from('action_items')
       .select('*, item_notes(*)')
@@ -31,6 +45,39 @@ export async function GET(req: NextRequest) {
       .eq('event_type', 'logged')
       .eq('event_date', date)
       .order('created_at', { ascending: true }),
+    // Hopper: candidate items for this week (non-template)
+    ...(showHopper ? [
+      supabase
+        .from('action_items')
+        .select('*, activity:activities(time_type, emotional_weight, duration_range_min, duration_range_max, preferred_time, frequency)')
+        .eq('user_id', user.id)
+        .eq('status', 'candidate')
+        .neq('source', 'template_proposal')
+        .or(`proposed_date.is.null,proposed_date.lte.${weekEndStr}`)
+        .order('priority_score', { ascending: false })
+        .limit(20),
+      // Activities for suggested computation
+      supabase
+        .from('activities')
+        .select('id, name, time_type, emotional_weight, frequency, duration_range_min, duration_range_max, preferred_time, is_active')
+        .eq('user_id', user.id)
+        .eq('is_active', true),
+      // Coverage: committed/completed items by activity_id
+      supabase
+        .from('action_items')
+        .select('activity_id, committed_date')
+        .eq('user_id', user.id)
+        .in('status', ['committed', 'in_progress', 'completed'])
+        .not('activity_id', 'is', null)
+        .not('committed_date', 'is', null),
+      // Dismissed virtual items this week
+      supabase
+        .from('action_items')
+        .select('id, activity_id, name, metadata')
+        .eq('user_id', user.id)
+        .eq('status', 'dismissed')
+        .eq('source', 'template_proposal'),
+    ] : []),
   ])
 
   if (itemsRes.error) return NextResponse.json({ error: itemsRes.error.message }, { status: 500 })
@@ -121,10 +168,9 @@ export async function GET(req: NextRequest) {
 
   // Determine "next up": next upcoming time-locked item (today only)
   const now = new Date()
-  const todayStr = now.toISOString().split('T')[0]
   let nextUp = null
 
-  if (date === todayStr) {
+  if (date === todayDate) {
     const currentTime = now.toTimeString().slice(0, 5)
     const upcoming = items
       .filter(i => i.scheduled_time && i.status !== 'completed' && i.status !== 'skipped')
@@ -134,5 +180,24 @@ export async function GET(req: NextRequest) {
 
   const loggedItems = loggedRes.data ?? []
 
-  return NextResponse.json({ items, nextUp, loggedItems })
+  // Build hopper + suggested data if applicable
+  let hopperItems: unknown[] = []
+  let suggestedData: { activities: unknown[]; coverage: unknown[]; dismissedActivityIds: string[]; weekStart: string } | null = null
+
+  if (showHopper && hopperResults.length === 4) {
+    const [hopperRes, activitiesRes, coverageRes, dismissedRes] = hopperResults
+    hopperItems = (hopperRes as { data: unknown[] | null }).data ?? []
+    const activities = (activitiesRes as { data: unknown[] | null }).data ?? []
+    const coverage = (coverageRes as { data: unknown[] | null }).data ?? []
+    const dismissed = (dismissedRes as { data: Array<{ activity_id: string | null; metadata?: Record<string, unknown> | null }> | null }).data ?? []
+
+    // Filter dismissed to this week only (check metadata.dismissed_week)
+    const dismissedActivityIds = dismissed
+      .filter(d => d.activity_id && d.metadata?.dismissed_week === weekStartStr)
+      .map(d => d.activity_id!)
+
+    suggestedData = { activities, coverage, dismissedActivityIds, weekStart: weekStartStr }
+  }
+
+  return NextResponse.json({ items, nextUp, loggedItems, hopperItems, suggestedData })
 }
