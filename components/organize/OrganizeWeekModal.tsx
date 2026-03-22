@@ -1040,6 +1040,45 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     }, 360)
   }
 
+  // ── Commit a hopper item to today as an unscheduled to-do ───────────────────
+  async function commitToToday(itemId: string) {
+    const today = new Date().toISOString().split('T')[0]
+    setExitingHopperIds(prev => new Set([...prev, itemId]))
+
+    let actionItemId = itemId
+    if (itemId.startsWith('activity:')) {
+      const activityId = itemId.slice('activity:'.length)
+      const activity = activities.find(a => a.id === activityId)
+      const createRes = await fetch('/api/action-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: activity?.name ?? activityId,
+          source: 'template_proposal',
+          activity_id: activityId,
+          status: 'committed',
+          committed_date: today,
+          committed_at: new Date().toISOString(),
+        }),
+      })
+      if (!createRes.ok) return
+      const newItem = await createRes.json()
+      actionItemId = newItem.id
+      setScheduleCoverage(prev => [...prev, { activity_id: activityId, scheduled_date: today }])
+    } else {
+      await fetch(`/api/action-items/${actionItemId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'committed', committed_date: today }),
+      })
+    }
+
+    setTimeout(() => {
+      setHopper(prev => prev.filter(h => h.id !== itemId))
+      setExitingHopperIds(prev => { const s = new Set(prev); s.delete(itemId); return s })
+    }, 360)
+  }
+
   // ── Permanently delete a hopper item ───────────────────────────────────────
   async function deleteHopperItem(id: string) {
     setExitingHopperIds(prev => new Set([...prev, id]))
@@ -2213,6 +2252,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                         onDoubleClick={() => item.activity_id ? openActivityEditor(item.activity_id) : undefined}
                         onMakeActivity={!item.activity_id ? () => { setEditingActivityPrefillName(item.name); setEditingActivityId('new') } : undefined}
                         onAutoPlace={(overrides, force) => handleAutoPlace(item.id, overrides, force)}
+                        onCommitToday={() => commitToToday(item.id)}
                         onTimeShift={(date) => timeShiftItem(item.id, date)}
                         onDelete={() => deleteHopperItem(item.id)}
                         dragging={draggingHopperItem?.id === item.id}
@@ -2244,6 +2284,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                           if (actId) openActivityEditor(actId)
                         }}
                         onAutoPlace={(overrides, force) => handleAutoPlace(item.id, overrides, force)}
+                        onCommitToday={() => commitToToday(item.id)}
                         dragging={draggingHopperItem?.id === item.id}
                         armed={hopperDuplicateArmed === item.id}
                         isExiting={exitingHopperIds.has(item.id)}
@@ -3303,6 +3344,7 @@ interface HopperItemCardProps {
   onAutoPlace?: (overrides?: { preferred_time: string; duration_minutes: number }, force?: boolean) => void
   onTimeShift?: (date: string) => void
   onDelete?: () => void
+  onCommitToday?: () => void
   isVirtual?: boolean
   dragging: boolean
   armed?: boolean
@@ -3334,7 +3376,7 @@ const TIME_OPTIONS = ['morning', 'afternoon', 'evening'] as const
 const TIME_LABELS: Record<string, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
 const DUR_OPTIONS = [15, 30, 45, 60, 90]
 
-const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onLog, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, onTimeShift, onDelete, isVirtual, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
+const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onLog, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, onTimeShift, onDelete, onCommitToday, isVirtual, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
   const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [showLaterMenu, setShowLaterMenu] = useState(false)
   const [showOverflow, setShowOverflow] = useState(false)
@@ -3407,6 +3449,12 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
             <button onClick={e => { e.stopPropagation(); setShowScheduleForm(f => !f); setShowLaterMenu(false) }}
               style={{ ...actionLink, color: '#4B82AF', fontWeight: 600 }}>
               Schedule
+            </button>
+          )}
+          {onCommitToday && (
+            <button onClick={e => { e.stopPropagation(); onCommitToday() }}
+              style={{ ...actionLink, color: '#5A9E6F' }}>
+              To-do
             </button>
           )}
           {onTimeShift && !isVirtual && (
