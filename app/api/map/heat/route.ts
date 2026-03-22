@@ -13,7 +13,7 @@ export async function GET() {
   const [{ data: values }, { data: links }, { data: logs }, { data: activities }] = await Promise.all([
     supabase.from('user_values').select('id'),
     supabase.from('activity_value_links').select('id, value_id, activity_id, contribution_strength'),
-    supabase.from('action_log').select('activity_id, event_date, value_ids').eq('event_type', 'completed').order('event_date', { ascending: false }),
+    supabase.from('action_log').select('activity_id, event_date, value_ids').in('event_type', ['completed', 'logged']).order('event_date', { ascending: false }),
     supabase.from('activities').select('id, activity_type, frequency, status, is_preventive, alarm_threshold_days'),
   ])
 
@@ -53,13 +53,17 @@ export async function GET() {
       if (act.status === 'aspirational' || act.status === 'paused' || act.status === 'completed') return
 
       const weight = link.contribution_strength === 'strong' ? 1.0 : link.contribution_strength === 'moderate' ? 0.6 : 0.3
-      const cadenceDays = act.activity_type === 'one_time' ? 90 : (act.frequency ? CADENCE_DAYS[act.frequency] ?? 30 : 30)
+      const rawCadence = act.activity_type === 'one_time' ? 90 : (act.frequency ? CADENCE_DAYS[act.frequency] ?? 30 : 30)
+      const cadenceDays = Math.max(3, rawCadence) // floor of 3 days so daily activities don't zero out overnight
       const last = lastLog[link.activity_id]
       const daysSince = last ? (now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24) : cadenceDays + 1
       const decay = Math.max(0, 1 - daysSince / cadenceDays)
 
-      weightedSum += decay * weight
-      totalWeight += weight
+      // Only count activities that have at least one completion — never-completed activities don't drag the average down
+      if (last) {
+        weightedSum += decay * weight
+        totalWeight += weight
+      }
 
       // Overdue check uses alarm_threshold_days (independent of cadence)
       const alarmDays = act.alarm_threshold_days ?? 8
