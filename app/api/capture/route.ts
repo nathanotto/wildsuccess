@@ -76,12 +76,18 @@ export async function POST(req: NextRequest) {
 
   const isToday = source === 'today'
 
+  // Extract value IDs from parser's resolved valueLinks (from matched people + activities)
+  const valueIds = parsed.valueLinks.length > 0
+    ? parsed.valueLinks.map(vl => vl.valueId)
+    : null
+
   if (parsed.outcome === 'logged') {
     const { data } = await supabase.from('action_log').insert({
       user_id: user.id,
       event_type: 'logged',
       event_date: today,
       note: rawInput.trim(),
+      value_ids: valueIds,
       metadata: {
         cleanedName: parsed.cleanedName,
         duration: parsed.duration,
@@ -118,6 +124,7 @@ export async function POST(req: NextRequest) {
       action_item_id: data?.id ?? null,
       event_date: today,
       note: rawInput.trim(),
+      value_ids: valueIds,
     })
 
   } else if (parsed.outcome === 'captured_dated') {
@@ -146,6 +153,7 @@ export async function POST(req: NextRequest) {
       action_item_id: data?.id ?? null,
       event_date: today,
       note: rawInput.trim(),
+      value_ids: valueIds,
     })
 
   } else if (parsed.outcome === 'scheduled_soft' || parsed.outcome === 'scheduled_hard') {
@@ -177,6 +185,7 @@ export async function POST(req: NextRequest) {
       action_item_id: data?.id ?? null,
       event_date: today,
       note: rawInput.trim(),
+      value_ids: valueIds,
     })
 
   } else if (parsed.outcome === 'tickler') {
