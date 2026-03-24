@@ -4,7 +4,6 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile, IntakeQuestion } from '@/lib/types'
 import WildSuccessMapSVG from './WildSuccessMapSVG'
 import LifeMapSVG from './LifeMapSVG'
-import NavBar from './NavBar'
 import TakeActionBox from './TakeActionBox'
 import EditValueModal from './EditValueModal'
 import EditActivityModal from './EditActivityModal'
@@ -14,7 +13,6 @@ import Toast from './Toast'
 import SeedQuestionsModal from './SeedQuestionsModal'
 import QuickCapture from './QuickCapture'
 import ContextualNudge from './ContextualNudge'
-import OrganizeWeekModal from '@/components/organize/OrganizeWeekModal'
 import WaterfallDiagram from './WaterfallDiagram'
 import ActivitiesEditor from './ActivitiesEditor'
 
@@ -46,7 +44,6 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [modal, setModal] = useState<ModalState>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [mapMode, setMapMode] = useState<'values' | 'life'>('values')
-  const [organizeOpen, setOrganizeOpen] = useState(false)
   const [referenceOpen, setReferenceOpen] = useState(false)
   const [activitiesEditorOpen, setActivitiesEditorOpen] = useState(false)
   const [hopperCount, setHopperCount] = useState(0)
@@ -204,18 +201,6 @@ export default function MapClient({ userId, userEmail }: Props) {
   return (
     <div style={{ fontFamily: "'Source Sans 3', sans-serif", background: '#FAFAF7', minHeight: '100vh', color: '#2D2A26' }}>
 
-      <NavBar
-        displayName={displayName}
-        userInitial={userInitial}
-        overdueCount={overdueActivityIds.length}
-        hopperCount={hopperCount}
-        calendarConnected={calendarConnected}
-        onOrganize={() => setOrganizeOpen(true)}
-        onNewValue={() => setModal({ type: 'newValue' })}
-        onNewActivity={() => setModal({ type: 'newActivity' })}
-        onNewOutcome={() => setModal({ type: 'newOutcome' })}
-        onNewDomain={() => setModal({ type: 'newDomain' })}
-      />
 
       {/* Map mode toggle */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 16px 0' }}>
@@ -459,14 +444,6 @@ export default function MapClient({ userId, userEmail }: Props) {
         />
       )}
 
-      {organizeOpen && (
-        <OrganizeWeekModal
-          onClose={() => { setOrganizeOpen(false); fetchAll() }}
-          values={values}
-          domains={domains}
-          activities={activities}
-        />
-      )}
 
       {referenceOpen && (
         <div

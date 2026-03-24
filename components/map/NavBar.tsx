@@ -75,6 +75,7 @@ export default function NavBar({ displayName, userInitial, overdueCount, hopperC
             onClick={() => {
               if (m.name === 'Organize') onOrganize()
               else if (m.name === 'Today') router.push('/today')
+              else if (m.name === 'Review') router.push('/review')
               else setComingSoon(m)
             }}
             style={{

@@ -5,7 +5,7 @@ import { BigOutcome, UserValue, LifeDomain, Activity, ValueLink } from '@/lib/ty
 interface Props {
   outcome: BigOutcome | null
   values: UserValue[]
-  domains: LifeDomain[]
+  domains?: LifeDomain[]
   activities: Activity[]
   onSave: (data: Record<string, unknown>) => Promise<void>
   onDelete: (() => Promise<void>) | null
@@ -21,7 +21,6 @@ export default function EditBigOutcomeModal({ outcome, values, domains, activiti
   const [description, setDescription] = useState(outcome?.description ?? '')
   const [status, setStatus] = useState(outcome?.status ?? 'aspirational')
   const [targetDate, setTargetDate] = useState(outcome?.target_date ?? '')
-  const [lifeDomainId, setLifeDomainId] = useState('')
   const [completionNote, setCompletionNote] = useState(outcome?.completion_note ?? '')
   const [abandonmentReason, setAbandonmentReason] = useState(outcome?.abandonment_reason ?? '')
   const [valueLinks, setValueLinks] = useState<ValueLink[]>(outcome?.value_links ?? [])
@@ -44,7 +43,6 @@ export default function EditBigOutcomeModal({ outcome, values, domains, activiti
     setSaving(true)
     await onSave({
       name: name.trim(), description: description || null, status, target_date: targetDate || null,
-      life_domain_id: lifeDomainId || null,
       completion_note: status === 'achieved' ? completionNote || null : null,
       abandonment_reason: status === 'abandoned' ? abandonmentReason : null,
       value_links: valueLinks.map(l => ({ value_id: l.value_id, contribution_strength: l.contribution_strength })),
@@ -80,14 +78,6 @@ export default function EditBigOutcomeModal({ outcome, values, domains, activiti
             <label style={labelStyle}>Target Date</label>
             <input type="date" style={inputStyle} value={targetDate} onChange={e => setTargetDate(e.target.value)} />
           </div>
-        </div>
-
-        <div style={fieldStyle}>
-          <label style={labelStyle}>Life Domain</label>
-          <select style={{ ...inputStyle, background: '#FFF' }} value={lifeDomainId} onChange={e => setLifeDomainId(e.target.value)}>
-            <option value="">None</option>
-            {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
         </div>
 
         {status === 'achieved' && (

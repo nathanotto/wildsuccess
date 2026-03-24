@@ -983,7 +983,13 @@ export default function TodayPage({ displayName }: Props) {
       setItems(prev => prev.map(i => {
         if (i.id !== id) return i
         const { item_notes, ...serverFields } = data.item
-        return { ...i, ...serverFields, item_notes: item_notes ?? i.item_notes }
+        return {
+          ...i,
+          ...serverFields,
+          scheduled_time: serverFields.scheduled_time ?? i.scheduled_time,
+          scheduled_end_time: serverFields.scheduled_end_time ?? i.scheduled_end_time,
+          item_notes: item_notes ?? i.item_notes,
+        }
       }))
     }
   }
@@ -1286,17 +1292,6 @@ export default function TodayPage({ displayName }: Props) {
 
   return (
     <div style={{ background: '#FAFAF7', minHeight: '100vh' }}>
-      {/* Nav */}
-      <div style={{
-        padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 12,
-        borderBottom: '1px solid #F0EDE6', background: '#FFFFFF', position: 'sticky', top: 0, zIndex: 10,
-      }}>
-        <button onClick={() => router.push('/map')} style={{
-          fontSize: 14, fontWeight: 700, color: '#C4725A', background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-        }}>Wild Success</button>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: '#8A8578' }}>{displayName}</span>
-      </div>
 
       <div style={pageStyle}>
         {focusItem ? (

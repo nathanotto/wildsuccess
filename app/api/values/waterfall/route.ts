@@ -13,7 +13,7 @@ export async function GET() {
   const twoWeeksAgo   = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]
   const oneWeekAgo    = new Date(Date.now() - 7  * 86400000).toISOString().split('T')[0]
 
-  const [valuesRes, activityLinksRes, taskLinksRes, completionsRes] = await Promise.all([
+  const [valuesRes, activityLinksRes, taskLinksRes, completionsRes, spansRes, spanLinksRes] = await Promise.all([
     supabase.from('user_values').select('*').eq('user_id', user.id).eq('is_active', true).order('sort_order'),
     supabase.from('activity_value_links').select('value_id, contribution_strength, activity_id').eq('user_id', user.id),
     supabase.from('task_suggestion_value_links').select('value_id, contribution_strength, task_suggestion_id').eq('user_id', user.id),
@@ -22,12 +22,21 @@ export async function GET() {
       .eq('user_id', user.id)
       .eq('event_type', 'completed')
       .gte('event_date', threeWeeksAgo),
+    supabase.from('day_spans')
+      .select('id, start_date, end_date')
+      .eq('user_id', user.id)
+      .gte('end_date', threeWeeksAgo),
+    supabase.from('day_span_value_links')
+      .select('day_span_id, value_id, contribution_strength')
+      .eq('user_id', user.id),
   ])
 
   const values = valuesRes.data ?? []
   const activityLinks = activityLinksRes.data ?? []
   const taskLinks = taskLinksRes.data ?? []
   const completions = completionsRes.data ?? []
+  const spans = spansRes.data ?? []
+  const spanLinks = spanLinksRes.data ?? []
 
   const strengthWeight = (s: string) => s === 'strong' ? 1.0 : s === 'moderate' ? 0.6 : 0.3
 
@@ -61,6 +70,40 @@ export async function GET() {
         effortRecent[value_id] = (effortRecent[value_id] ?? 0) + weight
       } else if (c.event_date >= twoWeeksAgo) {
         effortMid[value_id] = (effortMid[value_id] ?? 0) + weight
+      }
+    }
+  }
+
+  // Source 2: Day span coverage — each day under a span counts as one effort unit per linked value
+  const spanToLinks: Record<string, { value_id: string; weight: number }[]> = {}
+  for (const sl of spanLinks) {
+    if (!spanToLinks[sl.day_span_id]) spanToLinks[sl.day_span_id] = []
+    spanToLinks[sl.day_span_id].push({ value_id: sl.value_id, weight: strengthWeight(sl.contribution_strength) })
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+  for (const span of spans) {
+    const links = spanToLinks[span.id]
+    if (!links || links.length === 0) continue
+    // Count days within the 3-week window
+    const windowStart = threeWeeksAgo
+    const clampedStart = span.start_date > windowStart ? span.start_date : windowStart
+    const clampedEnd = span.end_date < today ? span.end_date : today
+    if (clampedStart > clampedEnd) continue
+    const startMs = new Date(clampedStart).getTime()
+    const endMs = new Date(clampedEnd).getTime()
+    const dayCount = Math.floor((endMs - startMs) / 86400000) + 1
+    for (const { value_id, weight } of links) {
+      const contribution = dayCount * weight
+      effortTotal[value_id] = (effortTotal[value_id] ?? 0) + contribution
+      // Split into recent/mid windows for trend
+      for (let i = 0; i < dayCount; i++) {
+        const dayDate = new Date(startMs + i * 86400000).toISOString().split('T')[0]
+        if (dayDate >= oneWeekAgo) {
+          effortRecent[value_id] = (effortRecent[value_id] ?? 0) + weight
+        } else if (dayDate >= twoWeeksAgo) {
+          effortMid[value_id] = (effortMid[value_id] ?? 0) + weight
+        }
       }
     }
   }

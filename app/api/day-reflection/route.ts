@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { reflection_date, mood_energy, journal_note, plan_status = 'open' } = body
+  const { reflection_date, mood_energy, journal_note, wins, friction, plan_status = 'open' } = body
 
   if (!reflection_date) {
     return NextResponse.json({ error: 'reflection_date is required' }, { status: 400 })
@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
     reflection_date,
     mood_energy: mood_energy ?? null,
     journal_note: journal_note ?? null,
+    wins: wins ?? null,
+    friction: friction ?? null,
     plan_status,
   }
   if (plan_status === 'committed') update.committed_at = now

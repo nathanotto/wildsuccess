@@ -110,6 +110,26 @@ interface CalEventLocal {
   } | null
 }
 
+interface DaySpanLocal {
+  id: string
+  name: string
+  start_date: string
+  end_date: string
+  person_id: string | null
+  person?: { id: string; name: string } | null
+  note: string | null
+  color: string | null
+  value_links: { id: string; value_id: string; contribution_strength: 'weak' | 'moderate' | 'strong' }[]
+}
+
+interface KnownPersonLocal {
+  id: string
+  name: string
+}
+
+const SPAN_COLORS = ['#E8E4DC', '#C4725A', '#4B6A82', '#7A6BAF', '#5A9E6F', '#B8896E', '#8A857D', '#BA7517']
+const DEFAULT_SPAN_COLOR = '#E8E4DC'
+
 interface ClassifyState {
   event: CalEventLocal
   classification: 'info' | 'fixed_commitment' | 'flexible_commitment'
@@ -121,10 +141,11 @@ interface ClassifyState {
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface Props {
-  onClose: () => void
+  onClose?: () => void
   values: UserValue[]
   domains: LifeDomain[]
-  activities: Activity[]
+  activities?: Activity[]
+  mode?: 'modal' | 'page'
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -184,7 +205,8 @@ const SOURCE_ICONS: Record<string, string> = {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
+export default function OrganizeWeekModal({ onClose, values, domains, mode = 'page' }: Props) {
+  const isPage = mode === 'page'
   // Core state
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()))
   const [blockTypes, setBlockTypes] = useState<BlockType[]>([])
@@ -195,8 +217,14 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   const [floatingItems, setFloatingItems] = useState<Record<string, FloatingActionItem[]>>({})
   const [calEvents, setCalEvents] = useState<CalEventLocal[]>([])
   const [calConnected, setCalConnected] = useState(false)
+  const [daySpans, setDaySpans] = useState<DaySpanLocal[]>([])
+  const [knownPeople, setKnownPeople] = useState<KnownPersonLocal[]>([])
+  const [editingSpan, setEditingSpan] = useState<DaySpanLocal | 'new' | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+
+  // Inline block label edit
+  const [editingBlockLabel, setEditingBlockLabel] = useState<{ blockId: string; date: string; label: string } | null>(null)
 
   // UI state
   const [paletteShrunk, setPaletteShrunk] = useState(false)
@@ -305,6 +333,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         outcomesRes,
         activitiesRes,
         coverageRes,
+        spansRes,
+        peopleRes,
       ] = await Promise.all([
         fetch('/api/block-types'),
         fetch(`/api/time-blocks?range_start=${rangeStart}&range_end=${rangeEnd}`),
@@ -316,9 +346,11 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         fetch('/api/big-outcomes'),
         fetch('/api/activities'),
         fetch('/api/action-items/coverage'),
+        fetch(`/api/day-spans?week_start=${rangeStart}&week_end=${rangeEnd}`),
+        fetch('/api/known-people'),
       ])
 
-      const [btData, tbData, siData, hopperData, dismissedData, calData, calSettings, outcomesData, activitiesData, coverageData] = await Promise.all([
+      const [btData, tbData, siData, hopperData, dismissedData, calData, calSettings, outcomesData, activitiesData, coverageData, spansData, peopleData] = await Promise.all([
         btRes.ok ? btRes.json() : [],
         tbRes.ok ? tbRes.json() : [],
         siRes.ok ? siRes.json() : [],
@@ -329,10 +361,16 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         outcomesRes.ok ? outcomesRes.json() : [],
         activitiesRes.ok ? activitiesRes.json() : [],
         coverageRes.ok ? coverageRes.json() : [],
+        spansRes.ok ? spansRes.json() : [],
+        peopleRes.ok ? peopleRes.json() : [],
       ])
 
       const bts: BlockType[] = Array.isArray(btData) ? btData : []
       setBlockTypes(bts)
+
+      // Day spans
+      setDaySpans(Array.isArray(spansData) ? spansData : [])
+      setKnownPeople(Array.isArray(peopleData) ? peopleData : [])
       setEditingBlockTypes(bts)
 
       const outcomesArr: { id: string; name: string; status: string }[] = Array.isArray(outcomesData) ? outcomesData : []
@@ -381,7 +419,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           start_time: block.start_time ?? minutesToTime(GRID_START * 60),
           end_time: block.end_time ?? minutesToTime(GRID_START * 60 + 60),
           duration_minutes: duration,
-          is_hard: block.is_hard,
+          is_hard: block.is_hard || block.source === 'calendar_import',
           block_type_id: (block as TimeBlockLocal & { block_type_id?: string | null }).block_type_id ?? null,
           block_type: bts.find(bt => bt.id === ((block as TimeBlockLocal & { block_type_id?: string | null }).block_type_id ?? '')) ?? undefined,
           source: block.source,
@@ -632,7 +670,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     if (!blockType) return
 
     const snapTime = getTimeFromClientY(clientY)
-    const duration = blockType.name === 'Focus' ? focusMinutes : blockType.default_duration_minutes
+    const duration = blockType.name === 'Desk' ? focusMinutes : blockType.default_duration_minutes
     const endTime = minutesToTime(timeToMinutes(snapTime) + duration)
 
     try {
@@ -1090,6 +1128,21 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
   }
 
   // ── Delete block ────────────────────────────────────────────────────────────
+  async function renameBlock(blockId: string, ds: string, newLabel: string) {
+    const trimmed = newLabel.trim()
+    if (!trimmed) return
+    setDayBlocks(prev => ({
+      ...prev,
+      [ds]: (prev[ds] ?? []).map(b => b.id === blockId ? { ...b, label: trimmed } : b),
+    }))
+    setEditingBlockLabel(null)
+    await fetch(`/api/time-blocks/${blockId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: trimmed }),
+    })
+  }
+
   async function deleteBlock(blockId: string, ds: string) {
     try {
       // Find block before removing it so we can restore hopper items
@@ -1550,6 +1603,43 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
     })
   }
 
+  // ── Day span CRUD ──────────────────────────────────────────────────────────
+  async function saveSpan(span: DaySpanLocal) {
+    const isNew = !span.id
+    const url = isNew ? '/api/day-spans' : `/api/day-spans/${span.id}`
+    const method = isNew ? 'POST' : 'PATCH'
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: span.name,
+        start_date: span.start_date,
+        end_date: span.end_date,
+        person_id: span.person_id || null,
+        color: span.color || null,
+        note: span.note || null,
+        value_links: span.value_links.map(vl => ({
+          value_id: vl.value_id,
+          contribution_strength: vl.contribution_strength,
+        })),
+      }),
+    })
+    if (!res.ok) return
+    const saved = await res.json()
+    if (isNew) {
+      setDaySpans(prev => [...prev, saved])
+    } else {
+      setDaySpans(prev => prev.map(s => s.id === saved.id ? saved : s))
+    }
+    setEditingSpan(null)
+  }
+
+  async function deleteSpan(spanId: string) {
+    await fetch(`/api/day-spans/${spanId}`, { method: 'DELETE' })
+    setDaySpans(prev => prev.filter(s => s.id !== spanId))
+    setEditingSpan(null)
+  }
+
   // ── Calendar classification ─────────────────────────────────────────────────
   async function saveClassification() {
     if (!classifying) return
@@ -1878,7 +1968,9 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
       }
     `}</style>
     <div
-      style={{
+      style={isPage ? {
+        fontFamily: '"Source Sans 3", "Source Sans Pro", sans-serif',
+      } : {
         position: 'fixed',
         inset: 0,
         zIndex: 999,
@@ -1889,10 +1981,17 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
         justifyContent: 'center',
         fontFamily: '"Source Sans 3", "Source Sans Pro", sans-serif',
       }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onClick={!isPage ? (e => { if (e.target === e.currentTarget && onClose) onClose() }) : undefined}
     >
       <div
-        style={{
+        style={isPage ? {
+          width: '100%',
+          height: 'calc(100vh - 41px)',
+          background: '#FAFAF7',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        } : {
           width: '97vw',
           height: '95vh',
           maxWidth: 1600,
@@ -1973,10 +2072,12 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
           {loading && (
             <span style={{ fontSize: 11, color: '#B5B0A8', marginRight: 8 }}>Loading…</span>
           )}
-          <button
-            onClick={onClose}
-            style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #E0DDD6', background: 'transparent', cursor: 'pointer', fontSize: 14, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >×</button>
+          {!isPage && onClose && (
+            <button
+              onClick={onClose}
+              style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #E0DDD6', background: 'transparent', cursor: 'pointer', fontSize: 14, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >×</button>
+          )}
         </div>
 
         {/* ── Block Type Palette ──────────────────────────────────────────── */}
@@ -1991,50 +2092,57 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
             flexShrink: 0,
             background: '#F7F5F0',
           }}>
-            {blockTypes.filter(bt => bt.is_active).map(bt => (
-              <div
-                key={bt.id}
-                draggable
-                onDragStart={e => {
-                  setDraggingBlockTypeId(bt.id)
-                  e.dataTransfer.effectAllowed = 'copy'
-                }}
-                onDragEnd={() => setDraggingBlockTypeId(null)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '5px 10px',
-                  borderRadius: 20,
-                  border: `1.5px solid ${bt.color}40`,
-                  borderLeft: `3px solid ${bt.color}`,
-                  background: '#FFFFFF',
-                  cursor: 'grab',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  color: '#2D2A26',
-                  userSelect: 'none',
-                  boxShadow: draggingBlockTypeId === bt.id ? `0 2px 8px ${bt.color}30` : undefined,
-                  opacity: draggingBlockTypeId && draggingBlockTypeId !== bt.id ? 0.5 : 1,
-                }}
-              >
-                {bt.icon && <span>{bt.icon}</span>}
-                <span>{bt.name}</span>
-                <span style={{ fontSize: 10, color: '#8A857D', marginLeft: 2 }}>
-                  {bt.name === 'Focus' ? `${focusMinutes}m` : `${bt.default_duration_minutes}m`}
-                </span>
-                <span style={{
-                  width: 12, height: 12, borderRadius: '50%',
-                  background: EC[bt.time_type],
-                  display: 'inline-block',
-                  flexShrink: 0,
-                }} title={EL[bt.time_type]} />
-              </div>
-            ))}
+            {(() => {
+              const active = blockTypes.filter(bt => bt.is_active)
+              const contextBlocks = active.filter(bt => bt.sort_order <= 2)
+              const protectionBlocks = active.filter(bt => bt.sort_order > 2)
+              const renderBt = (bt: BlockType) => (
+                <div
+                  key={bt.id}
+                  draggable
+                  onDragStart={e => {
+                    setDraggingBlockTypeId(bt.id)
+                    e.dataTransfer.effectAllowed = 'copy'
+                  }}
+                  onDragEnd={() => setDraggingBlockTypeId(null)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '5px 10px',
+                    borderRadius: 4,
+                    border: `1px solid ${bt.color}4D`,
+                    background: `${bt.color}26`,
+                    cursor: 'grab',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: '#2D2A26',
+                    userSelect: 'none',
+                    boxShadow: draggingBlockTypeId === bt.id ? `0 2px 8px ${bt.color}30` : undefined,
+                    opacity: draggingBlockTypeId && draggingBlockTypeId !== bt.id ? 0.5 : 1,
+                  }}
+                >
+                  {bt.icon && <span style={{ fontSize: 14 }}>{bt.icon}</span>}
+                  <span>{bt.name}</span>
+                  <span style={{ fontSize: 10, color: '#8A857D', marginLeft: 2 }}>
+                    {bt.name === 'Desk' ? `${focusMinutes}m` : `${bt.default_duration_minutes}m`}
+                  </span>
+                </div>
+              )
+              return (
+                <>
+                  {contextBlocks.map(renderBt)}
+                  {contextBlocks.length > 0 && protectionBlocks.length > 0 && (
+                    <div style={{ width: 1, height: 24, background: '#D5D0C8', flexShrink: 0, margin: '0 4px' }} />
+                  )}
+                  {protectionBlocks.map(renderBt)}
+                </>
+              )
+            })()}
             <div style={{ flex: 1 }} />
-            {blockTypes.find(bt => bt.name === 'Focus') && (
+            {blockTypes.find(bt => bt.name === 'Desk') && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 11, color: '#8A857D' }}>Focus:</span>
+                <span style={{ fontSize: 11, color: '#8A857D' }}>Desk:</span>
                 <select
                   value={focusMinutes}
                   onChange={e => setFocusMinutes(Number(e.target.value))}
@@ -2387,6 +2495,110 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
               })}
             </div>
 
+            {/* Day Spans area */}
+            {(() => {
+              const rangeStart = dateStr(weekStart)
+              const rangeEnd = dateStr(addDays(weekStart, 6))
+              const visibleSpans = daySpans.filter(
+                s => s.start_date <= rangeEnd && s.end_date >= rangeStart
+              )
+              const displaySpans = visibleSpans.slice(0, 3)
+              const extraCount = visibleSpans.length - 3
+
+              if (visibleSpans.length === 0 && !editingSpan) {
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', padding: '2px 16px 2px 48px', background: '#FAFAF7', borderBottom: '1px solid #F0EDE8' }}>
+                    <button
+                      onClick={() => setEditingSpan('new')}
+                      style={{ fontSize: 11, color: '#8A857D', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
+                    >+ Add span</button>
+                  </div>
+                )
+              }
+
+              return (
+                <div style={{ background: '#FAFAF7', borderBottom: '1px solid #F0EDE8', padding: '4px 0', position: 'relative' }}>
+                  {displaySpans.map(span => {
+                    const spanColor = span.color || DEFAULT_SPAN_COLOR
+                    // Compute which columns this span covers
+                    const clampedStart = span.start_date < rangeStart ? rangeStart : span.start_date
+                    const clampedEnd = span.end_date > rangeEnd ? rangeEnd : span.end_date
+                    // Map dates to column indices (0=Mon ... 6=Sun)
+                    const startCol = Math.max(0, Math.floor((new Date(clampedStart).getTime() - new Date(rangeStart).getTime()) / 86400000))
+                    const endCol = Math.min(6, Math.floor((new Date(clampedEnd).getTime() - new Date(rangeStart).getTime()) / 86400000))
+                    const colSpan = endCol - startCol + 1
+                    // Position as percentage of the 7-column area (offset by 48px hour label)
+                    const leftPct = (startCol / 7) * 100
+                    const widthPct = (colSpan / 7) * 100
+
+                    return (
+                      <div
+                        key={span.id}
+                        onClick={() => setEditingSpan(span)}
+                        style={{
+                          height: 24,
+                          marginLeft: 48,
+                          position: 'relative',
+                          marginBottom: 2,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{
+                          position: 'absolute',
+                          left: `${leftPct}%`,
+                          width: `${widthPct}%`,
+                          height: 24,
+                          background: `${spanColor}33`,
+                          borderLeft: `3px solid ${spanColor}`,
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '0 8px',
+                          overflow: 'hidden',
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = `${spanColor}4D`)}
+                        onMouseLeave={e => (e.currentTarget.style.background = `${spanColor}33`)}
+                        >
+                          <span style={{ fontSize: 12, color: '#2D2A26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {span.name}
+                            {span.person?.name && <span style={{ color: '#8A857D', marginLeft: 4 }}>· {span.person.name}</span>}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {extraCount > 0 && (
+                    <div style={{ marginLeft: 48, fontSize: 11, color: '#8A857D', padding: '0 8px 2px' }}>+{extraCount} more</div>
+                  )}
+                  <div style={{ marginLeft: 48, padding: '0 8px' }}>
+                    <button
+                      onClick={() => setEditingSpan('new')}
+                      style={{ fontSize: 11, color: '#8A857D', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
+                    >+ Add span</button>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Span Edit Popover */}
+            {editingSpan && (() => {
+              const isNew = editingSpan === 'new'
+              const rangeStart = dateStr(weekStart)
+              const rangeEnd = dateStr(addDays(weekStart, 6))
+              const initial: DaySpanLocal = isNew
+                ? { id: '', name: '', start_date: rangeStart, end_date: rangeEnd, person_id: null, note: null, color: null, value_links: [] }
+                : editingSpan
+              return <SpanEditPopover
+                span={initial}
+                values={values}
+                knownPeople={knownPeople}
+                onSave={saveSpan}
+                onDelete={isNew ? undefined : () => deleteSpan(initial.id)}
+                onCancel={() => setEditingSpan(null)}
+              />
+            })()}
+
             {/* Scrollable grid */}
             <div
               ref={gridScrollRef}
@@ -2454,7 +2666,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                     : draggingHopperItem
                       ? (draggingHopperItem.duration_min > 0 ? draggingHopperItem.duration_min : 60)
                       : (placeholderBt
-                          ? (placeholderBt.name === 'Focus' ? focusMinutes : placeholderBt.default_duration_minutes)
+                          ? (placeholderBt.name === 'Desk' ? focusMinutes : placeholderBt.default_duration_minutes)
                           : 60)
 
                   return (
@@ -2558,27 +2770,26 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                           return (
                             <div
                               key={calEv.id}
-                              onClick={() => openClassifyDialog(calEv)}
                               style={{
                                 position: 'absolute',
                                 left: 0,
                                 right: 0,
                                 zIndex: 0,
+                                pointerEvents: 'none',
                                 top: blockTopPx(startT),
                                 height: blockHeightPx(dur),
                                 background: '#4B82AF08',
                                 borderLeft: '2px solid #4B82AF20',
-                                cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'flex-start',
                                 justifyContent: 'space-between',
                                 overflow: 'hidden',
                               }}
                             >
-                              <span style={{ fontSize: 8, color: '#4B82AF80', padding: '2px 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                              <span onClick={() => openClassifyDialog(calEv)} style={{ fontSize: 8, color: '#4B82AF80', padding: '2px 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, pointerEvents: 'auto', cursor: 'pointer' }}>
                                 {calEv.display_label ?? calEv.title}
                               </span>
-                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#4B82AF60', padding: '1px 3px', lineHeight: 1, flexShrink: 0 }} title="Hide event">×</button>
+                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#4B82AF60', padding: '1px 3px', lineHeight: 1, flexShrink: 0, pointerEvents: 'auto' }} title="Hide event">×</button>
                             </div>
                           )
                         })
@@ -2594,13 +2805,12 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                           return (
                             <div
                               key={calEv.id}
-                              onClick={() => openClassifyDialog(calEv)}
                               style={{
                                 position: 'absolute',
                                 left: 2,
                                 right: 2,
-                                zIndex: 2,
-                                cursor: 'pointer',
+                                zIndex: 0,
+                                pointerEvents: 'none',
                                 top: blockTopPx(startT),
                                 height: blockHeightPx(dur),
                                 borderRadius: 6,
@@ -2613,15 +2823,15 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                                 overflow: 'hidden',
                               }}
                             >
-                              <span style={{ fontSize: 9, background: '#C4725A', color: 'white', borderRadius: 3, padding: '1px 4px', fontWeight: 700, flexShrink: 0, marginTop: 1 }}>?</span>
-                              <span style={{ fontSize: 9, color: '#2D2A26', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{calEv.title}</span>
-                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#C4725A80', padding: '0 2px', lineHeight: 1, flexShrink: 0, marginTop: 1 }} title="Hide event">×</button>
+                              <span onClick={() => openClassifyDialog(calEv)} style={{ fontSize: 9, background: '#C4725A', color: 'white', borderRadius: 3, padding: '1px 4px', fontWeight: 700, flexShrink: 0, marginTop: 1, pointerEvents: 'auto', cursor: 'pointer' }}>?</span>
+                              <span onClick={() => openClassifyDialog(calEv)} style={{ fontSize: 9, color: '#2D2A26', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, pointerEvents: 'auto', cursor: 'pointer' }}>{calEv.title}</span>
+                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#C4725A80', padding: '0 2px', lineHeight: 1, flexShrink: 0, marginTop: 1, pointerEvents: 'auto' }} title="Hide event">×</button>
                             </div>
                           )
                         })
                       }
 
-                      {/* Calendar event fixed_commitment — hard block, clickable to reclassify */}
+                      {/* Calendar event fixed_commitment — hard block, non-interactive container */}
                       {dayCalEvents
                         .filter(ev => ev.classification?.classification === 'fixed_commitment')
                         .map(calEv => {
@@ -2631,13 +2841,12 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                           return (
                             <div
                               key={calEv.id}
-                              onClick={() => openClassifyDialog(calEv)}
                               style={{
                                 position: 'absolute',
                                 left: 2,
                                 right: 2,
-                                zIndex: 1,
-                                cursor: 'pointer',
+                                zIndex: 0,
+                                pointerEvents: 'none',
                                 top: blockTopPx(startT),
                                 height: blockHeightPx(dur),
                                 borderRadius: 6,
@@ -2650,11 +2859,11 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                                 overflow: 'hidden',
                               }}
                             >
-                              <span style={{ fontSize: 8, color: '#9E6A46', flexShrink: 0 }}>🔒</span>
-                              <span style={{ fontSize: 9, color: '#9E6A46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                              <span onClick={() => openClassifyDialog(calEv)} style={{ fontSize: 8, color: '#9E6A46', flexShrink: 0, pointerEvents: 'auto', cursor: 'pointer' }}>🔒</span>
+                              <span onClick={() => openClassifyDialog(calEv)} style={{ fontSize: 9, color: '#9E6A46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, pointerEvents: 'auto', cursor: 'pointer' }}>
                                 {calEv.display_label ?? calEv.title}
                               </span>
-                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#9E6A4660', padding: '0 2px', lineHeight: 1, flexShrink: 0 }} title="Hide event">×</button>
+                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#9E6A4660', padding: '0 2px', lineHeight: 1, flexShrink: 0, pointerEvents: 'auto' }} title="Hide event">×</button>
                             </div>
                           )
                         })
@@ -2697,7 +2906,8 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                                 : (block.is_hard ? '#9E6A4610' : blockColor + '12'),
                               border: `1.5px solid ${isOver ? blockColor : blockColor + '40'}`,
                               overflow: 'hidden',
-                              zIndex: 1,
+                              zIndex: block.is_hard ? 0 : 1,
+                              pointerEvents: block.is_hard ? 'none' : undefined,
                               opacity: (draggingBlock?.block.id === block.id && !draggingBlock.isDuplicate) ? 0.4 : 1,
                               cursor: block.is_hard ? 'default' : 'grab',
                               outline: duplicateArmed === block.id ? `2px dashed ${blockColor}` : 'none',
@@ -2737,12 +2947,31 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                               gap: 4,
                               padding: '4px 6px',
                               borderBottom: block.items.length > 0 ? '1px solid #F0EDE8' : 'none',
+                              pointerEvents: block.is_hard ? 'auto' : undefined,
                             }}>
                               <div style={{ width: 3, height: 14, borderRadius: 2, background: blockColor, flexShrink: 0 }} />
-                              <span style={{ fontSize: 10, fontWeight: 600, color: '#2D2A26', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {block.block_type?.icon && <span style={{ marginRight: 3 }}>{block.block_type.icon}</span>}
-                                {block.label}
-                              </span>
+                              {editingBlockLabel?.blockId === block.id ? (
+                                <input
+                                  autoFocus
+                                  value={editingBlockLabel.label}
+                                  onChange={e => setEditingBlockLabel(prev => prev ? { ...prev, label: e.target.value } : null)}
+                                  onBlur={() => renameBlock(block.id, ds, editingBlockLabel.label)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') renameBlock(block.id, ds, editingBlockLabel.label)
+                                    if (e.key === 'Escape') setEditingBlockLabel(null)
+                                  }}
+                                  onClick={e => e.stopPropagation()}
+                                  style={{ fontSize: 10, fontWeight: 600, color: '#2D2A26', flex: 1, border: '1px solid #E0DDD6', borderRadius: 3, padding: '1px 4px', background: '#FFF', outline: 'none', minWidth: 0 }}
+                                />
+                              ) : (
+                                <span
+                                  onDoubleClick={e => { e.stopPropagation(); setEditingBlockLabel({ blockId: block.id, date: ds, label: block.label }) }}
+                                  style={{ fontSize: 10, fontWeight: 600, color: '#2D2A26', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
+                                >
+                                  {block.block_type?.icon && <span style={{ marginRight: 3 }}>{block.block_type.icon}</span>}
+                                  {block.label}
+                                </span>
+                              )}
                               <span style={{ fontSize: 9, color: '#8A857D', flexShrink: 0 }}>{formatTime12(block.start_time)}</span>
                               {block.is_hard && <span style={{ fontSize: 8, color: '#9E6A46' }}>🔒</span>}
                               <button
@@ -2855,7 +3084,12 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                       })}
 
                       {/* Floating schedule items (auto-placed, no time block) */}
-                      {(floatingItems[ds] ?? []).map(fi => {
+                      {(floatingItems[ds] ?? [])
+                        .filter(fi => {
+                          // Skip floating items whose time overlaps with an existing block's item
+                          return !blocks.some(b => b.items.some(bi => bi.id === fi.id))
+                        })
+                        .map(fi => {
                         const startMin = timeToMinutes(fi.scheduled_time)
                         const endMin = fi.scheduled_end_time ? timeToMinutes(fi.scheduled_end_time) : startMin + 45
                         const dur = endMin - startMin
@@ -2868,7 +3102,7 @@ export default function OrganizeWeekModal({ onClose, values, domains }: Props) {
                               height: blockHeightPx(dur),
                               left: 2,
                               right: 2,
-                              zIndex: 3,
+                              zIndex: 0,
                               borderRadius: 6,
                               border: `1.5px solid ${EC[fi.time_type] ?? '#B5B0A8'}80`,
                               background: `${EC[fi.time_type] ?? '#B5B0A8'}14`,
@@ -3579,6 +3813,201 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+})
+
+// ── SpanEditPopover ──────────────────────────────────────────────────────────
+const SpanEditPopover = memo(function SpanEditPopover({
+  span: initial,
+  values,
+  knownPeople,
+  onSave,
+  onDelete,
+  onCancel,
+}: {
+  span: DaySpanLocal
+  values: { id: string; name: string }[]
+  knownPeople: KnownPersonLocal[]
+  onSave: (span: DaySpanLocal) => void
+  onDelete?: () => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(initial.name)
+  const [startDate, setStartDate] = useState(initial.start_date)
+  const [endDate, setEndDate] = useState(initial.end_date)
+  const [personId, setPersonId] = useState(initial.person_id || '')
+  const [color, setColor] = useState(initial.color || '')
+  const [note, setNote] = useState(initial.note || '')
+  const [valueLinks, setValueLinks] = useState<{ value_id: string; contribution_strength: 'weak' | 'moderate' | 'strong' }[]>(
+    initial.value_links.map(vl => ({ value_id: vl.value_id, contribution_strength: vl.contribution_strength }))
+  )
+
+  function toggleValue(valueId: string) {
+    setValueLinks(prev => {
+      const existing = prev.find(vl => vl.value_id === valueId)
+      if (existing) return prev.filter(vl => vl.value_id !== valueId)
+      return [...prev, { value_id: valueId, contribution_strength: 'moderate' as const }]
+    })
+  }
+
+  function setStrength(valueId: string, strength: 'weak' | 'moderate' | 'strong') {
+    setValueLinks(prev => prev.map(vl => vl.value_id === valueId ? { ...vl, contribution_strength: strength } : vl))
+  }
+
+  function handleSave() {
+    if (!name.trim()) return
+    onSave({
+      ...initial,
+      name: name.trim(),
+      start_date: startDate,
+      end_date: endDate,
+      person_id: personId || null,
+      color: color || null,
+      note: note || null,
+      value_links: valueLinks.map(vl => ({ id: '', value_id: vl.value_id, contribution_strength: vl.contribution_strength })),
+    })
+  }
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: 0,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 100,
+      width: 320,
+      background: '#FAFAF7',
+      border: '1px solid #E0DDD6',
+      borderRadius: 4,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+      padding: 16,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+    }}>
+      <input
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Span name"
+        autoFocus
+        style={{ fontSize: 14, fontWeight: 600, border: '1px solid #E0DDD6', borderRadius: 4, padding: '6px 8px', background: '#FFF', color: '#2D2A26', width: '100%', boxSizing: 'border-box' }}
+      />
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 10, color: '#8A857D', display: 'block', marginBottom: 2 }}>Start</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+            style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 4, padding: '4px 6px', background: '#FFF', width: '100%', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 10, color: '#8A857D', display: 'block', marginBottom: 2 }}>End</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+            style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 4, padding: '4px 6px', background: '#FFF', width: '100%', boxSizing: 'border-box' }}
+          />
+        </div>
+      </div>
+
+      {knownPeople.length > 0 && (
+        <div>
+          <label style={{ fontSize: 10, color: '#8A857D', display: 'block', marginBottom: 2 }}>Person</label>
+          <select
+            value={personId}
+            onChange={e => setPersonId(e.target.value)}
+            style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 4, padding: '4px 6px', background: '#FFF', width: '100%', boxSizing: 'border-box' }}
+          >
+            <option value="">None</option>
+            {knownPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      )}
+
+      <div>
+        <label style={{ fontSize: 10, color: '#8A857D', display: 'block', marginBottom: 4 }}>Values</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {values.map(v => {
+            const link = valueLinks.find(vl => vl.value_id === v.id)
+            return (
+              <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={!!link}
+                  onChange={() => toggleValue(v.id)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ fontSize: 12, color: '#2D2A26', flex: 1 }}>{v.name}</span>
+                {link && (
+                  <select
+                    value={link.contribution_strength}
+                    onChange={e => setStrength(v.id, e.target.value as 'weak' | 'moderate' | 'strong')}
+                    style={{ fontSize: 10, border: '1px solid #E0DDD6', borderRadius: 3, padding: '1px 3px', background: '#FFF' }}
+                  >
+                    <option value="weak">Weak</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="strong">Strong</option>
+                  </select>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label style={{ fontSize: 10, color: '#8A857D', display: 'block', marginBottom: 4 }}>Color</label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {SPAN_COLORS.map(c => (
+            <div
+              key={c}
+              onClick={() => setColor(c)}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 3,
+                background: c,
+                cursor: 'pointer',
+                border: color === c ? '2px solid #2D2A26' : '1px solid #D5D0C8',
+                boxSizing: 'border-box',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label style={{ fontSize: 10, color: '#8A857D', display: 'block', marginBottom: 2 }}>Note</label>
+        <input
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="Optional note"
+          style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 4, padding: '4px 6px', background: '#FFF', width: '100%', boxSizing: 'border-box' }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            style={{ fontSize: 12, color: '#C4725A', background: 'none', border: '1px solid #C4725A40', borderRadius: 4, padding: '5px 12px', cursor: 'pointer', marginRight: 'auto' }}
+          >Delete</button>
+        )}
+        <button
+          onClick={onCancel}
+          style={{ fontSize: 12, color: '#8A857D', background: 'none', border: '1px solid #E0DDD6', borderRadius: 4, padding: '5px 12px', cursor: 'pointer' }}
+        >Cancel</button>
+        <button
+          onClick={handleSave}
+          disabled={!name.trim()}
+          style={{ fontSize: 12, color: '#FFF', background: name.trim() ? '#2D2A26' : '#B5B0A8', border: 'none', borderRadius: 4, padding: '5px 14px', cursor: name.trim() ? 'pointer' : 'default' }}
+        >Save</button>
       </div>
     </div>
   )

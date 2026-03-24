@@ -183,6 +183,8 @@ export interface DayReflection {
   reflection_date: string
   mood_energy: number | null
   journal_note: string | null
+  wins: string | null
+  friction: string | null
   plan_status: 'open' | 'committed' | 'closed'
   committed_at: string | null
   closed_at: string | null
@@ -375,6 +377,30 @@ export interface BlockType {
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface DaySpan {
+  id: string
+  user_id: string
+  name: string
+  start_date: string
+  end_date: string
+  person_id: string | null
+  note: string | null
+  color: string | null
+  created_at: string
+  updated_at: string
+  person?: { id: string; name: string } | null
+  value_links?: DaySpanValueLink[]
+}
+
+export interface DaySpanValueLink {
+  id: string
+  user_id: string
+  day_span_id: string
+  value_id: string
+  contribution_strength: 'weak' | 'moderate' | 'strong'
+  created_at: string
 }
 
 export interface FocusSettings {
