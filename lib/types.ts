@@ -538,6 +538,49 @@ export interface MissionValueLink {
   contribution_strength: 'strong' | 'moderate' | 'weak'
 }
 
+export interface Commitment {
+  id: string
+  coa_id: string
+  mission_id: string
+  user_id: string
+  description: string | null
+  deadline: string | null
+  status: 'active' | 'completed' | 'abandoned'
+  completed_at: string | null
+  completion_note: string | null
+  created_at: string
+  updated_at: string
+  // Joined
+  user_name?: string
+}
+
+export interface MissionInvitation {
+  id: string
+  mission_id: string
+  invited_by: string
+  email: string
+  role: 'collaborator' | 'observer'
+  status: 'pending' | 'accepted' | 'declined' | 'expired'
+  token: string
+  created_at: string
+  accepted_at: string | null
+  // Joined
+  inviter_name?: string
+}
+
+export interface AccessRequest {
+  id: string
+  user_id: string
+  status: 'pending' | 'approved' | 'denied'
+  note: string | null
+  resolved_by: string | null
+  requested_at: string
+  resolved_at: string | null
+  // Joined
+  user_name?: string
+  user_email?: string
+}
+
 export interface ActivitySpec {
   name: string
   description?: string

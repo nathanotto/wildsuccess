@@ -232,7 +232,15 @@ export default function SetupClient() {
       <div style={{ borderBottom: `1px solid ${BORDER}`, background: CARD, padding: '0 24px' }}>
         <div style={{ maxWidth: 640, margin: '0 auto', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: ACCENT }}>Wild Success</span>
-          <span style={{ fontSize: 12, color: MUTED }}>Setup · Step {step} of 3</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 12, color: MUTED }}>Setup · Step {step} of 3</span>
+            <button onClick={async () => {
+              const { createClient } = await import('@/lib/supabase/client')
+              const supabase = createClient()
+              await supabase.auth.signOut()
+              window.location.href = '/login'
+            }} style={{ fontSize: 11, color: MUTED, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Log out</button>
+          </div>
         </div>
       </div>
 

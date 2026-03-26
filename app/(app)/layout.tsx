@@ -9,16 +9,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('intake_status, display_name, preferred_name, full_name')
+    .select('intake_status, display_name, preferred_name, full_name, app_role')
     .eq('id', user.id)
     .single()
 
-  if (!profile || profile.intake_status === 'not_started') redirect('/setup')
+  const appRole = (profile as Record<string, unknown>)?.app_role as string ?? 'mission_collaborator'
 
-  const displayName = profile.display_name ?? profile.preferred_name ?? profile.full_name ?? user.email ?? ''
+  // Mission collaborators skip the intake/setup check — they only need /plan
+  // For full/admin users, only redirect to setup if intake is explicitly 'not_started'
+  if (appRole !== 'mission_collaborator' && profile?.intake_status === 'not_started') redirect('/setup')
+
+  const displayName = profile?.display_name ?? profile?.preferred_name ?? profile?.full_name ?? user.email ?? ''
 
   return (
-    <AppLayoutShell displayName={displayName}>
+    <AppLayoutShell displayName={displayName} appRole={appRole}>
       {children}
     </AppLayoutShell>
   )

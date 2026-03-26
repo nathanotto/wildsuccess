@@ -14,7 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       </head>
-      <body style={{ fontFamily: "'Source Sans 3', sans-serif", margin: 0, padding: 0 }}>
+      <body style={{ fontFamily: "'Source Sans 3', sans-serif", margin: 0, padding: 0, zoom: 1.2 }}>
         {children}
       </body>
     </html>

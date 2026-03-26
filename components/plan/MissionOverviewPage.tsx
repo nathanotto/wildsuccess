@@ -259,6 +259,12 @@ export default function MissionOverviewPage({ missionId }: Props) {
             <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={navLinkStyle}>
               See plan summary
             </button>
+            <button onClick={() => router.push(`/plan/${missionId}/commitments`)} style={navLinkStyle}>
+              Commitments
+            </button>
+            <button onClick={() => router.push(`/plan/${missionId}/invite`)} style={navLinkStyle}>
+              Invite collaborators
+            </button>
           </div>
         </div>
 

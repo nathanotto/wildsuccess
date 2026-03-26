@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   displayName: string
+  appRole?: string
   hopperCount?: number
   todayCount?: number
   overdueCount?: number
@@ -26,7 +27,7 @@ const COMING_SOON: Record<string, string> = {
   Spending: 'Review spending against your Financial Sufficiency threshold and budget commitments.',
 }
 
-export default function AppNavBar({ displayName, hopperCount = 0, todayCount = 0, overdueCount = 0, calendarConnected = false }: Props) {
+export default function AppNavBar({ displayName, appRole, hopperCount = 0, todayCount = 0, overdueCount = 0, calendarConnected = false }: Props) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -83,7 +84,10 @@ export default function AppNavBar({ displayName, hopperCount = 0, todayCount = 0
           onClick={() => router.push('/map')}
           style={{ fontSize: 14, fontWeight: 700, color: '#C4725A', marginRight: 10, cursor: 'pointer' }}
         >Wild Success</div>
-        {TABS.map(tab => {
+        {TABS.filter(tab => {
+          if (appRole === 'mission_collaborator') return tab.name === 'Plan'
+          return true
+        }).map(tab => {
           const active = isActive(tab.path)
           const badgeCount = tab.badgeKey ? badges[tab.badgeKey] ?? 0 : 0
           return (
@@ -119,7 +123,17 @@ export default function AppNavBar({ displayName, hopperCount = 0, todayCount = 0
         {overdueCount > 0 && (
           <span style={{ fontSize: 10, color: '#C4504A', fontWeight: 700, marginLeft: 4 }}>{overdueCount} overdue</span>
         )}
+        {appRole === 'admin' && (
+          <button onClick={() => router.push('/admin')}
+            style={{ fontSize: 10, color: '#C4725A', cursor: 'pointer', marginLeft: 4, background: 'none', border: 'none', fontWeight: 600 }}>
+            Admin
+          </button>
+        )}
         <div style={{ flex: 1 }} />
+        <button onClick={() => router.push('/settings')}
+          style={{ fontSize: 10, color: '#8A8578', cursor: 'pointer', marginRight: 6, background: 'none', border: 'none' }}>
+          Settings
+        </button>
         <button onClick={handleLogout}
           style={{ fontSize: 10, color: '#8A8578', cursor: 'pointer', marginRight: 6, background: 'none', border: 'none' }}>
           Log out
