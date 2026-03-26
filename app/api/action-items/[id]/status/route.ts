@@ -66,6 +66,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     update.committed_at = null
   }
 
+  if (status === 'rescheduled') {
+    // Clear scheduling fields so the old time_block becomes orphan-safe
+    // and delete the old time_block to prevent orphan reconciliation from creating duplicates
+    if (current.time_block_id) {
+      await supabase.from('time_blocks').delete().eq('id', current.time_block_id)
+    }
+    update.scheduled_time = null
+    update.scheduled_end_time = null
+    update.time_block_id = null
+    // Move back to candidate so it lands in the hopper
+    update.status = 'candidate'
+    update.committed_date = null
+    update.committed_at = null
+  }
+
   if (status === 'dismissed' && current.task_suggestion_id) {
     // Increment consecutive_dismissals on the task_suggestion
     await supabase.rpc('increment_field', {

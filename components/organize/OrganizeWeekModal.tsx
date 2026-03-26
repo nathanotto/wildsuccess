@@ -1854,28 +1854,31 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   const suggestedHopper = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
 
-    // Build coverage map from DB action_items
+    // Build set of activity_ids already scheduled this week (direct check)
+    const scheduledThisWeek = new Set<string>()
+    const ws = weekStart; const we = addDays(ws, 7)
+    for (const { activity_id, scheduled_date } of scheduleCoverage) {
+      const d = new Date(scheduled_date + 'T00:00:00')
+      if (d >= ws && d < we) scheduledThisWeek.add(activity_id)
+    }
+    for (const [, blocks] of Object.entries(dayBlocks)) {
+      for (const block of blocks) {
+        for (const item of block.items) {
+          if (item.activity_id) scheduledThisWeek.add(item.activity_id)
+        }
+      }
+    }
+    for (const [, fis] of Object.entries(floatingItems)) {
+      for (const fi of fis) {
+        if (fi.activity_id) scheduledThisWeek.add(fi.activity_id)
+      }
+    }
+
+    // Build coverage map for cadence window check
     const coverageMap: Record<string, Date[]> = {}
     for (const { activity_id, scheduled_date } of scheduleCoverage) {
       if (!coverageMap[activity_id]) coverageMap[activity_id] = []
       coverageMap[activity_id].push(new Date(scheduled_date + 'T00:00:00'))
-    }
-    // Also include action_items loaded for the current week (in dayBlocks / floatingItems)
-    for (const blocks of Object.values(dayBlocks)) {
-      for (const block of blocks) {
-        for (const item of block.items) {
-          if (!item.activity_id) continue
-          if (!coverageMap[item.activity_id]) coverageMap[item.activity_id] = []
-          coverageMap[item.activity_id].push(new Date())
-        }
-      }
-    }
-    for (const items of Object.values(floatingItems)) {
-      for (const fi of items) {
-        if (!fi.activity_id) continue
-        if (!coverageMap[fi.activity_id]) coverageMap[fi.activity_id] = []
-        coverageMap[fi.activity_id].push(new Date())
-      }
     }
 
     // Activities already in the hopper (as real items) shouldn't appear in Suggested
@@ -1885,6 +1888,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       .filter(a => a.frequency && CADENCE_DAYS[a.frequency])
       .filter(a => !hopperActivityIds.has(a.id))
       .filter(a => !dismissedVirtualIds.has(a.id))
+      // Primary: already scheduled this week — suppress
+      .filter(a => !scheduledThisWeek.has(a.id))
+      // Secondary: cadence window
       .filter(a => {
         const cadenceDays = CADENCE_DAYS[a.frequency!]
         const windowMs = cadenceDays * 24 * 60 * 60 * 1000

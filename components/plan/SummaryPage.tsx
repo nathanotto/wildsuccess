@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { Factor, COA, COADependency, COAResourceNeed, MissionLogEntry, Mission, MissionValueLink, FactorKind } from '@/lib/types'
 
 const HORIZONS: { key: COA['time_horizon']; label: string; color: string }[] = [
@@ -19,6 +19,8 @@ interface Props {
 
 export default function SummaryPage({ missionId }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isPrint = searchParams.get('print') === 'true'
   const [mission, setMission] = useState<Mission | null>(null)
   const [allMissions, setAllMissions] = useState<Mission[]>([])
   const [coas, setCoas] = useState<COA[]>([])
@@ -150,6 +152,148 @@ export default function SummaryPage({ missionId }: Props) {
     setExpandedFactors(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
+  const ALL_FACTOR_KINDS: { kind: FactorKind; label: string }[] = [
+    { kind: 'driver', label: 'Drivers' },
+    { kind: 'constraint', label: 'Constraints' },
+    { kind: 'fact', label: 'Facts' },
+    { kind: 'assumption', label: 'Assumptions' },
+  ]
+
+  // ============ PRINT VIEW ============
+  if (isPrint) {
+    return (
+      <>
+        <style>{`
+          @media print {
+            .no-print { display: none !important; }
+            body { font-size: 11px; }
+          }
+        `}</style>
+        <div style={{ padding: '16px 24px', maxWidth: 700, margin: '0 auto', fontFamily: 'inherit', fontSize: 12, color: '#2D2A26', lineHeight: 1.5 }}>
+          <div className="no-print" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => window.print()} style={{ padding: '4px 12px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Print</button>
+            <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={{ padding: '4px 12px', background: '#F8F7F4', border: '1px solid #E8E4DC', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>Back to summary</button>
+          </div>
+
+          <h1 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>{mission.name}</h1>
+          {mission.description && <p style={{ fontSize: 11, margin: '0 0 8px', color: '#444' }}>{mission.description}</p>}
+          <div style={{ fontSize: 9, color: '#888', marginBottom: 12 }}>
+            {mission.status} · {allLinked.size}/{factors.filter(f => f.status === 'active').length} factors accounted for
+            {allRes.length > 0 && <> · {metRes.length}/{allRes.length} resources met</>}
+          </div>
+
+          {/* Intended results */}
+          {successFactors.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <h2 style={{ fontSize: 12, fontWeight: 700, margin: '0 0 4px', color: '#C4725A' }}>Intended Results</h2>
+              {successFactors.map(f => (
+                <div key={f.id} style={{ paddingLeft: 10, borderLeft: '2px solid #C4725A40', marginBottom: 2, fontSize: 11 }}>{f.name}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Intended actions by horizon */}
+          <h2 style={{ fontSize: 12, fontWeight: 700, margin: '0 0 6px' }}>Intended Actions</h2>
+          {HORIZONS.map(h => {
+            const sectionCoas = coas.filter(c => c.time_horizon === h.key).sort((a, b) => a.sort_order - b.sort_order)
+            if (sectionCoas.length === 0) return null
+            return (
+              <div key={h.key} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#666', marginBottom: 3 }}>{h.label}</div>
+                {sectionCoas.map(c => {
+                  const coaDeps = dependencies.filter(d => d.coa_id === c.id)
+                  const coaRes = resources[c.id] ?? []
+                  const coaLinks = coaFactorLinks[c.id] ?? []
+
+                  const linkedByKind: Record<string, Factor[]> = {}
+                  coaLinks.forEach(l => {
+                    const f = factorMap.get(l.factor_id)
+                    if (f && f.kind !== 'success') {
+                      if (!linkedByKind[f.kind]) linkedByKind[f.kind] = []
+                      linkedByKind[f.kind].push(f)
+                    }
+                  })
+
+                  return (
+                    <div key={c.id} style={{ marginBottom: 6, paddingLeft: 8, borderLeft: '1px solid #ddd' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600 }}>
+                        {c.action}{c.outcome ? <span style={{ fontWeight: 400, color: '#666' }}> IOT {c.outcome}</span> : ''}
+                        <span style={{ fontWeight: 400, color: '#999', marginLeft: 6, fontSize: 9 }}>{c.status}</span>
+                      </div>
+
+                      {coaDeps.length > 0 && (
+                        <div style={{ fontSize: 9, color: '#888', paddingLeft: 8 }}>
+                          {coaDeps.map(d => <div key={d.id}>After: &quot;{d.depends_on_action}&quot; ({d.reason})</div>)}
+                        </div>
+                      )}
+
+                      {coaRes.length > 0 && (
+                        <div style={{ fontSize: 9, color: '#888', paddingLeft: 8 }}>
+                          Resources: {coaRes.map(r => `${r.status === 'met' ? '✓' : '○'} ${r.description}`).join('; ')}
+                        </div>
+                      )}
+
+                      {/* Factors — always expanded, two columns */}
+                      {Object.keys(linkedByKind).length > 0 && (
+                        <div style={{ paddingLeft: 8, marginTop: 2, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 12px', fontSize: 9, color: '#444' }}>
+                          {ALL_FACTOR_KINDS.map(fk => {
+                            const kf = linkedByKind[fk.kind]
+                            if (!kf?.length) return null
+                            return (
+                              <div key={fk.kind} style={{ marginBottom: 2 }}>
+                                <span style={{ fontWeight: 600, color: '#666' }}>{fk.label}:</span>
+                                {kf.map(f => (
+                                  <div key={f.id} style={{ paddingLeft: 6, color: f.status === 'resolved' ? '#aaa' : '#444', textDecoration: f.status === 'resolved' ? 'line-through' : 'none' }}>
+                                    {f.name}
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {c.has_sub_mission && c.sub_mission_id && (
+                        <div style={{ fontSize: 9, color: '#4B82AF', paddingLeft: 8 }}>Sub-mission: {allMissions.find(m => m.id === c.sub_mission_id)?.name ?? c.sub_mission_id}</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+
+          {/* Unaccounted */}
+          {unaccounted.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <h3 style={{ fontSize: 10, fontWeight: 700, color: '#C4504A', margin: '0 0 2px' }}>Unaccounted Factors ({unaccounted.length})</h3>
+              {unaccounted.map(f => <div key={f.id} style={{ fontSize: 9, paddingLeft: 8 }}>{f.kind} — {f.name}</div>)}
+            </div>
+          )}
+
+          {/* Resolved */}
+          {resolvedFactors.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <h3 style={{ fontSize: 10, fontWeight: 700, color: '#5A9E6F', margin: '0 0 2px' }}>Resolved Factors</h3>
+              {resolvedFactors.map(f => <div key={f.id} style={{ fontSize: 9, paddingLeft: 8, color: '#888' }}>({f.kind}) {f.name}{f.resolution_note ? ` — ${f.resolution_note}` : ''}</div>)}
+            </div>
+          )}
+
+          {/* Child missions */}
+          {childMissions.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <h3 style={{ fontSize: 10, fontWeight: 700, margin: '0 0 2px' }}>Child Missions</h3>
+              {childMissions.map(cm => (
+                <div key={cm.id} style={{ fontSize: 9, paddingLeft: 8 }}>{cm.name} ({cm.status}) — {cm.coa_count ?? 0} COAs, {cm.accounted_factor_count ?? 0}/{cm.factor_count ?? 0} factors</div>
+              ))}
+            </div>
+          )}
+        </div>
+      </>
+    )
+  }
+
+  // ============ INTERACTIVE VIEW ============
   return (
     <div style={{ padding: '24px 32px', maxWidth: 800, margin: '0 auto' }}>
       {/* Nav */}
@@ -157,6 +301,8 @@ export default function SummaryPage({ missionId }: Props) {
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Mission overview</span>
         <span>|</span>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Arrange plan</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/summary?print=true`)}>Print version</span>
         {ancestry.length > 0 && (
           <>
             <span>|</span>

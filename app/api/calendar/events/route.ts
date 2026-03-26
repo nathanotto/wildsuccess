@@ -30,6 +30,29 @@ export async function GET(req: NextRequest) {
 
   const classMap = new Map((classifications ?? []).map(c => [c.match_key, c]))
 
+  // Load existing action_items for the date range so we can suppress calendar events
+  // that already have a matching action_item (same name, same time slot)
+  let existingItems: { name: string; scheduled_time: string | null; committed_date: string | null }[] = []
+  if (start && end) {
+    const startDate = start.split('T')[0]
+    const endDate = end.split('T')[0]
+    const { data: items } = await supabase
+      .from('action_items')
+      .select('name, scheduled_time, committed_date')
+      .eq('user_id', user.id)
+      .gte('committed_date', startDate)
+      .lte('committed_date', endDate)
+      .not('status', 'in', '("rescheduled","dismissed","archived")')
+    existingItems = items ?? []
+  }
+
+  // Build a set of "date|time|name" keys for fast lookup
+  const existingKeys = new Set(
+    existingItems
+      .filter(i => i.scheduled_time && i.committed_date)
+      .map(i => `${i.committed_date}|${(i.scheduled_time ?? '').slice(0, 5)}|${i.name.trim().toLowerCase()}`)
+  )
+
   const enriched: Record<string, unknown>[] = []
   for (const ev of (events ?? [])) {
     const cls = classMap.get(ev.external_series_id ?? '') ?? classMap.get(ev.external_event_id) ?? null
@@ -45,6 +68,15 @@ export async function GET(req: NextRequest) {
       if (fp === cls.suppressed_fingerprint) continue  // unchanged: suppress
       enriched.push({ ...ev, classification: null })  // changed: reappear as provisional
       continue
+    }
+
+    // Suppress if an action_item with the same name and time already exists
+    if (!ev.is_all_day && ev.start_time) {
+      const evStart = new Date(ev.start_time)
+      const evDate = `${evStart.getFullYear()}-${String(evStart.getMonth() + 1).padStart(2, '0')}-${String(evStart.getDate()).padStart(2, '0')}`
+      const evTime = `${String(evStart.getHours()).padStart(2, '0')}:${String(evStart.getMinutes()).padStart(2, '0')}`
+      const evTitle = (ev.title ?? '').trim().toLowerCase()
+      if (existingKeys.has(`${evDate}|${evTime}|${evTitle}`)) continue
     }
 
     enriched.push({ ...ev, classification: cls })

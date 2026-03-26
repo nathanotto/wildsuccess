@@ -880,6 +880,12 @@ export default function TodayPage({ displayName }: Props) {
     .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
     .find(i => (i.scheduled_time ?? '') > nowTime) ?? null : null
 
+  // Next up for focus view — excludes the focused item, computed from live items
+  const focusNextUp = isToday && focusItemId ? items
+    .filter(i => i.scheduled_time && i.status !== 'completed' && i.status !== 'skipped' && i.id !== focusItemId)
+    .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
+    .find(i => (i.scheduled_time ?? '') > nowTime) ?? null : null
+
   // Filter logged items to only those whose created_at falls on the selected local date
   const filteredLoggedItems = loggedItems.filter(entry => {
     const localDate = toDateStr(new Date(entry.created_at))
@@ -904,19 +910,36 @@ export default function TodayPage({ displayName }: Props) {
     if (!suggestedData) return []
     const today = new Date(); today.setHours(0, 0, 0, 0)
 
-    // Build coverage map
+    // Current week boundaries (Mon–Sun)
+    const weekStartDate = new Date(suggestedData.weekStart + 'T00:00:00')
+    const weekEndDate = new Date(weekStartDate); weekEndDate.setDate(weekEndDate.getDate() + 7)
+
+    // Build set of activity_ids already scheduled this week (from coverage data)
+    const scheduledThisWeek = new Set<string>()
+    for (const { activity_id, committed_date } of suggestedData.coverage) {
+      const d = new Date(committed_date + 'T00:00:00')
+      if (d >= weekStartDate && d < weekEndDate) scheduledThisWeek.add(activity_id)
+    }
+
+    // Also check items in current view (today's committed/in_progress items)
+    for (const item of items) {
+      const aid = (item as ActionItemWithNotes & { activity_id?: string }).activity_id
+      if (!aid) continue
+      const cd = (item as ActionItemWithNotes & { committed_date?: string }).committed_date
+      if (cd) {
+        const d = new Date(cd + 'T00:00:00')
+        if (d >= weekStartDate && d < weekEndDate) scheduledThisWeek.add(aid)
+      } else {
+        // Item visible on today without committed_date — count as this week
+        scheduledThisWeek.add(aid)
+      }
+    }
+
+    // Build coverage map for cadence window check (for activities NOT caught by week check)
     const coverageMap: Record<string, Date[]> = {}
     for (const { activity_id, committed_date } of suggestedData.coverage) {
       if (!coverageMap[activity_id]) coverageMap[activity_id] = []
       coverageMap[activity_id].push(new Date(committed_date + 'T00:00:00'))
-    }
-
-    // Also count committed items in current view
-    for (const item of items) {
-      const aid = (item as ActionItemWithNotes & { activity_id?: string }).activity_id
-      if (!aid) continue
-      if (!coverageMap[aid]) coverageMap[aid] = []
-      coverageMap[aid].push(new Date())
     }
 
     // Activities already in the hopper shouldn't appear in Suggested
@@ -927,6 +950,9 @@ export default function TodayPage({ displayName }: Props) {
       .filter(a => a.frequency && CADENCE_DAYS[a.frequency])
       .filter(a => !hopperActivityIds.has(a.id))
       .filter(a => !dismissedSet.has(a.id) && !dismissedVirtualIds.has(a.id))
+      // Primary check: already scheduled this week — suppress
+      .filter(a => !scheduledThisWeek.has(a.id))
+      // Secondary check: cadence window (covers "done recently, don't suggest yet")
       .filter(a => {
         const cadenceDays = CADENCE_DAYS[a.frequency!]
         const windowMs = cadenceDays * 24 * 60 * 60 * 1000
@@ -964,6 +990,7 @@ export default function TodayPage({ displayName }: Props) {
     // Optimistic update — preserve all existing fields, only change status
     setItems(prev => {
       if (status === 'rescheduled') {
+        // Server converts to 'candidate' and clears schedule — remove from today list
         return prev.filter(i => i.id !== id)
       }
       return prev.map(i => {
@@ -1097,6 +1124,11 @@ export default function TodayPage({ displayName }: Props) {
   }
 
   async function handleDelete(id: string) {
+    const item = items.find(i => i.id === id)
+    // Delete associated time_block first to prevent orphan reconciliation
+    if (item?.time_block_id) {
+      await fetch(`/api/time-blocks/${item.time_block_id}`, { method: 'DELETE' })
+    }
     const res = await fetch(`/api/action-items/${id}`, { method: 'DELETE' })
     if (res.ok) {
       setItems(prev => prev.filter(i => i.id !== id))
@@ -1116,23 +1148,36 @@ export default function TodayPage({ displayName }: Props) {
     const item = items.find(i => i.id === id)
     const blockDate = item?.committed_date ?? selectedDate
 
-    // Create a time_block so OWM treats this as a normal, movable scheduled item
-    const tbRes = await fetch('/api/time-blocks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        block_date: blockDate,
-        label: item?.name ?? '',
-        start_time: time,
-        end_time: endTime,
-        time_type: item?.time_type ?? 'B',
-        source: 'manual',
-      }),
-    })
-    const timeBlock = tbRes.ok ? await tbRes.json() : null
+    // If item already has a time_block, update it; otherwise create a new one
+    let timeBlock: { id: string } | null = null
+    if (item?.time_block_id) {
+      const tbRes = await fetch(`/api/time-blocks/${item.time_block_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_time: time,
+          end_time: endTime,
+        }),
+      })
+      timeBlock = tbRes.ok ? { id: item.time_block_id } : null
+    } else {
+      const tbRes = await fetch('/api/time-blocks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          block_date: blockDate,
+          label: item?.name ?? '',
+          start_time: time,
+          end_time: endTime,
+          time_type: item?.time_type ?? 'B',
+          source: 'manual',
+        }),
+      })
+      timeBlock = tbRes.ok ? await tbRes.json() : null
+    }
 
-    // Update the action_item with scheduled_time and the new time_block_id
-    const update: Record<string, unknown> = { scheduled_time: time }
+    // Update the action_item with scheduled_time, time_block_id, and ensure status is committed
+    const update: Record<string, unknown> = { scheduled_time: time, status: 'committed' }
     if (endTime) update.scheduled_end_time = endTime
     if (timeBlock?.id) update.time_block_id = timeBlock.id
 
@@ -1285,14 +1330,12 @@ export default function TodayPage({ displayName }: Props) {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const pageStyle: React.CSSProperties = {
-    maxWidth: 480, margin: '0 auto', padding: '0 16px',
+    maxWidth: 480, padding: '0 20px', marginLeft: 40,
     fontFamily: '"Source Sans 3", "Source Sans Pro", sans-serif',
     fontSize: 14, color: '#2D2A26', background: '#FAFAF7', minHeight: '100vh',
   }
 
   return (
-    <div style={{ background: '#FAFAF7', minHeight: '100vh' }}>
-
       <div style={pageStyle}>
         {focusItem ? (
           <FocusView
@@ -1308,7 +1351,7 @@ export default function TodayPage({ displayName }: Props) {
             onDelete={handleDelete}
             onSchedule={handleSchedule}
             onUnschedule={handleUnschedule}
-            nextUp={nextUp}
+            nextUp={focusNextUp ?? listNextUp}
             isToday={isToday}
           />
         ) : (
@@ -1503,7 +1546,6 @@ export default function TodayPage({ displayName }: Props) {
           </>
         )}
       </div>
-    </div>
   )
 }
 
@@ -1692,13 +1734,18 @@ function renderScheduleItems(
     // Insert "now" line between past and future items (today only)
     if (isToday && !nowLineInserted && itemTime > nowTime) {
       nowLineInserted = true
+      const currentItem = items.find(it => {
+        const start = it.scheduled_time?.slice(0, 5) ?? ''
+        const end = it.scheduled_end_time?.slice(0, 5) ?? ''
+        return start <= nowTime && end > nowTime
+      })
       result.push(
         <div key="now-line" style={{
           fontSize: 12, color: '#C4725A', margin: '6px 0',
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
           <span style={{ height: 1, background: '#C4725A', flex: 1 }} />
-          <span>now {fmtTime(nowTime)}</span>
+          <span>{fmtTime(nowTime)}{currentItem ? ` ${currentItem.name}` : ''}</span>
           <span style={{ height: 1, background: '#C4725A', flex: 1 }} />
         </div>
       )
@@ -1718,13 +1765,18 @@ function renderScheduleItems(
 
   // If no future items were found and today, still might need the "now" line at end
   if (isToday && !nowLineInserted) {
+    const currentItem = items.find(it => {
+      const start = it.scheduled_time?.slice(0, 5) ?? ''
+      const end = it.scheduled_end_time?.slice(0, 5) ?? ''
+      return start <= nowTime && end > nowTime
+    })
     result.push(
       <div key="now-line" style={{
         fontSize: 12, color: '#C4725A', margin: '6px 0',
         display: 'flex', alignItems: 'center', gap: 6,
       }}>
         <span style={{ height: 1, background: '#C4725A', flex: 1 }} />
-        <span>now {fmtTime(nowTime)}</span>
+        <span>{fmtTime(nowTime)}{currentItem ? ` ${currentItem.name}` : ''}</span>
         <span style={{ height: 1, background: '#C4725A', flex: 1 }} />
       </div>
     )

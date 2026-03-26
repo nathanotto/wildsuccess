@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 import SummaryPage from '@/components/plan/SummaryPage'
 
 export default async function PlanSummaryPage({ params }: { params: Promise<{ missionId: string }> }) {
@@ -8,5 +9,9 @@ export default async function PlanSummaryPage({ params }: { params: Promise<{ mi
   if (!user) redirect('/login')
 
   const { missionId } = await params
-  return <SummaryPage missionId={missionId} />
+  return (
+    <Suspense fallback={<div style={{ padding: 40, color: '#8A8578', fontSize: 13 }}>Loading…</div>}>
+      <SummaryPage missionId={missionId} />
+    </Suspense>
+  )
 }
