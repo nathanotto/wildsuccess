@@ -137,9 +137,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
     subject_id: data.id,
   })
 
+  // Get author name for the response
+  const sbPost = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const { data: profile } = await sbPost.from('user_profiles').select('preferred_name, full_name').eq('id', user.id).single()
+
   return NextResponse.json({
     ...data, linked_factor_count: 0, aims_to_resolve_count: 0,
     has_sub_mission: false, sub_mission_id: null, big_outcome_name: null,
     resource_count: 0, resource_met_count: 0, dependency_count: 0,
+    author_name: profile?.preferred_name || profile?.full_name || 'You', is_own: true,
   }, { status: 201 })
 }
