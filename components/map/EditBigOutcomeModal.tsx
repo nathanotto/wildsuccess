@@ -9,6 +9,9 @@ interface Props {
   activities: Activity[]
   onSave: (data: Record<string, unknown>) => Promise<void>
   onDelete: (() => Promise<void>) | null
+  onPlanThis?: ((outcomeId: string) => void) | null
+  hasMission?: boolean
+  missionId?: string | null
   onClose: () => void
 }
 
@@ -16,7 +19,7 @@ const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 12px', bo
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#2D2A26', display: 'block', marginBottom: 6 }
 const fieldStyle: React.CSSProperties = { marginBottom: 16 }
 
-export default function EditBigOutcomeModal({ outcome, values, domains, activities, onSave, onDelete, onClose }: Props) {
+export default function EditBigOutcomeModal({ outcome, values, domains, activities, onSave, onDelete, onPlanThis, hasMission, missionId, onClose }: Props) {
   const [name, setName] = useState(outcome?.name ?? '')
   const [description, setDescription] = useState(outcome?.description ?? '')
   const [status, setStatus] = useState(outcome?.status ?? 'aspirational')
@@ -124,6 +127,24 @@ export default function EditBigOutcomeModal({ outcome, values, domains, activiti
               {linkedActivities.length === 0 ? <span style={{ fontSize: 11, color: '#C4BFB4' }}>None</span> :
                 linkedActivities.map(a => <span key={a.id} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#F8F7F4', border: '1px solid #E8E4DC', color: '#8A8578' }}>{a.name}</span>)}
             </div>
+          </div>
+        )}
+
+        {outcome && (
+          <div style={{ marginBottom: 16 }}>
+            {hasMission && missionId ? (
+              <a href={`/plan/${missionId}`} style={{ fontSize: 12, color: '#C4725A', fontWeight: 600, textDecoration: 'none' }}>
+                View Plan →
+              </a>
+            ) : !hasMission && onPlanThis ? (
+              <button
+                onClick={() => onPlanThis(outcome.id)}
+                style={{
+                  background: '#F8F7F4', border: '1px solid #C4725A40', borderRadius: 6,
+                  padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#C4725A', cursor: 'pointer',
+                }}
+              >Plan this</button>
+            ) : null}
           </div>
         )}
 

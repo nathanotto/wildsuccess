@@ -411,6 +411,133 @@ export interface FocusSettings {
   updated_at: string
 }
 
+// =============================================================================
+// Plan Module
+// =============================================================================
+
+export interface Mission {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  parent_coa_id: string | null
+  big_outcome_id: string | null
+  status: 'planning' | 'active' | 'completed' | 'abandoned'
+  is_public: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+  // Computed / joined
+  factor_count?: number
+  accounted_factor_count?: number
+  coa_count?: number
+  big_outcome_name?: string | null
+  parent_mission_id?: string | null
+  parent_mission_name?: string | null
+  parent_coa_name?: string | null
+}
+
+export type FactorKind = 'success' | 'driver' | 'constraint' | 'fact' | 'assumption'
+
+export interface Factor {
+  id: string
+  mission_id: string
+  user_id: string
+  kind: FactorKind
+  name: string
+  sort_order: number
+  status: 'active' | 'resolved'
+  resolution_note: string | null
+  resolved_at: string | null
+  resolved_by_coa_id: string | null
+  created_at: string
+  // Computed
+  link_count?: number
+}
+
+export interface COA {
+  id: string
+  mission_id: string
+  user_id: string
+  action: string
+  outcome: string | null
+  status: 'proposed' | 'committed' | 'in_progress' | 'completed' | 'abandoned'
+  time_horizon: 'unset' | 'now' | 'next' | 'later'
+  big_outcome_id: string | null
+  sort_order: number
+  created_at: string
+  updated_at: string
+  // Computed / joined
+  linked_factor_count?: number
+  aims_to_resolve_count?: number
+  has_sub_mission?: boolean
+  sub_mission_id?: string | null
+  big_outcome_name?: string | null
+  resource_count?: number
+  resource_met_count?: number
+  dependency_count?: number
+}
+
+export interface COAFactorLink {
+  id: string
+  coa_id: string
+  factor_id: string
+  relationship: 'accounts_for' | 'aims_to_resolve'
+  created_at: string
+}
+
+export interface COADependency {
+  id: string
+  coa_id: string
+  depends_on_coa_id: string
+  reason: string
+  is_hard: boolean
+  created_at: string
+  // Joined
+  depends_on_action?: string
+}
+
+export interface COAResourceNeed {
+  id: string
+  coa_id: string
+  description: string
+  kind: 'time' | 'money' | 'people' | 'materials' | 'access' | 'other'
+  quantity: number | null
+  unit: string | null
+  status: 'needed' | 'partially_met' | 'met'
+  status_note: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface MissionLogEntry {
+  id: string
+  mission_id: string
+  user_id: string
+  entry_type: string
+  subject_type: string | null
+  subject_id: string | null
+  description: string
+  created_at: string
+}
+
+export interface MissionParticipant {
+  id: string
+  mission_id: string
+  user_id: string
+  role: 'creator' | 'collaborator' | 'observer'
+  invited_at: string
+  accepted_at: string | null
+}
+
+export interface MissionValueLink {
+  id: string
+  mission_id: string
+  value_id: string
+  user_id: string
+  contribution_strength: 'strong' | 'moderate' | 'weak'
+}
+
 export interface ActivitySpec {
   name: string
   description?: string

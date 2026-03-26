@@ -16,6 +16,7 @@ interface Props {
   onAddOutcome: () => void
   onShowReference: () => void
   onShowActivities: () => void
+  missionsByOutcome?: Record<string, string>
 }
 
 const CX = 500
@@ -106,6 +107,7 @@ function computeActivityLayout(
 export default function WildSuccessMapSVG({
   values, activities, outcomes, overdueActivityIds, displayName,
   onEditValue, onEditActivity, onEditOutcome, onAddValue, onAddActivity, onAddOutcome, onShowReference, onShowActivities,
+  missionsByOutcome = {},
 }: Props) {
   const [selectedValue, setSelectedValue] = useState<UserValue | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
@@ -428,6 +430,9 @@ export default function WildSuccessMapSVG({
             const ox = outcomeStartX + idx * (outcomeBoxW + 10)
             const isSel = selectedOutcome?.id === o.id
             const needsActivities = (o.activity_count ?? 0) <= 1
+            const hasPlan = !!missionsByOutcome[o.id]
+            const extraLines = (needsActivities ? 1 : 0) + (hasPlan ? 1 : 0)
+            const boxH = outcomeBoxH + extraLines * 12
             return (
               <g key={o.id}
                 onClick={(e) => {
@@ -439,7 +444,7 @@ export default function WildSuccessMapSVG({
                 onDoubleClick={(e) => { e.stopPropagation(); onEditOutcome(o) }}
                 style={{ cursor: 'pointer' }}
               >
-                <rect x={ox} y={outcomeY} width={outcomeBoxW} height={outcomeBoxH} rx={12}
+                <rect x={ox} y={outcomeY} width={outcomeBoxW} height={boxH} rx={12}
                   fill="#FFFFFF" stroke={isSel ? '#C4725A' : '#E8E4DC'} strokeWidth={isSel ? 1.5 : 1}
                 />
                 <text x={ox + outcomeBoxW / 2} y={outcomeY + 18} textAnchor="middle" fontSize={10} fontWeight={700} fill="#2D2A26">
@@ -451,6 +456,17 @@ export default function WildSuccessMapSVG({
                 {needsActivities && (
                   <text x={ox + outcomeBoxW / 2} y={outcomeY + 44} textAnchor="middle" fontSize={7.5} fill="#C4504A">
                     Needs more activities
+                  </text>
+                )}
+                {missionsByOutcome[o.id] && (
+                  <text
+                    x={ox + outcomeBoxW / 2}
+                    y={outcomeY + (needsActivities ? 54 : 44)}
+                    textAnchor="middle" fontSize={8} fontWeight={600} fill="#C4725A"
+                    style={{ cursor: 'pointer' }}
+                    onClick={(e) => { e.stopPropagation(); window.location.href = `/plan/${missionsByOutcome[o.id]}` }}
+                  >
+                    Plan →
                   </text>
                 )}
               </g>

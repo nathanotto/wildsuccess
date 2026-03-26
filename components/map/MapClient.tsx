@@ -47,6 +47,7 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [referenceOpen, setReferenceOpen] = useState(false)
   const [activitiesEditorOpen, setActivitiesEditorOpen] = useState(false)
   const [hopperCount, setHopperCount] = useState(0)
+  const [missionsByOutcome, setMissionsByOutcome] = useState<Record<string, string>>({}) // bigOutcomeId -> missionId
   const [calendarConnected, setCalendarConnected] = useState(false)
   const [unclosedDays, setUnclosedDays] = useState<string[]>([])
   const searchParams = useSearchParams()
@@ -64,7 +65,7 @@ export default function MapClient({ userId, userEmail }: Props) {
 
   const fetchAll = useCallback(async () => {
     const NC = { cache: 'no-store' } as const
-    const [vRes, dRes, oRes, aRes, pRes, hRes, hopperRes] = await Promise.all([
+    const [vRes, dRes, oRes, aRes, pRes, hRes, hopperRes, missionsRes] = await Promise.all([
       fetch('/api/values', NC),
       fetch('/api/life-domains', NC),
       fetch('/api/big-outcomes', NC),
@@ -72,9 +73,10 @@ export default function MapClient({ userId, userEmail }: Props) {
       fetch('/api/profile', NC),
       fetch('/api/map/heat', NC),
       fetch('/api/action-items?status=candidate', NC),
+      fetch('/api/missions', NC),
     ])
-    const [v, d, o, a, p, h, hopper] = await Promise.all([
-      vRes.json(), dRes.json(), oRes.json(), aRes.json(), pRes.json(), hRes.json(), hopperRes.json(),
+    const [v, d, o, a, p, h, hopper, missions] = await Promise.all([
+      vRes.json(), dRes.json(), oRes.json(), aRes.json(), pRes.json(), hRes.json(), hopperRes.json(), missionsRes.json(),
     ])
     if (Array.isArray(v)) {
       // Apply heat scores (0.0–1.0 from activity completions) to value scores (1–10 scale)
@@ -91,6 +93,11 @@ export default function MapClient({ userId, userEmail }: Props) {
     if (p && !p.error) setProfile(p)
     if (h && h.overdueActivityIds) setOverdueActivityIds(h.overdueActivityIds)
     if (Array.isArray(hopper)) setHopperCount(hopper.length)
+    if (Array.isArray(missions)) {
+      const map: Record<string, string> = {}
+      for (const m of missions) { if (m.big_outcome_id) map[m.big_outcome_id] = m.id }
+      setMissionsByOutcome(map)
+    }
     // Fetch unclosed days
     fetch('/api/day-completion?unclosed=true', NC)
       .then(r => r.ok ? r.json() : [])
@@ -254,6 +261,7 @@ export default function MapClient({ userId, userEmail }: Props) {
             outcomes={outcomes}
             overdueActivityIds={overdueActivityIds}
             displayName={displayName}
+            missionsByOutcome={missionsByOutcome}
             onEditValue={(v) => setModal({ type: 'editValue', value: v })}
             onEditActivity={(a) => setModal({ type: 'editActivity', activity: a })}
             onEditOutcome={(o) => setModal({ type: 'editOutcome', outcome: o })}
@@ -354,6 +362,19 @@ export default function MapClient({ userId, userEmail }: Props) {
           values={values}
           domains={domains}
           activities={activities}
+          hasMission={!!missionsByOutcome[modal.outcome.id]}
+          missionId={missionsByOutcome[modal.outcome.id] ?? null}
+          onPlanThis={async (outcomeId: string) => {
+            const res = await fetch(`/api/big-outcomes/${outcomeId}/plan`, { method: 'POST' })
+            if (res.ok) {
+              const { mission_id } = await res.json()
+              router.push(`/plan/${mission_id}`)
+            } else {
+              const e = await res.json()
+              if (e.mission_id) router.push(`/plan/${e.mission_id}`)
+              else showToast(e.error, 'error')
+            }
+          }}
           onSave={async (data) => {
             const res = await fetch(`/api/big-outcomes/${modal.outcome.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
             if (res.ok) { await fetchAll(); setModal(null); showToast('Outcome saved') }

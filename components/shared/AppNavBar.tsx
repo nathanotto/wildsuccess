@@ -15,14 +15,13 @@ const TABS = [
   { name: 'Map', path: '/map' },
   { name: 'Today', path: '/today', badgeKey: 'todayCount' as const, badgeColor: '#4B6A82' },
   { name: 'Organize', path: '/organize', badgeKey: 'hopperCount' as const, badgeColor: '#C4725A' },
-  { name: 'Plan', path: null },
+  { name: 'Plan', path: '/plan' },
   { name: 'Communicate', path: null },
   { name: 'Review', path: '/review' },
   { name: 'Spending', path: null },
 ]
 
 const COMING_SOON: Record<string, string> = {
-  Plan: 'Turn aspirations into commitments. Schedule activities, set target dates, build out Big Outcomes.',
   Communicate: 'Draft messages, emails, and communications connected to your activities and outcomes.',
   Spending: 'Review spending against your Financial Sufficiency threshold and budget commitments.',
 }
@@ -42,6 +41,7 @@ export default function AppNavBar({ displayName, hopperCount = 0, todayCount = 0
   function isActive(tabPath: string | null) {
     if (!tabPath) return false
     if (tabPath === '/review') return pathname.startsWith('/review')
+    if (tabPath === '/plan') return pathname.startsWith('/plan')
     return pathname === tabPath
   }
 
