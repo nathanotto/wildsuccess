@@ -453,6 +453,8 @@ export interface Factor {
   created_at: string
   // Computed
   link_count?: number
+  author_name?: string
+  is_own?: boolean
 }
 
 export interface COA {
@@ -468,6 +470,8 @@ export interface COA {
   created_at: string
   updated_at: string
   // Computed / joined
+  author_name?: string
+  is_own?: boolean
   linked_factor_count?: number
   aims_to_resolve_count?: number
   has_sub_mission?: boolean

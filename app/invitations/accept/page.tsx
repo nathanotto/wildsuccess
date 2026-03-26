@@ -61,13 +61,23 @@ function AcceptContent() {
 
   async function handleSignup() {
     setAuthLoading(true); setAuthError('')
-    const { error: e } = await supabase.auth.signUp({
+    const { data: signUpData, error: e } = await supabase.auth.signUp({
       email, password,
-      options: { data: { full_name: fullName, preferred_name: fullName.split(' ')[0] } },
+      options: {
+        data: { full_name: fullName, preferred_name: fullName.split(' ')[0] },
+        emailRedirectTo: `${window.location.origin}/invitations/accept?token=${token}`,
+      },
     })
     if (e) { setAuthError(e.message); setAuthLoading(false); return }
-    const { data: { user: u } } = await supabase.auth.getUser()
-    if (u) { setUser({ id: u.id, email: u.email ?? '' }); await handleAcceptAfterAuth() }
+
+    // If session exists, user is auto-confirmed — proceed immediately
+    if (signUpData?.session) {
+      const { data: { user: u } } = await supabase.auth.getUser()
+      if (u) { setUser({ id: u.id, email: u.email ?? '' }); await handleAcceptAfterAuth() }
+    } else {
+      // Email confirmation required — show message
+      setAuthError('Check your email to confirm your account, then come back to this page to join the mission.')
+    }
     setAuthLoading(false)
   }
 

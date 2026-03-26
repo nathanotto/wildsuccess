@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Factor, FactorKind } from '@/lib/types'
+import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
+import { useRealtimeMission } from '@/lib/useRealtimeMission'
 
 const KIND_ORDER: FactorKind[] = ['success', 'driver', 'constraint', 'fact', 'assumption']
 
@@ -52,6 +54,22 @@ export default function FactorsGuidedPage({ missionId }: Props) {
       setLoading(false)
     })
   }, [missionId, kind])
+
+  // Real-time: other users' factor changes
+  useRealtimeMission(missionId, {
+    onFactorChange: (eventType, payload) => {
+      const record = (eventType === 'DELETE' ? payload.old : payload.new) as Record<string, unknown>
+      if (eventType === 'DELETE') {
+        if (record.kind === kind) setFactors(prev => prev.filter(f => f.id !== record.id))
+      } else {
+        if (record.kind === kind || (payload.new as Record<string, unknown>)?.kind === kind) {
+          fetch(`/api/missions/${missionId}/factors?kind=${kind}`).then(r => r.json()).then(data => {
+            if (Array.isArray(data)) setFactors(data)
+          })
+        }
+      }
+    },
+  })
 
   useEffect(() => { inputRef.current?.focus() }, [kind])
 
@@ -174,15 +192,17 @@ export default function FactorsGuidedPage({ missionId }: Props) {
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', fontSize: 13 }}>
               <button onClick={() => moveFactor(f.id, 'up')} style={arrowBtn}>↑</button>
               <button onClick={() => moveFactor(f.id, 'down')} style={arrowBtn}>↓</button>
-              {deleteConfirm === f.id ? (
-                <>
-                  <button onClick={() => handleDelete(f.id)} style={{ ...arrowBtn, color: '#C4504A', fontSize: 10 }}>confirm</button>
-                  <button onClick={() => setDeleteConfirm(null)} style={{ ...arrowBtn, fontSize: 10 }}>cancel</button>
-                </>
-              ) : (
-                <button onClick={() => setDeleteConfirm(f.id)} style={{ ...arrowBtn, color: '#C4504A' }}>del</button>
-              )}
-              <span style={{ color, fontWeight: 600, fontSize: 12 }}>You</span>
+              {f.is_own ? (
+                deleteConfirm === f.id ? (
+                  <span style={{ display: 'inline-flex', gap: 2, background: '#FDF5F4', border: '1px solid #C4504A40', borderRadius: 4, padding: '1px 4px' }}>
+                    <button onClick={() => handleDelete(f.id)} style={{ ...arrowBtn, color: '#C4504A', fontSize: 10, fontWeight: 700 }}>yes</button>
+                    <button onClick={() => setDeleteConfirm(null)} style={{ ...arrowBtn, fontSize: 10 }}>no</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setDeleteConfirm(f.id)} style={{ ...arrowBtn, color: '#C4504A' }}>del</button>
+                )
+              ) : <span style={{ width: 14 }} />}
+              <span style={{ color: getAuthorColor(f.user_id, !!f.is_own), fontWeight: 600, fontSize: 12 }}>{formatAuthorTag(f.author_name, f.is_own)}</span>
               <span style={{ color: '#2D2A26' }}>{f.name}</span>
             </div>
           ))}

@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Factor, COA, FactorKind } from '@/lib/types'
+import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
+import { useRealtimeMission } from '@/lib/useRealtimeMission'
 
 const KIND_ORDER: FactorKind[] = ['success', 'driver', 'constraint', 'fact', 'assumption']
 const KIND_LABELS: Record<string, string> = {
@@ -60,6 +62,31 @@ export default function COAsPage({ missionId }: Props) {
   }, [missionId])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Real-time: other users' COA and factor link changes
+  useRealtimeMission(missionId, {
+    onCoaChange: (eventType, payload) => {
+      if (eventType === 'DELETE') {
+        const old = payload.old as Record<string, unknown>
+        setCoas(prev => prev.filter(c => c.id !== old.id))
+      } else {
+        // INSERT or UPDATE — refetch for proper author names and computed fields
+        loadData()
+      }
+    },
+    onFactorChange: (eventType) => {
+      // Factor added/removed — refresh factors list
+      if (eventType === 'INSERT' || eventType === 'DELETE') {
+        fetch(`/api/missions/${missionId}/factors`).then(r => r.json()).then(data => {
+          if (Array.isArray(data)) setFactors(data)
+        })
+      }
+    },
+    onLinkChange: () => {
+      // Factor-COA link changed — reload link data
+      loadData()
+    },
+  })
 
   async function handleAddCoa() {
     if (!actionInput.trim()) return
@@ -238,7 +265,7 @@ export default function COAsPage({ missionId }: Props) {
                   <button onClick={() => moveCoa(c.id, 'down')} style={arrowBtn}>↓</button>
                   <span style={{ color: '#C4504A', fontSize: 12, fontWeight: 700, minWidth: 28 }}>♥ {linkCount}</span>
                   <button onClick={() => handleDeleteCoa(c.id)} style={{ ...arrowBtn, color: '#C4504A' }}>del</button>
-                  <span style={{ color: '#C4725A', fontWeight: 600, fontSize: 11 }}>You</span>
+                  <span style={{ color: getAuthorColor(c.user_id, !!c.is_own), fontWeight: 600, fontSize: 11 }}>{formatAuthorTag(c.author_name, c.is_own)}</span>
                   <span
                     onClick={() => setSelectedCoaId(isSelected ? null : c.id)}
                     style={{ color: isSelected ? '#C4725A' : '#2D2A26', cursor: 'pointer', flex: 1, fontSize: 13 }}

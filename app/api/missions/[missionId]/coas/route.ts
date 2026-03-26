@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { writeMissionLog } from '@/lib/mission-log'
 
@@ -67,8 +68,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ mis
     depCounts[d.coa_id] = (depCounts[d.coa_id] ?? 0) + 1
   })
 
-  const result = coas.map((c: Record<string, unknown>) => ({
+  // Fetch author names (service role to bypass RLS)
+  const sb = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const coaAuthorIds = [...new Set(coas.map((c: { user_id: string }) => c.user_id))]
+  const { data: coaProfiles } = await sb
+    .from('user_profiles')
+    .select('id, preferred_name, full_name')
+    .in('id', coaAuthorIds.length ? coaAuthorIds : ['__none__'])
+  const coaProfileMap = new Map((coaProfiles ?? []).map(p => [p.id, p]))
+
+  const result = coas.map((c: Record<string, unknown>) => {
+    const profile = coaProfileMap.get(c.user_id as string)
+    return {
     ...c,
+    author_name: profile?.preferred_name || profile?.full_name || 'Unknown',
+    is_own: c.user_id === user.id,
     big_outcome_name: (c.big_outcomes as { name: string } | null)?.name ?? null,
     big_outcomes: undefined,
     linked_factor_count: linkCounts[c.id as string] ?? 0,
@@ -78,7 +92,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ mis
     resource_count: resCounts[c.id as string] ?? 0,
     resource_met_count: resMetCounts[c.id as string] ?? 0,
     dependency_count: depCounts[c.id as string] ?? 0,
-  }))
+  }})
 
   return NextResponse.json(result)
 }

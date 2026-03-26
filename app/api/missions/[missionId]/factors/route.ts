@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { writeMissionLog } from '@/lib/mission-log'
 
@@ -33,10 +34,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     linkCounts[l.factor_id] = (linkCounts[l.factor_id] ?? 0) + 1
   })
 
-  const result = data.map((f: Record<string, unknown>) => ({
-    ...f,
-    link_count: linkCounts[f.id as string] ?? 0,
-  }))
+  // Fetch author names (use service role to bypass RLS — collaborators need to see each other's names)
+  const sb = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const authorIds = [...new Set(data.map((f: { user_id: string }) => f.user_id))]
+  const { data: profiles } = await sb
+    .from('user_profiles')
+    .select('id, preferred_name, full_name')
+    .in('id', authorIds.length ? authorIds : ['__none__'])
+  const profileMap = new Map((profiles ?? []).map(p => [p.id, p]))
+
+  const result = data.map((f: Record<string, unknown>) => {
+    const profile = profileMap.get(f.user_id as string)
+    return {
+      ...f,
+      author_name: profile?.preferred_name || profile?.full_name || 'Unknown',
+      author_full_name: profile?.full_name || profile?.preferred_name || 'Unknown',
+      is_own: f.user_id === user.id,
+      link_count: linkCounts[f.id as string] ?? 0,
+    }
+  })
 
   return NextResponse.json(result)
 }
@@ -82,5 +98,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
     subject_id: data.id,
   })
 
-  return NextResponse.json({ ...data, link_count: 0 }, { status: 201 })
+  // Get author name for the response
+  const sbPost = createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  const { data: profile } = await sbPost.from('user_profiles').select('preferred_name, full_name').eq('id', user.id).single()
+
+  return NextResponse.json({ ...data, link_count: 0, author_name: profile?.preferred_name || profile?.full_name || 'You', is_own: true }, { status: 201 })
 }

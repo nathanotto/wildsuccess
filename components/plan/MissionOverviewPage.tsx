@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Mission, Factor, FactorKind } from '@/lib/types'
+import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
+import { useRealtimeMission } from '@/lib/useRealtimeMission'
 
 const FACTOR_KINDS: { kind: FactorKind; label: string; color: string }[] = [
   { kind: 'success', label: 'Signs and visions of wild success', color: '#C4725A' },
@@ -35,6 +37,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
   const [nameDraft, setNameDraft] = useState('')
   const [editingDesc, setEditingDesc] = useState(false)
   const [descDraft, setDescDraft] = useState('')
+  const [collaborators, setCollaborators] = useState<{ user_id: string; role: string; name: string }[]>([])
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [toastVisible, setToastVisible] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -80,15 +83,39 @@ export default function MissionOverviewPage({ missionId }: Props) {
     Promise.all([
       fetch(`/api/missions`).then(r => r.json()),
       fetch(`/api/missions/${missionId}/factors`).then(r => r.json()),
-    ]).then(([missions, facs]) => {
+      fetch(`/api/missions/${missionId}/invitations`).then(r => r.json()),
+    ]).then(([missions, facs, invitations]) => {
       const all = Array.isArray(missions) ? missions : []
       setAllMissions(all)
       const m = all.find((ms: Mission) => ms.id === missionId)
       setMission(m ?? null)
-      setFactors(facs)
+      setFactors(Array.isArray(facs) ? facs : [])
+      // Build collaborators from factor authors (they have names from the API)
+      const authorMap = new Map<string, string>()
+      for (const f of (Array.isArray(facs) ? facs : [])) {
+        if (f.user_id && (f.author_full_name || f.author_name)) authorMap.set(f.user_id, f.author_full_name || f.author_name)
+      }
+      // Also add accepted invitation emails as collaborators
+      const collabs = [...authorMap.entries()].map(([uid, name]) => ({ user_id: uid, role: 'collaborator', name }))
+      setCollaborators(collabs)
       setLoading(false)
     })
   }, [missionId])
+
+  // Real-time: other users' factor changes appear live
+  useRealtimeMission(missionId, {
+    onFactorChange: (eventType, payload) => {
+      if (eventType === 'DELETE') {
+        const old = payload.old as Record<string, unknown>
+        setFactors(prev => prev.filter(f => f.id !== old.id))
+      } else {
+        // INSERT or UPDATE — refetch to get proper author names and avoid duplicates
+        fetch(`/api/missions/${missionId}/factors`).then(r => r.json()).then(data => {
+          if (Array.isArray(data)) setFactors(data)
+        })
+      }
+    },
+  })
 
   async function addFactor(kind: FactorKind) {
     const text = inputs[kind]?.trim()
@@ -233,6 +260,17 @@ export default function MissionOverviewPage({ missionId }: Props) {
             </div>
           )}
 
+          {collaborators.length > 0 && (
+            <div style={{ marginBottom: 12, fontSize: 11 }}>
+              <div style={{ color: '#2D2A26', fontWeight: 600, marginBottom: 4 }}>Collaborators</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {collaborators.map(c => (
+                  <span key={c.user_id} style={{ color: getAuthorColor(c.user_id, false), fontWeight: 600, fontSize: 11 }}>{c.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ background: '#F8F7F4', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 12 }}>
             <div style={{ color: '#2D2A26', fontWeight: 600, marginBottom: 6 }}>Planning Stats</div>
             <div style={{ color: '#8A8578' }}>{mission.coa_count ?? 0} courses of action</div>
@@ -336,6 +374,7 @@ function FactorCard({
   infoOpen: boolean
   onToggleInfo: () => void
 }) {
+  const [confirmId, setConfirmId] = useState<string | null>(null)
   const meta = FACTOR_KINDS.find(f => f.kind === kind)!
   const items = factors.filter(f => f.kind === kind).sort((a, b) => a.sort_order - b.sort_order)
 
@@ -388,8 +427,17 @@ function FactorCard({
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
               <button onClick={() => onMove(f.id, 'up', kind)} style={arrowBtnStyle}>↑</button>
               <button onClick={() => onMove(f.id, 'down', kind)} style={arrowBtnStyle}>↓</button>
-              <button onClick={() => onDelete(f.id)} style={{ ...arrowBtnStyle, color: '#C4504A' }}>del</button>
-              <span style={{ color: '#C4725A', fontWeight: 600, fontSize: 11 }}>You</span>
+              {f.is_own ? (
+                confirmId === f.id ? (
+                  <span style={{ display: 'inline-flex', gap: 2, background: '#FDF5F4', border: '1px solid #C4504A40', borderRadius: 4, padding: '1px 4px' }}>
+                    <button onClick={() => { onDelete(f.id); setConfirmId(null) }} style={{ ...arrowBtnStyle, color: '#C4504A', fontSize: 10, fontWeight: 700 }}>yes</button>
+                    <button onClick={() => setConfirmId(null)} style={{ ...arrowBtnStyle, fontSize: 10 }}>no</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setConfirmId(f.id)} style={{ ...arrowBtnStyle, color: '#C4504A' }}>del</button>
+                )
+              ) : <span style={{ width: 14 }} />}
+              <span style={{ color: getAuthorColor(f.user_id, !!f.is_own), fontWeight: 600, fontSize: 11 }}>{formatAuthorTag(f.author_name, f.is_own)}</span>
               <span style={{ color: '#2D2A26' }}>{f.name}</span>
               {(f.link_count ?? 0) > 0 && (
                 <span style={{ color: '#C4504A', fontSize: 10, marginLeft: 'auto' }}>♥ {f.link_count}</span>

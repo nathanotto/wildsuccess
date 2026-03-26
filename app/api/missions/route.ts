@@ -7,10 +7,10 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // No user_id filter — RLS handles visibility (own missions + participated missions)
   const { data: missions, error } = await supabase
     .from('missions')
     .select('*, big_outcomes(name), coas!missions_parent_coa_id_fkey(action)')
-    .eq('user_id', user.id)
     .order('sort_order')
     .order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
