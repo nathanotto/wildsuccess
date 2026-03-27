@@ -254,6 +254,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   // Block drag (move or duplicate)
   const [draggingBlock, setDraggingBlock] = useState<{ block: TimeBlockLocal; date: string; isDuplicate: boolean } | null>(null)
   const [duplicateArmed, setDuplicateArmed] = useState<string | null>(null) // block id armed for duplication
+  const dragOffsetYRef = useRef(0) // Y offset of cursor within the dragged block
 
   // Hopper item persist-drag (right-click to keep item in hopper after placing)
   const [hopperDuplicateArmed, setHopperDuplicateArmed] = useState<string | null>(null)
@@ -1210,6 +1211,18 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ block_date: toDate, start_time: newStartTime, end_time: newEndTime }),
       })
+      // Also update scheduled_time on linked action_items so /today reflects the change
+      for (const item of block.items) {
+        await fetch(`/api/action-items/${item.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scheduled_time: newStartTime,
+            scheduled_end_time: newEndTime,
+            ...(fromDate !== toDate ? { committed_date: toDate } : {}),
+          }),
+        })
+      }
       setDayBlocks(prev => {
         const fromList = (prev[fromDate] ?? []).filter(b => b.id !== block.id)
         const moved: TimeBlockLocal = { ...block, block_date: toDate, start_time: newStartTime, end_time: newEndTime }
@@ -2696,7 +2709,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                               gridRectRef.current = gridScrollRef.current.getBoundingClientRect()
                             }
                             setDragOverCol(ds)
-                            setDragOverTime(getTimeFromClientY(clientY))
+                            const adjustedY = draggingBlock ? clientY - dragOffsetYRef.current : clientY
+                            setDragOverTime(getTimeFromClientY(adjustedY))
                           })
                         }
                       }}
@@ -2713,7 +2727,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                         if (draggingBlockTypeId) {
                           handleDropOnColumn(ds, e.clientY)
                         } else if (draggingBlock) {
-                          const snapTime = getTimeFromClientY(e.clientY)
+                          const snapTime = getTimeFromClientY(e.clientY - dragOffsetYRef.current)
                           const { block, date: fromDate, isDuplicate } = draggingBlock
                           setDraggingBlock(null)
                           setDragOverCol(null)
@@ -2892,13 +2906,17 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                             onContextMenu={!block.is_hard ? e => { e.preventDefault(); setDuplicateArmed(prev => prev === block.id ? null : block.id) } : undefined}
                             onDragStart={!block.is_hard ? e => {
                               e.stopPropagation()
+                              setBlockTooltip(null)
+                              // Capture cursor offset within block so drop aligns to block top
+                              const blockEl = e.currentTarget as HTMLElement
+                              dragOffsetYRef.current = e.clientY - blockEl.getBoundingClientRect().top
                               const isDuplicate = duplicateArmed === block.id
                               setDraggingBlock({ block, date: ds, isDuplicate })
                               setDuplicateArmed(null)
                             } : undefined}
                             onDragEnd={() => { setDraggingBlock(null); setDuplicateArmed(null) }}
-                            onMouseEnter={e => setBlockTooltip({ label: block.label, time: `${formatTime12(block.start_time)} · ${block.duration_minutes}m`, x: e.clientX, y: e.clientY })}
-                            onMouseMove={e => setBlockTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                            onMouseEnter={e => { if (!draggingBlock && !draggingBlockTypeId && !draggingHopperItem) setBlockTooltip({ label: block.label, time: `${formatTime12(block.start_time)} · ${block.duration_minutes}m`, x: e.clientX, y: e.clientY }) }}
+                            onMouseMove={e => { if (draggingBlock || draggingBlockTypeId || draggingHopperItem) { setBlockTooltip(null); return } setBlockTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null) }}
                             onMouseLeave={() => setBlockTooltip(null)}
                             style={{
                               position: 'absolute',
@@ -3504,8 +3522,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     {blockTooltip && (
       <div style={{
         position: 'fixed',
-        left: blockTooltip.x + 12,
-        top: blockTooltip.y - 8,
+        left: blockTooltip.x / 1.2 + 12,
+        top: blockTooltip.y / 1.2 - 8,
         background: '#2D2A26',
         color: '#FAF9F6',
         padding: '5px 10px',

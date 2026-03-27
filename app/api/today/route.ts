@@ -154,13 +154,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // For items that still have a time_block_id but no scheduled_time, fill in from the block
+  // Sync scheduled_time from time_block — the block is the source of truth for time
+  // This handles both items with no scheduled_time AND items where the block was moved in /organize
   items = items.map(item => {
-    if (!item.scheduled_time && item.time_block_id && blockMap[item.time_block_id]?.start_time) {
+    if (item.time_block_id && blockMap[item.time_block_id]?.start_time) {
       return {
         ...item,
         scheduled_time: blockMap[item.time_block_id].start_time,
-        scheduled_end_time: item.scheduled_end_time ?? blockMap[item.time_block_id].end_time ?? null,
+        scheduled_end_time: blockMap[item.time_block_id].end_time ?? item.scheduled_end_time ?? null,
       }
     }
     return item
