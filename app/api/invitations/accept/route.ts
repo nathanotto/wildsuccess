@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
     .eq('token', token)
     .single()
 
-  if (error || !invitation) return NextResponse.json({ error: 'Invitation not found' }, { status: 404 })
+  if (error || !invitation) {
+    console.error('Invitation lookup failed:', { token, error: error?.message, hasKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY })
+    return NextResponse.json({ error: 'Invitation not found', detail: error?.message || 'no data' }, { status: 404 })
+  }
   if (invitation.status !== 'pending') return NextResponse.json({ error: 'Invitation already used', status: invitation.status }, { status: 410 })
 
   // Get inviter name
