@@ -348,6 +348,7 @@ function FocusView({
   const [captureFollowUp, setCaptureFollowUp] = useState('')
   const [showCaptureFollowUp, setShowCaptureFollowUp] = useState(false)
   const [showScheduler, setShowScheduler] = useState(false)
+  const [showSteps, setShowSteps] = useState(true)
   const [pickedTime, setPickedTime] = useState<string | null>(null)
   const [customTime, setCustomTime] = useState('')
   const [saving, setSaving] = useState(false)
@@ -469,10 +470,15 @@ function FocusView({
 
       {/* Steps section */}
       <div style={section}>
-        <div style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+        <div
+          onClick={() => setShowSteps(!showSteps)}
+          style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+        >
+          <span style={{ fontSize: 8 }}>{showSteps ? '▼' : '▶'}</span>
           Steps
+          {!showSteps && steps.length > 0 && <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none' }}>({steps.filter(s => !s.is_completed).length} remaining)</span>}
         </div>
-        {steps.map((s) => (
+        {showSteps && steps.map((s) => (
           <div key={s.id} style={{
             display: 'flex', alignItems: 'flex-start', gap: 8,
             padding: '6px 8px', marginBottom: 2,
@@ -497,13 +503,15 @@ function FocusView({
             </button>
           </div>
         ))}
-        <input
-          value={stepInput}
-          onChange={e => setStepInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddStep() } }}
-          placeholder={steps.filter(s => !s.is_completed).length === 0 ? "what's next?" : "add step..."}
-          style={{ ...inputStyle, marginTop: steps.length > 0 ? 4 : 0 }}
-        />
+        {showSteps && (
+          <input
+            value={stepInput}
+            onChange={e => setStepInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddStep() } }}
+            placeholder={steps.filter(s => !s.is_completed).length === 0 ? "what's next?" : "add step..."}
+            style={{ ...inputStyle, marginTop: steps.length > 0 ? 4 : 0 }}
+          />
+        )}
       </div>
 
       {/* Notes section */}
@@ -1561,6 +1569,7 @@ function TodoRow({
   onSkip: () => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
+  const [showSteps, setShowSteps] = useState(true)
   const menuOpenedAt = useRef(0)
   const isCompleted = item.status === 'completed'
   const isParked = item.status === 'parked'
@@ -1622,7 +1631,14 @@ function TodoRow({
       </div>
       {steps.length > 0 && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
-          {steps.map(s => (
+          <div
+            onClick={e => { e.stopPropagation(); setShowSteps(!showSteps) }}
+            style={{ fontSize: 10, color: '#B5B0A8', cursor: 'pointer', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 3 }}
+          >
+            <span style={{ fontSize: 7 }}>{showSteps ? '▼' : '▶'}</span>
+            {showSteps ? 'steps' : `${steps.filter(s => !s.is_completed).length} of ${steps.length} steps remaining`}
+          </div>
+          {showSteps && steps.map(s => (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
               <span style={{
                 width: 10, height: 10, borderRadius: 1, flexShrink: 0,

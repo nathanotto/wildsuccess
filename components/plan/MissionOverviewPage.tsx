@@ -83,19 +83,42 @@ export default function MissionOverviewPage({ missionId }: Props) {
     Promise.all([
       fetch(`/api/missions`).then(r => r.json()),
       fetch(`/api/missions/${missionId}/factors`).then(r => r.json()),
-      fetch(`/api/missions/${missionId}/invitations`).then(r => r.json()),
-    ]).then(([missions, facs, invitations]) => {
+      fetch(`/api/missions/${missionId}/commitments`).then(r => r.json()),
+    ]).then(async ([missions, facs]) => {
       const all = Array.isArray(missions) ? missions : []
       setAllMissions(all)
       const m = all.find((ms: Mission) => ms.id === missionId)
       setMission(m ?? null)
       setFactors(Array.isArray(facs) ? facs : [])
-      // Build collaborators from factor authors (they have names from the API)
+
+      // Build collaborators from factor authors + fetch all participants via user search
       const authorMap = new Map<string, string>()
       for (const f of (Array.isArray(facs) ? facs : [])) {
         if (f.user_id && (f.author_full_name || f.author_name)) authorMap.set(f.user_id, f.author_full_name || f.author_name)
       }
-      // Also add accepted invitation emails as collaborators
+
+      // Fetch invitations to get all accepted collaborators with emails
+      const invRes = await fetch(`/api/missions/${missionId}/invitations`)
+      const invitations = invRes.ok ? await invRes.json() : []
+      for (const inv of (Array.isArray(invitations) ? invitations : [])) {
+        if (inv.status === 'accepted' && inv.email) {
+          // Use email as fallback name if we don't have them from factors
+          if (!authorMap.has(inv.email)) {
+            // We don't have user_id from invitations, so just note the email
+          }
+        }
+      }
+
+      // Also get names from the factors API for any participants who contributed
+      // For participants who haven't added factors, use a direct lookup
+      const participantRes = await fetch(`/api/missions/${missionId}/commitments`)
+      const commitments = participantRes.ok ? await participantRes.json() : []
+      for (const c of (Array.isArray(commitments) ? commitments : [])) {
+        if (c.user_id && c.user_name && !authorMap.has(c.user_id)) {
+          authorMap.set(c.user_id, c.user_name)
+        }
+      }
+
       const collabs = [...authorMap.entries()].map(([uid, name]) => ({ user_id: uid, role: 'collaborator', name }))
       setCollaborators(collabs)
       setLoading(false)
