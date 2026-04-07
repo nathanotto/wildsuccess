@@ -1394,7 +1394,7 @@ export default function TodayPage({ displayName }: Props) {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const pageStyle: React.CSSProperties = {
-    maxWidth: 480, padding: '0 20px', marginLeft: 40,
+    maxWidth: 860, padding: '0 20px', marginLeft: 40,
     fontFamily: '"Source Sans 3", "Source Sans Pro", sans-serif',
     fontSize: 14, color: '#2D2A26', background: '#FAFAF7', minHeight: '100vh',
   }
@@ -1525,31 +1525,45 @@ export default function TodayPage({ displayName }: Props) {
                   </div>
                 )}
 
-                {/* To-do section */}
-                {todoItems.length > 0 && (
-                  <div style={{ marginBottom: 24 }}>
-                    {todoItems.map(item => (
-                      <TodoRow
-                        key={item.id}
-                        item={item}
-                        isPast={isPast}
-                        selectedDate={selectedDate}
-                        onCheckbox={() => handleCheckboxCycle(item)}
-                        onFocus={() => setFocusItemId(item.id)}
-                        onReschedule={() => handleStatusChange(item.id, 'rescheduled')}
-                        onSkip={() => handleStatusChange(item.id, 'skipped')}
-                      />
-                    ))}
+                {/* Two-column layout: todos left, schedule right (desktop only) */}
+                <style>{`
+                  .today-columns { display: flex; flex-direction: column; }
+                  @media (min-width: 768px) {
+                    .today-columns { flex-direction: row; gap: 24px; }
+                    .today-col-todo { flex: 1; min-width: 0; }
+                    .today-col-schedule { flex: 1; min-width: 0; }
+                  }
+                `}</style>
+                <div className="today-columns">
+                  {/* To-do column */}
+                  <div className="today-col-todo">
+                    {todoItems.length > 0 && (
+                      <div style={{ marginBottom: 24 }}>
+                        {todoItems.map(item => (
+                          <TodoRow
+                            key={item.id}
+                            item={item}
+                            isPast={isPast}
+                            selectedDate={selectedDate}
+                            onCheckbox={() => handleCheckboxCycle(item)}
+                            onFocus={() => setFocusItemId(item.id)}
+                            onReschedule={() => handleStatusChange(item.id, 'rescheduled')}
+                            onSkip={() => handleStatusChange(item.id, 'skipped')}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
 
-                {/* Schedule section */}
-                {scheduleItems.length > 0 && (
-                  <div style={{ marginBottom: 24 }}>
-                    <div style={{ height: 1, background: '#F0EDE6', marginBottom: 8 }} />
-                    {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
+                  {/* Schedule column */}
+                  <div className="today-col-schedule">
+                    {scheduleItems.length > 0 && (
+                      <div style={{ marginBottom: 24 }}>
+                        {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {todoItems.length === 0 && scheduleItems.length === 0 && (
                   <div style={{ fontSize: 12, color: '#B5B0A8', paddingTop: 20 }}>
