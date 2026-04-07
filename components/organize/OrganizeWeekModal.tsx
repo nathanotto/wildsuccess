@@ -421,7 +421,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
           start_time: block.start_time ?? minutesToTime(GRID_START * 60),
           end_time: block.end_time ?? minutesToTime(GRID_START * 60 + 60),
           duration_minutes: duration,
-          is_hard: block.is_hard || block.source === 'calendar_import',
+          is_hard: block.is_hard,
           block_type_id: (block as TimeBlockLocal & { block_type_id?: string | null }).block_type_id ?? null,
           block_type: bts.find(bt => bt.id === ((block as TimeBlockLocal & { block_type_id?: string | null }).block_type_id ?? '')) ?? undefined,
           source: block.source,
@@ -1750,12 +1750,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     }))
     setClassifying(null)
 
-    // Fingerprint captures the event's state at suppression time. If Google changes
-    // the event (time or title), the fingerprint won't match and the event reappears.
-    // Series classifications use null = always suppress regardless of changes.
-    const suppressedFingerprint = (effectiveClassification === 'fixed_commitment' || effectiveClassification === 'hidden')
-      ? (matchType === 'event' ? `${event.title}|${event.start_time}|${event.end_time}` : null)
-      : null
+    // Always suppress confirmed/hidden events regardless of future changes in Google.
+    // null fingerprint = permanent suppression by event/series ID.
+    const suppressedFingerprint = null
 
     try {
       await fetch('/api/calendar/classify', {
@@ -1805,7 +1802,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
               committed_date: scheduledDate,
               scheduled_time: scheduledTime,
               scheduled_end_time: scheduledEndTime,
-              flexibility: 'hard_scheduled',
+              flexibility: 'soft_scheduled',
               time_type: energyLevel ?? 'B',
               bounding_type: 'time',
               emotional_weight: 'normal',
