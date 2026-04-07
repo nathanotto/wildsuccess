@@ -1721,7 +1721,7 @@ function TodoRow({
           </span>
         </div>
       </div>
-      {steps.length > 0 && (
+      {steps.length > 0 && item.status === 'in_progress' && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
           <div
             onClick={e => { e.stopPropagation(); setShowSteps(!showSteps) }}
