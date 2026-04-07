@@ -889,7 +889,8 @@ export default function TodayPage({ displayName }: Props) {
   const stats = {
     done: items.filter(i => i.status === 'completed').length,
     inProgress: items.filter(i => i.status === 'in_progress').length,
-    todo: items.filter(i => i.status === 'committed').length,
+    scheduled: items.filter(i => i.status === 'committed' && i.scheduled_time).length,
+    todo: items.filter(i => i.status === 'committed' && !i.scheduled_time).length,
     skipped: items.filter(i => i.status === 'skipped').length,
   }
 
@@ -1482,7 +1483,7 @@ export default function TodayPage({ displayName }: Props) {
 
                 {/* Stats */}
                 <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 12 }}>
-                  {stats.done} done · {stats.inProgress} in progress · {stats.todo} to-do{stats.skipped > 0 ? ` · ${stats.skipped} skipped` : ''}
+                  {stats.done} done{stats.inProgress > 0 ? ` · ${stats.inProgress} in progress` : ''}{stats.scheduled > 0 ? ` · ${stats.scheduled} scheduled` : ''}{stats.todo > 0 ? ` · ${stats.todo} to-do` : ''}{stats.skipped > 0 ? ` · ${stats.skipped} skipped` : ''}
                 </div>
 
                 {/* Yesterday's unfinished — triage box */}
