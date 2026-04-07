@@ -6,7 +6,7 @@ import TimeTemplateEditor from './TimeTemplateEditor'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#7A9E82' }
-const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Easy' }
+const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection' }
 const SL: Record<string, string> = { template_proposal: 'Suggested', outside_request: 'Request', quick_capture: 'Captured', planning_function: 'From Plan' }
 const SI: Record<string, string> = { template_proposal: '◈', outside_request: '↗', quick_capture: '✎', planning_function: '◎' }
 const WI: Record<string, string> = { light: '', normal: '', heavy: '◆' }

@@ -463,8 +463,8 @@ function FocusView({
       {(item.time_type || item.emotional_weight) && (
         <div style={{ fontSize: 11, color: '#8A8578', marginTop: 4 }}>
           {item.time_type === 'A' ? 'Focus' : item.time_type === 'B' ? 'Routine' :
-            item.time_type === 'C' ? 'Unwanted' : item.time_type === 'D' ? 'Self-care' :
-              item.time_type === '0' ? 'Free' : ''}
+            item.time_type === 'C' ? 'Connection' : item.time_type === 'D' ? 'Restore' :
+              item.time_type === '0' ? 'Open' : ''}
           {item.emotional_weight === 'heavy' ? ' · heavy' : ''}
           {item.bounding_type === 'time' ? ' · time-bounded' : ''}
         </div>

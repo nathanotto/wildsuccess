@@ -26,7 +26,7 @@ const GRID_HOURS = GRID_END - GRID_START
 const GRID_HEIGHT = GRID_HOURS * HOUR_HEIGHT
 
 const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
-const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Unwanted', D: 'Self-care', '0': 'Free' }
+const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection', D: 'Restore', '0': 'Open' }
 const TIER_COLORS: Record<string, string> = { urgent: '#C4725A', normal: '#2D2A26', suggested: '#2D2A26' }
 
 // ── Local types ───────────────────────────────────────────────────────────────
@@ -2320,8 +2320,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                   >
                     <option value="A">A Focus</option>
                     <option value="B">B Routine</option>
-                    <option value="C">C Unwanted</option>
-                    <option value="D">D Self-care</option>
+                    <option value="C">C Connection</option>
+                    <option value="D">D Restore</option>
                     <option value="0">0 Free</option>
                   </select>
                 </div>
@@ -3350,51 +3350,67 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                     {/* Time Balance */}
                     <div style={{ marginBottom: 16 }}>
                       <div style={{ fontSize: 10, fontWeight: 600, color: '#5A5650', letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' }}>Time Balance</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        {(['A', 'B', 'C', 'D', '0'] as const).map(level => (
-                          <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ width: 20, height: 20, borderRadius: '50%', background: EC[level], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: level === '0' ? '#5A5650' : '#FFF', fontWeight: 700, flexShrink: 0 }}>
-                              {level}
-                            </span>
-                            <span style={{ fontSize: 9, color: '#8A857D', minWidth: 48 }}>{EL[level]}</span>
-                            <div style={{ flex: 1, height: 6, background: '#E8E4DC', borderRadius: 3, overflow: 'hidden' }}>
-                              <div style={{
-                                height: '100%',
-                                width: `${allScheduledItems.length > 0 ? ((energyCounts[level] ?? 0) / allScheduledItems.length) * 100 : 0}%`,
-                                background: EC[level],
-                                borderRadius: 3,
-                              }} />
-                            </div>
-                            <span style={{ fontSize: 10, color: '#8A857D', minWidth: 16, textAlign: 'right' }}>{energyCounts[level] ?? 0}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {/* Warnings */}
-                      {allScheduledItems.length > 0 && (() => {
-                        const warnings: string[] = []
-                        if ((energyCounts['0'] ?? 0) === 0) warnings.push('No free time this week. Consider protecting some.')
-                        if ((energyCounts['D'] ?? 0) === 0) warnings.push('No self-care scheduled. This creates a leak in your Safety pool.')
-                        // Check if any day has 3+ C-type items
-                        const cByDay: Record<string, number> = {}
-                        Object.entries(dayBlocks).forEach(([ds, blocks]) => {
-                          blocks.forEach(b => b.items.forEach(item => {
-                            if (item.time_type === 'C') cByDay[ds] = (cByDay[ds] ?? 0) + 1
-                          }))
-                        })
-                        const heavyCDay = Object.entries(cByDay).find(([, count]) => count >= 3)
-                        if (heavyCDay) {
-                          const dayName = new Date(heavyCDay[0]).toLocaleDateString('en-US', { weekday: 'short' })
-                          warnings.push(`${dayName} has ${heavyCDay[1]} unwanted obligations clustered. Consider spreading them.`)
-                        }
-                        if (warnings.length === 0) return null
+                      {(() => {
+                        // Compute Open hours from waking time minus total block duration
+                        const totalBlockMin = Object.values(dayBlocks).flat().reduce((s, b) => s + b.duration_minutes, 0)
+                        const totalWakingMin = 7 * 16 * 60 // 16 waking hours × 7 days
+                        const openMin = Math.max(0, totalWakingMin - totalBlockMin)
+                        const openHours = Math.round(openMin / 60)
+                        const totalItems = allScheduledItems.length
+
                         return (
-                          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            {warnings.map((w, i) => (
-                              <div key={i} style={{ fontSize: 9, color: '#9E6A46', background: '#FFF8F0', border: '1px solid #F5E4D0', borderRadius: 4, padding: '4px 6px', lineHeight: 1.4 }}>
-                                {w}
+                          <>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                              {(['A', 'B', 'C', 'D'] as const).map(level => (
+                                <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: EC[level], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#FFF', fontWeight: 700, flexShrink: 0 }}>
+                                    {level}
+                                  </span>
+                                  <span style={{ fontSize: 9, color: '#8A857D', minWidth: 48 }}>{EL[level]}</span>
+                                  <div style={{ flex: 1, height: 6, background: '#E8E4DC', borderRadius: 3, overflow: 'hidden' }}>
+                                    <div style={{
+                                      height: '100%',
+                                      width: `${totalItems > 0 ? ((energyCounts[level] ?? 0) / totalItems) * 100 : 0}%`,
+                                      background: EC[level],
+                                      borderRadius: 3,
+                                    }} />
+                                  </div>
+                                  <span style={{ fontSize: 10, color: '#8A857D', minWidth: 16, textAlign: 'right' }}>{energyCounts[level] ?? 0}</span>
+                                </div>
+                              ))}
+                              {/* Open — computed from waking hours minus blocks */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 20, height: 20, borderRadius: '50%', background: EC['0'], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#5A5650', fontWeight: 700, flexShrink: 0 }}>
+                                  0
+                                </span>
+                                <span style={{ fontSize: 9, color: '#8A857D', minWidth: 48 }}>{EL['0']}</span>
+                                <div style={{ flex: 1, height: 6, background: '#E8E4DC', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{
+                                    height: '100%',
+                                    width: `${(openMin / totalWakingMin) * 100}%`,
+                                    background: EC['0'],
+                                    borderRadius: 3,
+                                  }} />
+                                </div>
+                                <span style={{ fontSize: 10, color: '#8A857D', minWidth: 16, textAlign: 'right' }}>{openHours}h</span>
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                            {/* Warnings */}
+                            {totalItems > 0 && (() => {
+                              const warnings: string[] = []
+                              if ((energyCounts['D'] ?? 0) === 0) warnings.push('No restore time scheduled.')
+                              if (warnings.length === 0) return null
+                              return (
+                                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  {warnings.map((w, i) => (
+                                    <div key={i} style={{ fontSize: 9, color: '#9E6A46', background: '#FFF8F0', border: '1px solid #F5E4D0', borderRadius: 4, padding: '4px 6px', lineHeight: 1.4 }}>
+                                      {w}
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            })()}
+                          </>
                         )
                       })()}
                     </div>

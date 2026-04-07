@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Activity, UserValue, LifeDomain, BigOutcome, ValueLink, DomainLink } from '@/lib/types'
 
 const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
-const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Unwanted', D: 'Self-care', '0': 'Free' }
+const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection', D: 'Restore', '0': 'Open' }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const STRENGTH_OPTIONS = ['weak', 'moderate', 'strong'] as const

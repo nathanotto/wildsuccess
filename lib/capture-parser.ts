@@ -335,11 +335,12 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
 
   if (!timeType) {
     const verbMap: [RegExp, string][] = [
+      [/\b(dinner|lunch|coffee|date\s+night|happy\s+hour|hang\s+out|visit|party|gathering|family\s+time)\b/i, 'C'],
       [/\b(call|email|text|message|send|reply|respond|reach\s+out)\b/i, 'B'],
       [/\b(review|write|build|design|plan|think\s+about|analyze|create|code|develop|draft)\b/i, 'A'],
       [/\b(pick\s+up|buy|go\s+to|drive|drop\s+off|shop|grocery|groceries|register|file|pay)\b/i, 'B'],
       [/\b(exercise|run|yoga|meditate|therapy|workout|gym|stretch)\b/i, 'D'],
-      [/\b(nap|rest|relax|read|walk|leisure|stroll)\b/i, '0'],
+      [/\b(nap|rest|relax|read|walk|leisure|stroll|recharge)\b/i, '0'],
       [/\b(meeting|appointment|dentist|court|doctor|interview)\b/i, 'B'],
     ]
     for (const [re, tt] of verbMap) {
