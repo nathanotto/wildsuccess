@@ -1705,37 +1705,6 @@ function TodoRow({
             {item.name}
           </span>
         </div>
-        {!isPast && (
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={e => { e.stopPropagation(); setShowMenu(!showMenu) }}
-            title="Skip or send back"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: '#8A857D', fontSize: 16, padding: '0 4px',
-              minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-            ↺
-          </button>
-          {showMenu && (
-            <>
-              <div onClick={e => { e.stopPropagation(); setShowMenu(false) }} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
-              <div style={{
-                position: 'absolute', right: 0, top: '100%', zIndex: 51,
-                background: '#FFFFFF', border: '1px solid #E8E4DC', borderRadius: 6,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 160, overflow: 'hidden',
-              }}>
-                <button onClick={e => { e.stopPropagation(); setShowMenu(false); onSkip() }} style={menuItemStyle}>
-                  ✕ Didn&apos;t happen
-                </button>
-                <button onClick={e => { e.stopPropagation(); setShowMenu(false); onReschedule() }} style={menuItemStyle}>
-                  ↺ Send to hopper
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-        )}
       </div>
       {steps.length > 0 && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
@@ -1808,37 +1777,6 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
           {item.name}
         </span>
       </div>
-      {!isPast && (
-      <div style={{ position: 'relative' }}>
-        <button
-          onClick={e => { e.stopPropagation(); setShowMenu(!showMenu) }}
-          title="Skip or send back"
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: '#8A857D', fontSize: 16, padding: '0 4px',
-            minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-          ↺
-        </button>
-        {showMenu && (
-          <>
-            <div onClick={e => { e.stopPropagation(); setShowMenu(false) }} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
-            <div style={{
-              position: 'absolute', right: 0, top: '100%', zIndex: 51,
-              background: '#FFFFFF', border: '1px solid #E8E4DC', borderRadius: 6,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 160, overflow: 'hidden',
-            }}>
-              <button onClick={e => { e.stopPropagation(); setShowMenu(false); onSkip() }} style={menuItemStyle}>
-                ✕ Didn&apos;t happen
-              </button>
-              <button onClick={e => { e.stopPropagation(); setShowMenu(false); onReschedule() }} style={menuItemStyle}>
-                ↺ Send to hopper
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-      )}
     </div>
   )
 }
