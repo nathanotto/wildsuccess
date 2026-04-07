@@ -23,16 +23,60 @@ export async function GET(req: NextRequest) {
   const weekStart = new Date(reqDate); weekStart.setDate(weekStart.getDate() - daysToMonday)
   const weekStartStr = weekStart.toISOString().split('T')[0]
 
+  // View mode determines query shape for rolling to-dos
+  // mode=pinned: original pinned-date behavior (for day completion page — only items committed on this exact date)
+  const mode = sp.get('mode')
+  const isPinned = mode === 'pinned'
+  const isPast = date < todayDate
+  const isFuture = date > todayDate
+
+  // Build items query based on view mode:
+  // - Pinned: exact date match (for day completion — shows only that day's items)
+  // - Today: rolling active items (committed_date <= today) + completed today
+  // - Past: historical snapshot (committed on/before that day, not yet resolved by that day)
+  // - Future: only explicitly planned items
+  const itemsQuery = isPinned || isFuture
+    ? supabase
+        .from('action_items')
+        .select('*, item_notes(*)')
+        .eq('user_id', user.id)
+        .eq('committed_date', date)
+        .not('status', 'in', '("rescheduled","dismissed","archived")')
+        .order('sort_order', { ascending: true })
+    : isPast
+      ? supabase
+          .from('action_items')
+          .select('*, item_notes(*)')
+          .eq('user_id', user.id)
+          .lte('committed_date', date)
+          .not('status', 'in', '("rescheduled","dismissed","archived")')
+          .or(`completed_date.is.null,completed_date.gte.${date}`)
+          .or(`status.neq.parked,parked_until.lte.${date}`)
+          .order('sort_order', { ascending: true })
+      : // Today: rolling active items
+        supabase
+          .from('action_items')
+          .select('*, item_notes(*)')
+          .eq('user_id', user.id)
+          .lte('committed_date', todayDate)
+          .not('status', 'in', '("completed","skipped","rescheduled","dismissed","archived")')
+          .or(`status.neq.parked,parked_until.lte.${todayDate}`)
+          .order('sort_order', { ascending: true })
+
+  // For today view, also fetch items completed today (separate query)
+  const completedTodayQuery = !isPast && !isFuture
+    ? supabase
+        .from('action_items')
+        .select('*, item_notes(*)')
+        .eq('user_id', user.id)
+        .eq('completed_date', todayDate)
+        .eq('status', 'completed')
+        .order('sort_order', { ascending: true })
+    : null
+
   // Fetch action_items, time_blocks, logged entries, and hopper data in parallel
-  const [itemsRes, blocksRes, loggedRes, ...hopperResults] = await Promise.all([
-    supabase
-      .from('action_items')
-      .select('*, item_notes(*)')
-      .eq('user_id', user.id)
-      .eq('committed_date', date)
-      .not('status', 'in', '("rescheduled","dismissed","archived")')
-      .or(`status.neq.parked,parked_until.lte.${date}`)
-      .order('sort_order', { ascending: true }),
+  const [itemsRes, blocksRes, loggedRes, completedTodayRes, ...hopperResults] = await Promise.all([
+    itemsQuery,
     supabase
       .from('time_blocks')
       .select('id, label, start_time, end_time, source, time_type')
@@ -45,6 +89,8 @@ export async function GET(req: NextRequest) {
       .eq('event_type', 'logged')
       .eq('event_date', date)
       .order('created_at', { ascending: true }),
+    // Completed-today items (only for today view, null placeholder otherwise)
+    completedTodayQuery ?? Promise.resolve({ data: null, error: null }),
     // Hopper: candidate items for this week (non-template)
     ...(showHopper ? [
       supabase
@@ -83,12 +129,33 @@ export async function GET(req: NextRequest) {
   if (itemsRes.error) return NextResponse.json({ error: itemsRes.error.message }, { status: 500 })
 
   const blocks = blocksRes.data ?? []
+
+  // Merge rolling active items + completed-today items (deduplicate by id)
   let items = itemsRes.data ?? []
+  const completedToday = (completedTodayRes as { data: typeof items | null })?.data ?? []
+  if (completedToday.length > 0) {
+    const existingIds = new Set(items.map(i => i.id))
+    items = [...items, ...completedToday.filter(i => !existingIds.has(i.id))]
+  }
+
+  // For today view: separate rolled-forward scheduled items from past dates
+  // into a "yesterday's unfinished" triage list instead of mixing into today's list
+  let yesterdayUnfinished: typeof items = []
+  if (!isPast && !isFuture) {
+    yesterdayUnfinished = items.filter(i =>
+      i.committed_date && i.committed_date < todayDate && i.scheduled_time
+      && i.status !== 'completed' && i.status !== 'skipped'
+    )
+    const yesterdayIds = new Set(yesterdayUnfinished.map(i => i.id))
+    items = items.filter(i => !yesterdayIds.has(i.id))
+  }
 
   const blockMap = Object.fromEntries(blocks.map(b => [b.id, b]))
 
   // Build a lookup of which block_ids already have a linked action_item
-  const linkedBlockIds = new Set(items.map(i => i.time_block_id).filter(Boolean))
+  // Only consider items committed for this specific date (not rolled-forward items)
+  const dateScopedItems = items.filter(i => i.committed_date === date)
+  const linkedBlockIds = new Set(dateScopedItems.map(i => i.time_block_id).filter(Boolean))
 
   // Orphaned blocks: no linked action_item, not a calendar import, has a label
   const orphanedBlocks = blocks.filter(b =>
@@ -100,7 +167,7 @@ export async function GET(req: NextRequest) {
   if (orphanedBlocks.length > 0) {
     // For each orphaned block, try to match an existing timeless action_item by name.
     // If matched, link it. Otherwise, create a new action_item.
-    const timelessItems = items.filter(i => !i.time_block_id && !i.scheduled_time)
+    const timelessItems = dateScopedItems.filter(i => !i.time_block_id && !i.scheduled_time)
 
     const toCreate: typeof orphanedBlocks = []
 
@@ -200,5 +267,5 @@ export async function GET(req: NextRequest) {
     suggestedData = { activities, coverage, dismissedActivityIds, weekStart: weekStartStr }
   }
 
-  return NextResponse.json({ items, nextUp, loggedItems, hopperItems, suggestedData })
+  return NextResponse.json({ items, nextUp, loggedItems, hopperItems, suggestedData, yesterdayUnfinished })
 }

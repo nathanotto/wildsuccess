@@ -86,5 +86,28 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Store heat snapshot for retrospective animation (fire-and-forget)
+  try {
+    const heatRes = await fetch(new URL('/api/map/heat', req.url), {
+      headers: { cookie: req.headers.get('cookie') ?? '' },
+    })
+    const heatData = await heatRes.json()
+    if (heatData?.heat?.length) {
+      const snapshots = heatData.heat.map((h: { value_id: string; heat: number }) => ({
+        user_id: user.id,
+        value_id: h.value_id,
+        heat: h.heat,
+        score: Math.round(1 + h.heat * 9),
+        snapshot_date: completion_date,
+      }))
+      await supabase.from('value_heat_snapshots').upsert(snapshots, {
+        onConflict: 'user_id,value_id,snapshot_date',
+      })
+    }
+  } catch {
+    // Non-critical — don't fail day completion if snapshot fails
+  }
+
   return NextResponse.json(data, { status: 201 })
 }

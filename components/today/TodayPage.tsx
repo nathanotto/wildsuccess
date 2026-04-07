@@ -116,25 +116,25 @@ const STATUS_ORDER: Record<string, number> = {
 
 // ─── Checkbox ────────────────────────────────────────────────────────────────
 
-function Checkbox({ status, onClick }: { status: string; onClick: () => void }) {
+function Checkbox({ status, onClick }: { status: string; onClick?: () => void }) {
   const base: React.CSSProperties = {
     width: 14, height: 14,
     border: '1.5px solid',
     borderRadius: 2,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', flexShrink: 0, position: 'relative', overflow: 'hidden',
+    cursor: onClick ? 'pointer' : 'default', flexShrink: 0, position: 'relative', overflow: 'hidden',
   }
 
   if (status === 'committed') {
     return (
       <span style={{ ...base, borderColor: '#B5B0A8', background: 'transparent' }}
-        onClick={e => { e.stopPropagation(); onClick() }} />
+        onClick={e => { e.stopPropagation(); onClick?.() }} />
     )
   }
   if (status === 'in_progress') {
     return (
       <span style={{ ...base, borderColor: '#C4725A', background: 'transparent' }}
-        onClick={e => { e.stopPropagation(); onClick() }}>
+        onClick={e => { e.stopPropagation(); onClick?.() }}>
         <span style={{ width: 6, height: 6, background: '#C4725A', borderRadius: 1 }} />
       </span>
     )
@@ -142,7 +142,7 @@ function Checkbox({ status, onClick }: { status: string; onClick: () => void }) 
   if (status === 'completed') {
     return (
       <span style={{ ...base, borderColor: '#8A857D', background: '#8A857D', color: 'white', fontSize: 10 }}
-        onClick={e => { e.stopPropagation(); onClick() }}>
+        onClick={e => { e.stopPropagation(); onClick?.() }}>
         ✓
       </span>
     )
@@ -150,7 +150,7 @@ function Checkbox({ status, onClick }: { status: string; onClick: () => void }) 
   if (status === 'parked') {
     return (
       <span style={{ ...base, borderColor: '#B5B0A8', background: 'transparent' }}
-        onClick={e => { e.stopPropagation(); onClick() }}>
+        onClick={e => { e.stopPropagation(); onClick?.() }}>
         <span style={{
           position: 'absolute', bottom: 0, left: 0, right: 0, height: 7,
           background: '#B5B0A8',
@@ -161,7 +161,7 @@ function Checkbox({ status, onClick }: { status: string; onClick: () => void }) 
   if (status === 'skipped') {
     return (
       <span style={{ ...base, borderColor: '#B5B0A8', background: 'transparent', color: '#B5B0A8', fontSize: 10, fontWeight: 700 }}
-        onClick={e => { e.stopPropagation(); onClick() }}>
+        onClick={e => { e.stopPropagation(); onClick?.() }}>
         ✕
       </span>
     )
@@ -169,7 +169,7 @@ function Checkbox({ status, onClick }: { status: string; onClick: () => void }) 
   // fallback
   return (
     <span style={{ ...base, borderColor: '#B5B0A8' }}
-      onClick={e => { e.stopPropagation(); onClick() }} />
+      onClick={e => { e.stopPropagation(); onClick?.() }} />
   )
 }
 
@@ -333,10 +333,12 @@ interface FocusViewProps {
   onUnschedule: (id: string) => Promise<void>
   nextUp: ActionItemWithNotes | null
   isToday: boolean
+  isPast: boolean
+  selectedDate: string
 }
 
 function FocusView({
-  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onMoveToTomorrow, onMarkDoneAndCapture, onDelete, onSchedule, onUnschedule, nextUp, isToday,
+  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onMoveToTomorrow, onMarkDoneAndCapture, onDelete, onSchedule, onUnschedule, nextUp, isToday, isPast, selectedDate,
 }: FocusViewProps) {
   const [title, setTitle] = useState(item.name)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -483,7 +485,7 @@ function FocusView({
             display: 'flex', alignItems: 'flex-start', gap: 8,
             padding: '6px 8px', marginBottom: 2,
           }}>
-            <Checkbox status={s.is_completed ? 'completed' : 'committed'} onClick={() => !s.is_completed && handleCheckStep(s.id)} />
+            <Checkbox status={s.is_completed ? 'completed' : 'committed'} onClick={isPast ? undefined : () => !s.is_completed && handleCheckStep(s.id)} />
             <span style={{
               fontSize: 14, flex: 1,
               color: s.is_completed ? '#B5B0A8' : '#2D2A26',
@@ -503,7 +505,7 @@ function FocusView({
             </button>
           </div>
         ))}
-        {showSteps && (
+        {showSteps && !isPast && (
           <input
             value={stepInput}
             onChange={e => setStepInput(e.target.value)}
@@ -527,17 +529,19 @@ function FocusView({
             <span style={{ fontSize: 12, color: '#8A8578' }}>{n.content}</span>
           </div>
         ))}
-        <input
-          value={noteInput}
-          onChange={e => setNoteInput(e.target.value)}
-          onKeyDown={handleAddNote}
-          placeholder="add note..."
-          style={{ ...inputStyle, paddingLeft: 46 }}
-        />
+        {!isPast && (
+          <input
+            value={noteInput}
+            onChange={e => setNoteInput(e.target.value)}
+            onKeyDown={handleAddNote}
+            placeholder="add note..."
+            style={{ ...inputStyle, paddingLeft: 46 }}
+          />
+        )}
       </div>
 
       {/* Follow-ups for time-locked (meeting) items */}
-      {isTimeLocked && (
+      {!isPast && isTimeLocked && (
         <div style={section}>
           <div style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
             Follow-ups
@@ -553,7 +557,7 @@ function FocusView({
       )}
 
       {/* Inline scheduler */}
-      {showScheduler ? (
+      {!isPast && (showScheduler ? (
         <InlineScheduler
           isToday={isToday}
           pickedTime={pickedTime}
@@ -579,24 +583,29 @@ function FocusView({
         }} style={{ ...actionBtnStyle, marginTop: 28 }}>
           ⏱ {item.scheduled_time ? 'Reschedule' : 'Schedule this item'}
         </button>
-      )}
+      ))}
 
       {/* Bottom actions */}
+      {isPast ? (
+        <div style={{ marginTop: 28, fontSize: 12, color: '#B5B0A8', fontStyle: 'italic' }}>
+          {item.completed_date === selectedDate ? '✓ Completed this day' : 'Was on list this day — not completed'}
+        </div>
+      ) : (
       <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button
           onClick={() => onStatusChange(item.id, 'completed').then(onBack)}
           style={actionBtnStyle}>
-          → Mark done
+          → It is done
         </button>
         <button
           onClick={() => onStatusChange(item.id, 'parked').then(onBack)}
           style={actionBtnStyle}>
-          → Done for today
+          → Done working on it today
         </button>
         <button
           onClick={() => onMoveToTomorrow(item.id).then(onBack)}
           style={actionBtnStyle}>
-          → Move to tomorrow
+          → Defer to tomorrow
         </button>
         {showCaptureFollowUp ? (
           <input
@@ -615,7 +624,7 @@ function FocusView({
           />
         ) : (
           <button onClick={() => setShowCaptureFollowUp(true)} style={actionBtnStyle}>
-            → Mark done and capture follow-up
+            → Done, needs follow-up
           </button>
         )}
         {item.scheduled_time ? (
@@ -628,13 +637,13 @@ function FocusView({
           <button
             onClick={() => onStatusChange(item.id, 'rescheduled').then(onBack)}
             style={actionBtnStyle}>
-            ↺ Send back to hopper
+            ↺ Put it back in the hopper
           </button>
         )}
         <button
           onClick={() => onStatusChange(item.id, 'skipped').then(onBack)}
           style={actionBtnStyle}>
-          ✕ Skip and dismiss
+          ✕ Never getting done
         </button>
         <button
           onClick={() => { if (window.confirm('Delete this item permanently?')) onDelete(item.id).then(onBack) }}
@@ -642,6 +651,7 @@ function FocusView({
           ⌫ Delete like it never happened
         </button>
       </div>
+      )}
 
       {/* Next up reminder */}
       {nextUp && isToday && (
@@ -827,8 +837,10 @@ export default function TodayPage({ displayName }: Props) {
   const [hopperItems, setHopperItems] = useState<HopperItem[]>([])
   const [suggestedData, setSuggestedData] = useState<SuggestedData | null>(null)
   const [dismissedVirtualIds, setDismissedVirtualIds] = useState<Set<string>>(new Set())
+  const [yesterdayUnfinished, setYesterdayUnfinished] = useState<ActionItemWithNotes[]>([])
 
   const isToday = selectedDate === todayStr
+  const isPast = selectedDate < todayStr
   const isYesterday = selectedDate === addDays(todayStr, -1)
   const isTomorrow = selectedDate === addDays(todayStr, 1)
 
@@ -855,6 +867,7 @@ export default function TodayPage({ displayName }: Props) {
       setHopperItems(data.hopperItems ?? [])
       setSuggestedData(data.suggestedData ?? null)
       setDismissedVirtualIds(new Set())
+      setYesterdayUnfinished(data.yesterdayUnfinished ?? [])
     } finally {
       setLoading(false)
     }
@@ -1091,6 +1104,11 @@ export default function TodayPage({ displayName }: Props) {
   }
 
   async function handleMoveToTomorrow(id: string) {
+    const item = items.find(i => i.id === id)
+    // Delete the old time_block first to prevent orphan reconciliation creating duplicates
+    if (item?.time_block_id) {
+      await fetch(`/api/time-blocks/${item.time_block_id}`, { method: 'DELETE' })
+    }
     const tomorrow = addDays(todayStr, 1)
     const res = await fetch(`/api/action-items/${id}`, {
       method: 'PATCH',
@@ -1100,6 +1118,44 @@ export default function TodayPage({ displayName }: Props) {
     if (res.ok) {
       setItems(prev => prev.filter(i => i.id !== id))
     }
+  }
+
+  // ── Yesterday's unfinished triage actions ──────────────────────────────────
+
+  async function handleYesterdayDidIt(id: string) {
+    // Mark complete with yesterday's date
+    const yesterday = addDays(todayStr, -1)
+    await fetch(`/api/action-items/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed', committed_date: yesterday }),
+    })
+    setYesterdayUnfinished(prev => prev.filter(i => i.id !== id))
+  }
+
+  async function handleYesterdaySkip(id: string) {
+    await fetch(`/api/action-items/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'skipped' }),
+    })
+    setYesterdayUnfinished(prev => prev.filter(i => i.id !== id))
+  }
+
+  async function handleYesterdayMoveToToday(id: string) {
+    const item = yesterdayUnfinished.find(i => i.id === id)
+    if (!item) return
+    // Delete old time_block to prevent orphan issues
+    if (item.time_block_id) {
+      await fetch(`/api/time-blocks/${item.time_block_id}`, { method: 'DELETE' })
+    }
+    await fetch(`/api/action-items/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ committed_date: todayStr, scheduled_time: null, scheduled_end_time: null, time_block_id: null }),
+    })
+    setYesterdayUnfinished(prev => prev.filter(i => i.id !== id))
+    setItems(prev => [...prev, { ...item, committed_date: todayStr, scheduled_time: null, scheduled_end_time: null, time_block_id: null }])
   }
 
   async function handleAddFollowUp(content: string, sourceId: string) {
@@ -1361,6 +1417,8 @@ export default function TodayPage({ displayName }: Props) {
             onUnschedule={handleUnschedule}
             nextUp={focusNextUp ?? listNextUp}
             isToday={isToday}
+            isPast={isPast}
+            selectedDate={selectedDate}
           />
         ) : (
           <>
@@ -1395,12 +1453,14 @@ export default function TodayPage({ displayName }: Props) {
               </span>
             </div>
 
-            {/* Capture */}
-            <CaptureInput
-              source="today"
-              onItemCreated={item => setItems(prev => [...prev, item])}
-              onLogEntry={() => loadData(selectedDate)}
-            />
+            {/* Capture — only on today and future views */}
+            {!isPast && (
+              <CaptureInput
+                source="today"
+                onItemCreated={item => setItems(prev => [...prev, item])}
+                onLogEntry={() => loadData(selectedDate)}
+              />
+            )}
 
             {loading ? (
               <div style={{ fontSize: 12, color: '#B5B0A8', paddingTop: 20 }}>Loading…</div>
@@ -1425,6 +1485,46 @@ export default function TodayPage({ displayName }: Props) {
                   {stats.done} done · {stats.inProgress} in progress · {stats.todo} to-do{stats.skipped > 0 ? ` · ${stats.skipped} skipped` : ''}
                 </div>
 
+                {/* Yesterday's unfinished — triage box */}
+                {isToday && yesterdayUnfinished.length > 0 && (
+                  <div style={{
+                    marginBottom: 16, padding: '10px 12px', borderRadius: 8,
+                    background: '#FBF9F5', border: '1px solid #E8E4DC',
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                      Yesterday&apos;s unfinished
+                    </div>
+                    {yesterdayUnfinished.map(item => (
+                      <div key={item.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '5px 0', borderBottom: '1px solid #F0EDE8',
+                      }}>
+                        <span style={{ fontSize: 13, color: '#2D2A26', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.name}
+                        </span>
+                        <span style={{ fontSize: 10, color: '#B5B0A8', flexShrink: 0 }}>
+                          {item.scheduled_time ? fmtTime(item.scheduled_time) : ''}
+                        </span>
+                        <button
+                          onClick={() => handleYesterdayDidIt(item.id)}
+                          title="I did it"
+                          style={{ background: 'none', border: '1px solid #8A857D', borderRadius: 3, cursor: 'pointer', fontSize: 9, color: '#5A9E6F', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        >✓</button>
+                        <button
+                          onClick={() => handleYesterdaySkip(item.id)}
+                          title="Didn't happen"
+                          style={{ background: 'none', border: '1px solid #8A857D', borderRadius: 3, cursor: 'pointer', fontSize: 9, color: '#C4725A', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        >✕</button>
+                        <button
+                          onClick={() => handleYesterdayMoveToToday(item.id)}
+                          title="Move to today"
+                          style={{ background: 'none', border: '1px solid #8A857D', borderRadius: 3, cursor: 'pointer', fontSize: 9, color: '#4B6A82', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        >→</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* To-do section */}
                 {todoItems.length > 0 && (
                   <div style={{ marginBottom: 24 }}>
@@ -1432,6 +1532,8 @@ export default function TodayPage({ displayName }: Props) {
                       <TodoRow
                         key={item.id}
                         item={item}
+                        isPast={isPast}
+                        selectedDate={selectedDate}
                         onCheckbox={() => handleCheckboxCycle(item)}
                         onFocus={() => setFocusItemId(item.id)}
                         onReschedule={() => handleStatusChange(item.id, 'rescheduled')}
@@ -1445,7 +1547,7 @@ export default function TodayPage({ displayName }: Props) {
                 {scheduleItems.length > 0 && (
                   <div style={{ marginBottom: 24 }}>
                     <div style={{ height: 1, background: '#F0EDE6', marginBottom: 8 }} />
-                    {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange)}
+                    {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
                   </div>
                 )}
 
@@ -1560,9 +1662,11 @@ export default function TodayPage({ displayName }: Props) {
 // ─── TodoRow ─────────────────────────────────────────────────────────────────
 
 function TodoRow({
-  item, onCheckbox, onFocus, onReschedule, onSkip,
+  item, isPast, selectedDate, onCheckbox, onFocus, onReschedule, onSkip,
 }: {
   item: ActionItemWithNotes
+  isPast?: boolean
+  selectedDate?: string
   onCheckbox: () => void
   onFocus: () => void
   onReschedule: () => void
@@ -1571,10 +1675,12 @@ function TodoRow({
   const [showMenu, setShowMenu] = useState(false)
   const [showSteps, setShowSteps] = useState(true)
   const menuOpenedAt = useRef(0)
-  const isCompleted = item.status === 'completed'
+  // For past views, derive display status from completed_date
+  const displayCompleted = isPast && selectedDate ? item.completed_date === selectedDate : item.status === 'completed'
+  const isCompleted = displayCompleted
   const isParked = item.status === 'parked'
   const isSkipped = item.status === 'skipped'
-  const muted = isCompleted || isParked || isSkipped
+  const muted = isCompleted || isParked || isSkipped || (isPast && !isCompleted)
 
   const steps = (item.item_notes ?? [])
     .filter(n => n.note_type === 'step')
@@ -1589,7 +1695,7 @@ function TodoRow({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <Checkbox status={item.status} onClick={onCheckbox} />
+        <Checkbox status={isCompleted ? 'completed' : isPast ? 'committed' : item.status} onClick={isPast ? undefined : onCheckbox} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{
             fontSize: 14,
@@ -1599,6 +1705,7 @@ function TodoRow({
             {item.name}
           </span>
         </div>
+        {!isPast && (
         <div style={{ position: 'relative' }}>
           <button
             onClick={e => { e.stopPropagation(); setShowMenu(!showMenu) }}
@@ -1628,6 +1735,7 @@ function TodoRow({
             </>
           )}
         </div>
+        )}
       </div>
       {steps.length > 0 && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
@@ -1662,18 +1770,21 @@ function TodoRow({
 
 // ─── ScheduleRow ──────────────────────────────────────────────────────────────
 
-function ScheduleRow({ item, onCheckbox, onFocus, onReschedule, onSkip }: {
+function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onReschedule, onSkip }: {
   item: ActionItemWithNotes
+  isPast?: boolean
+  selectedDate?: string
   onCheckbox: () => void
   onFocus: () => void
   onReschedule: () => void
   onSkip: () => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
-  const isCompleted = item.status === 'completed'
+  const displayCompleted = isPast && selectedDate ? item.completed_date === selectedDate : item.status === 'completed'
+  const isCompleted = displayCompleted
   const isParked = item.status === 'parked'
   const isSkipped = item.status === 'skipped'
-  const muted = isCompleted || isParked || isSkipped
+  const muted = isCompleted || isParked || isSkipped || (isPast && !isCompleted)
 
   return (
     <div
@@ -1687,7 +1798,7 @@ function ScheduleRow({ item, onCheckbox, onFocus, onReschedule, onSkip }: {
       <span style={{ fontSize: 12, color: '#8A8578', width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 1 }}>
         {item.scheduled_time ? fmtTime(item.scheduled_time) : ''}
       </span>
-      <Checkbox status={item.status} onClick={onCheckbox} />
+      <Checkbox status={isCompleted ? 'completed' : isPast ? 'committed' : item.status} onClick={isPast ? undefined : onCheckbox} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{
           fontSize: 14,
@@ -1697,6 +1808,7 @@ function ScheduleRow({ item, onCheckbox, onFocus, onReschedule, onSkip }: {
           {item.name}
         </span>
       </div>
+      {!isPast && (
       <div style={{ position: 'relative' }}>
         <button
           onClick={e => { e.stopPropagation(); setShowMenu(!showMenu) }}
@@ -1726,6 +1838,7 @@ function ScheduleRow({ item, onCheckbox, onFocus, onReschedule, onSkip }: {
           </>
         )}
       </div>
+      )}
     </div>
   )
 }
@@ -1739,6 +1852,8 @@ function renderScheduleItems(
   onCheckbox: (item: ActionItemWithNotes) => void,
   onFocus: (id: string) => void,
   onStatusChange: (id: string, status: string) => void,
+  isPast?: boolean,
+  selectedDate?: string,
 ) {
   const result: React.ReactNode[] = []
   let nowLineInserted = false
@@ -1771,6 +1886,8 @@ function renderScheduleItems(
       <ScheduleRow
         key={item.id}
         item={item}
+        isPast={isPast}
+        selectedDate={selectedDate}
         onCheckbox={() => onCheckbox(item)}
         onFocus={() => onFocus(item.id)}
         onReschedule={() => onStatusChange(item.id, 'rescheduled')}

@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const now = new Date()
 
   // Load user context in parallel
-  const [peopleRes, activitiesRes, suggestionsRes, profileRes] = await Promise.all([
+  const [peopleRes, activitiesRes, suggestionsRes, profileRes, valuesRes] = await Promise.all([
     supabase
       .from('known_people')
       .select('id, name, normalized_name, mention_count, known_people_value_links(value_id, contribution_strength, user_values(name))')
@@ -35,6 +35,10 @@ export async function POST(req: NextRequest) {
       .select('full_name, preferred_name')
       .eq('id', user.id)
       .single(),
+    supabase
+      .from('user_values')
+      .select('id, name')
+      .eq('user_id', user.id),
   ])
 
   const ctx: UserContext = {
@@ -65,7 +69,11 @@ export async function POST(req: NextRequest) {
       name: t.name,
       normalizedName: t.name.toLowerCase().trim(),
     })),
-    values: [],
+    values: (valuesRes.data ?? []).map((v: any) => ({
+      id: v.id,
+      name: v.name,
+      normalizedName: v.name.toLowerCase().trim(),
+    })),
     userName: profileRes.data?.preferred_name ?? profileRes.data?.full_name ?? '',
   }
 

@@ -277,6 +277,7 @@ export interface ActionItem {
   committed_at: string | null
   committed_to_person_id: string | null
   completed_at: string | null
+  completed_date: string | null
   completion_note: string | null
   actual_duration_minutes: number | null
   feelings: string[] | null

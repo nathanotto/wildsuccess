@@ -49,6 +49,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (status === 'completed') {
     update.completed_at = now.toISOString()
+    update.completed_date = today
   }
 
   if (status === 'parked') {
@@ -111,6 +112,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (isReopening) {
     update.completed_at = null
+    update.completed_date = null
     update.committed_date = extra.committed_date ?? current.committed_date ?? today
     update.committed_at = now.toISOString()
 

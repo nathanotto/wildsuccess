@@ -64,6 +64,7 @@ interface ActionItemLocal {
   emotional_weight: 'light' | 'normal' | 'heavy'
   status: 'committed' | 'completed' | 'skipped'
   committed_at?: string | null
+  metadata?: Record<string, unknown> | null
 }
 
 interface CandidateItemLocal {
@@ -664,6 +665,69 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     return Math.max(20, durationMin * (HOUR_HEIGHT / 60))
   }
 
+  // Compute overlap columns for blocks that share time ranges (Google Calendar style)
+  function computeOverlapLayout(blocks: Array<{ id: string; start_time: string; duration_minutes: number }>) {
+    if (blocks.length === 0) return new Map<string, { col: number; totalCols: number }>()
+
+    // Sort by start time, then by duration (longer first)
+    const sorted = [...blocks].sort((a, b) => {
+      const d = timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
+      return d !== 0 ? d : b.duration_minutes - a.duration_minutes
+    })
+
+    const endTime = (b: { start_time: string; duration_minutes: number }) =>
+      timeToMinutes(b.start_time) + b.duration_minutes
+
+    // Group overlapping blocks into clusters
+    const clusters: Array<typeof sorted> = []
+    let current: typeof sorted = []
+    let clusterEnd = 0
+
+    for (const block of sorted) {
+      const start = timeToMinutes(block.start_time)
+      if (current.length === 0 || start < clusterEnd) {
+        current.push(block)
+        clusterEnd = Math.max(clusterEnd, endTime(block))
+      } else {
+        clusters.push(current)
+        current = [block]
+        clusterEnd = endTime(block)
+      }
+    }
+    if (current.length > 0) clusters.push(current)
+
+    // Assign columns within each cluster
+    const layout = new Map<string, { col: number; totalCols: number }>()
+    for (const cluster of clusters) {
+      const columns: Array<number> = [] // end time of last block in each column
+      const assignments: Array<{ id: string; col: number }> = []
+
+      for (const block of cluster) {
+        const start = timeToMinutes(block.start_time)
+        let placed = false
+        for (let c = 0; c < columns.length; c++) {
+          if (columns[c] <= start) {
+            columns[c] = endTime(block)
+            assignments.push({ id: block.id, col: c })
+            placed = true
+            break
+          }
+        }
+        if (!placed) {
+          assignments.push({ id: block.id, col: columns.length })
+          columns.push(endTime(block))
+        }
+      }
+
+      const totalCols = columns.length
+      for (const a of assignments) {
+        layout.set(a.id, { col: a.col, totalCols })
+      }
+    }
+
+    return layout
+  }
+
   // ── Block placement ─────────────────────────────────────────────────────────
   async function handleDropOnColumn(ds: string, clientY: number) {
     if (!draggingBlockTypeId) return
@@ -1088,21 +1152,35 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     if (itemId.startsWith('activity:')) {
       const activityId = itemId.slice('activity:'.length)
       const activity = activities.find(a => a.id === activityId)
-      const createRes = await fetch('/api/action-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: activity?.name ?? activityId,
-          source: 'template_proposal',
-          activity_id: activityId,
-          status: 'committed',
-          committed_date: today,
-          committed_at: new Date().toISOString(),
-        }),
-      })
-      if (!createRes.ok) return
-      const newItem = await createRes.json()
-      actionItemId = newItem.id
+
+      // Check if an existing candidate for this activity is already in the hopper
+      const existingCandidate = hopper.find(h => h.activity_id === activityId && !h.id.startsWith('activity:'))
+
+      if (existingCandidate) {
+        // Commit the existing candidate instead of creating a new item
+        actionItemId = existingCandidate.id
+        await fetch(`/api/action-items/${actionItemId}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'committed', committed_date: today }),
+        })
+      } else {
+        const createRes = await fetch('/api/action-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: activity?.name ?? activityId,
+            source: 'template_proposal',
+            activity_id: activityId,
+            status: 'committed',
+            committed_date: today,
+            committed_at: new Date().toISOString(),
+          }),
+        })
+        if (!createRes.ok) return
+        const newItem = await createRes.json()
+        actionItemId = newItem.id
+      }
       setScheduleCoverage(prev => [...prev, { activity_id: activityId, scheduled_date: today }])
     } else {
       await fetch(`/api/action-items/${actionItemId}/status`, {
@@ -1732,6 +1810,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
               bounding_type: 'time',
               emotional_weight: 'normal',
               status: 'committed',
+              metadata: { calendar_event_id: ev.external_event_id },
             }),
           })
           scheduledEventIds.add(ev.external_event_id)
@@ -2656,7 +2735,19 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                   const ds = dateStr(d)
                   const isToday = ds === today
                   const blocks = dayBlocks[ds] ?? []
-                  const blockLabels = new Set(blocks.map(b => b.label.trim().toLowerCase()))
+                  // Use visual duration (accounts for item overflow) for overlap computation
+                  const blocksWithVisualDuration = blocks.map(b => ({
+                    ...b,
+                    duration_minutes: Math.max(b.duration_minutes, (b.items.length * 22 + 24) / (HOUR_HEIGHT / 60)),
+                  }))
+                  const overlapLayout = computeOverlapLayout(blocksWithVisualDuration)
+                  const blockLabels = blocks.map(b => b.label.trim().toLowerCase())
+                  // Collect calendar_event_ids from action items linked to blocks on this day
+                  const scheduledEventIds = new Set(
+                    blocks.flatMap(b => b.items
+                      .map(i => (i.metadata as Record<string, unknown> | null)?.calendar_event_id)
+                      .filter(Boolean) as string[])
+                  )
                   const dayCalEvents = calEvents.filter(ev => {
                     if (ev.is_all_day) return false
                     if (ev.classification?.classification === 'hidden') return false
@@ -2665,9 +2756,11 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                     const local = new Date(ev.start_time)
                     const evDate = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`
                     if (evDate !== ds) return false
-                    // Skip if a Wild Success block with the same name already exists on this day
+                    // Skip if this event was scheduled as an action item (by event ID)
+                    if (scheduledEventIds.has(ev.external_event_id)) return false
+                    // Skip if a Wild Success block has a matching name (fuzzy: contains match)
                     const evTitle = (ev.classification?.display_label ?? ev.title).trim().toLowerCase()
-                    if (blockLabels.has(evTitle)) return false
+                    if (blockLabels.some(label => label.includes(evTitle) || evTitle.includes(label))) return false
                     return true
                   })
 
@@ -2893,12 +2986,6 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                       {blocks.map(block => {
                         const isOver = dragOverBlockId === block.id && !block.is_hard
                         const blockColor = block.is_hard ? '#9E6A46' : (block.block_type?.color ?? '#4B82AF')
-                        const totalItemMin = block.items.length * 20
-                        const fillPct = block.duration_minutes > 0
-                          ? Math.min(100, (totalItemMin / block.duration_minutes) * 100)
-                          : 0
-                        const overFill = totalItemMin > block.duration_minutes
-
                         return (
                           <div
                             key={block.id}
@@ -2918,12 +3005,19 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                             onMouseEnter={e => { if (!draggingBlock && !draggingBlockTypeId && !draggingHopperItem) setBlockTooltip({ label: block.label, time: `${formatTime12(block.start_time)} · ${block.duration_minutes}m`, x: e.clientX, y: e.clientY }) }}
                             onMouseMove={e => { if (draggingBlock || draggingBlockTypeId || draggingHopperItem) { setBlockTooltip(null); return } setBlockTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null) }}
                             onMouseLeave={() => setBlockTooltip(null)}
-                            style={{
-                              position: 'absolute',
+                            style={(() => {
+                              const ol = overlapLayout.get(block.id)
+                              const col = ol?.col ?? 0
+                              const totalCols = ol?.totalCols ?? 1
+                              // Height: max of time-based height and content-needed height (header ~24px + ~22px per item)
+                              const timeHeight = blockHeightPx(block.duration_minutes)
+                              const contentHeight = 24 + block.items.length * 22
+                              return {
+                              position: 'absolute' as const,
                               top: blockTopPx(block.start_time),
-                              height: blockHeightPx(block.duration_minutes),
-                              left: 2,
-                              right: 2,
+                              height: Math.max(timeHeight, contentHeight),
+                              left: `calc(${(col / totalCols) * 100}% + 2px)`,
+                              width: `calc(${100 / totalCols}% - 4px)`,
                               borderRadius: 8,
                               background: isOver
                                 ? blockColor + '15'
@@ -2937,7 +3031,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                               outline: duplicateArmed === block.id ? `2px dashed ${blockColor}` : 'none',
                               outlineOffset: 2,
                               animation: exitingBlockIds.has(block.id) ? 'block-exit 260ms ease-out forwards' : newlyPlacedIds.has(block.id) ? 'auto-place-pulse 2s ease-out' : undefined,
-                            }}
+                            }})()}
                             onDragOver={!block.is_hard ? e => {
                               e.preventDefault()
                               if (draggingHopperItem) setDragOverBlockId(block.id)
@@ -2964,99 +3058,131 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                               </div>
                             )}
 
-                            {/* Block header */}
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              padding: '4px 6px',
-                              borderBottom: block.items.length > 0 ? '1px solid #F0EDE8' : 'none',
-                              pointerEvents: block.is_hard ? 'auto' : undefined,
-                            }}>
-                              <div style={{ width: 3, height: 14, borderRadius: 2, background: blockColor, flexShrink: 0 }} />
-                              {editingBlockLabel?.blockId === block.id ? (
-                                <input
-                                  autoFocus
-                                  value={editingBlockLabel.label}
-                                  onChange={e => setEditingBlockLabel(prev => prev ? { ...prev, label: e.target.value } : null)}
-                                  onBlur={() => renameBlock(block.id, ds, editingBlockLabel.label)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') renameBlock(block.id, ds, editingBlockLabel.label)
-                                    if (e.key === 'Escape') setEditingBlockLabel(null)
-                                  }}
-                                  onClick={e => e.stopPropagation()}
-                                  style={{ fontSize: 10, fontWeight: 600, color: '#2D2A26', flex: 1, border: '1px solid #E0DDD6', borderRadius: 3, padding: '1px 4px', background: '#FFF', outline: 'none', minWidth: 0 }}
-                                />
-                              ) : (
-                                <span
-                                  onDoubleClick={e => { e.stopPropagation(); setEditingBlockLabel({ blockId: block.id, date: ds, label: block.label }) }}
-                                  style={{ fontSize: 10, fontWeight: 600, color: '#2D2A26', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
-                                >
-                                  {block.block_type?.icon && <span style={{ marginRight: 3 }}>{block.block_type.icon}</span>}
-                                  {block.label}
-                                </span>
-                              )}
-                              <span style={{ fontSize: 9, color: '#8A857D', flexShrink: 0 }}>{formatTime12(block.start_time)}</span>
-                              {block.is_hard && <span style={{ fontSize: 8, color: '#9E6A46' }}>🔒</span>}
-                              <button
-                                onClick={() => deleteBlock(block.id, ds)}
-                                style={{
-                                  width: 12, height: 12, borderRadius: 3, border: 'none', background: 'transparent',
-                                  cursor: 'pointer', fontSize: 9, color: '#8A857D', display: 'flex', alignItems: 'center',
-                                  justifyContent: 'center', padding: 0, lineHeight: 1, flexShrink: 0,
-                                }}
-                                title="Delete block"
-                              >×</button>
-                            </div>
+                            {/* Block header — if an item matches the label, merge its actions into the header */}
+                            {(() => {
+                              const blockLabelLower = block.label.trim().toLowerCase()
+                              const matchingItems = block.items.filter(i => i.name.trim().toLowerCase() === blockLabelLower)
+                              // Prefer the non-completed item as primary (it's the actionable one)
+                              const primaryItem = matchingItems.find(i => i.status !== 'completed') ?? matchingItems[0] ?? null
+                              const extraItems = block.items.filter(i => i.name.trim().toLowerCase() !== blockLabelLower)
+                              const headerCompleted = primaryItem?.status === 'completed'
 
-                            {/* Scheduled items */}
-                            {block.items.map(item => (
-                              <div
-                                key={item.id}
-                                style={{
-                                  padding: '3px 6px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  borderBottom: '1px solid #F5F3EF',
-                                  background: flashingItemIds.has(item.id) ? 'transparent' : item.status === 'completed' ? '#5A9E6F08' : 'transparent',
-                                  animation: flashingItemIds.has(item.id) ? 'item-complete-flash 0.9s ease-out forwards' : undefined,
-                                  borderLeft: item.status === 'completed'
-                                    ? '3px solid #5A9E6F'
-                                    : item.committed_at
-                                      ? `3px solid ${EC[item.time_type]}`
-                                      : `3px dashed ${EC[item.time_type]}80`,
-                                }}
-                              >
-                                <span style={{ width: 5, height: 5, borderRadius: '50%', background: EC[item.time_type], flexShrink: 0 }} />
-                                <span style={{
-                                  fontSize: 9,
-                                  flex: 1,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  color: item.status === 'completed' ? '#5A9E6F' : '#2D2A26',
-                                  textDecoration: item.status === 'completed' ? 'line-through' : 'none',
-                                }}>
-                                  {item.name}
-                                  {item.emotional_weight === 'heavy' && (
-                                    <span style={{ color: '#C4725A', marginLeft: 2, fontSize: 7 }}>◆</span>
-                                  )}
-                                </span>
-                                {item.status !== 'completed' && (
-                                  <button
-                                    onClick={() => markItemComplete(item, block, ds)}
-                                    style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #8A857D', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                                    title="Mark complete"
-                                  >✓</button>
-                                )}
-                                <button
-                                  onClick={() => returnToHopper(item, block, ds)}
-                                  style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #8A857D', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                                  title="Return to hopper"
-                                >←</button>
-                              </div>
-                            ))}
+                              return (
+                                <>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    padding: '4px 6px',
+                                    borderBottom: extraItems.length > 0 ? '1px solid #F0EDE8' : 'none',
+                                    pointerEvents: block.is_hard ? 'auto' : undefined,
+                                    background: headerCompleted ? '#5A9E6F08' : 'transparent',
+                                  }}>
+                                    <div style={{ width: 3, height: 14, borderRadius: 2, background: headerCompleted ? '#5A9E6F' : blockColor, flexShrink: 0 }} />
+                                    {editingBlockLabel?.blockId === block.id ? (
+                                      <input
+                                        autoFocus
+                                        value={editingBlockLabel.label}
+                                        onChange={e => setEditingBlockLabel(prev => prev ? { ...prev, label: e.target.value } : null)}
+                                        onBlur={() => renameBlock(block.id, ds, editingBlockLabel.label)}
+                                        onKeyDown={e => {
+                                          if (e.key === 'Enter') renameBlock(block.id, ds, editingBlockLabel.label)
+                                          if (e.key === 'Escape') setEditingBlockLabel(null)
+                                        }}
+                                        onClick={e => e.stopPropagation()}
+                                        style={{ fontSize: 10, fontWeight: 600, color: '#2D2A26', flex: 1, border: '1px solid #E0DDD6', borderRadius: 3, padding: '1px 4px', background: '#FFF', outline: 'none', minWidth: 0 }}
+                                      />
+                                    ) : (
+                                      <span
+                                        onDoubleClick={e => { e.stopPropagation(); setEditingBlockLabel({ blockId: block.id, date: ds, label: block.label }) }}
+                                        style={{
+                                          fontSize: 10, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text',
+                                          color: headerCompleted ? '#5A9E6F' : '#2D2A26',
+                                          textDecoration: headerCompleted ? 'line-through' : 'none',
+                                        }}
+                                      >
+                                        {block.block_type?.icon && <span style={{ marginRight: 3 }}>{block.block_type.icon}</span>}
+                                        {block.label}
+                                      </span>
+                                    )}
+                                    <span style={{ fontSize: 9, color: '#8A857D', flexShrink: 0 }}>{formatTime12(block.start_time)}</span>
+                                    {block.is_hard && <span style={{ fontSize: 8, color: '#9E6A46' }}>🔒</span>}
+                                    {primaryItem && primaryItem.status !== 'completed' && (
+                                      <button
+                                        onClick={() => markItemComplete(primaryItem, block, ds)}
+                                        style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #8A857D', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                                        title="Mark complete"
+                                      >✓</button>
+                                    )}
+                                    {primaryItem && (
+                                      <button
+                                        onClick={() => returnToHopper(primaryItem, block, ds)}
+                                        style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #8A857D', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                                        title="Return to hopper"
+                                      >←</button>
+                                    )}
+                                    <button
+                                      onClick={() => deleteBlock(block.id, ds)}
+                                      style={{
+                                        width: 12, height: 12, borderRadius: 3, border: 'none', background: 'transparent',
+                                        cursor: 'pointer', fontSize: 9, color: '#8A857D', display: 'flex', alignItems: 'center',
+                                        justifyContent: 'center', padding: 0, lineHeight: 1, flexShrink: 0,
+                                      }}
+                                      title="Delete block"
+                                    >×</button>
+                                  </div>
+
+                                  {/* Extra items (names that don't match the block label) */}
+                                  {extraItems.map(item => (
+                                    <div
+                                      key={item.id}
+                                      style={{
+                                        padding: '3px 6px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        borderBottom: '1px solid #F5F3EF',
+                                        background: flashingItemIds.has(item.id) ? 'transparent' : item.status === 'completed' ? '#5A9E6F08' : 'transparent',
+                                        animation: flashingItemIds.has(item.id) ? 'item-complete-flash 0.9s ease-out forwards' : undefined,
+                                        borderLeft: item.status === 'completed'
+                                          ? '3px solid #5A9E6F'
+                                          : item.committed_at
+                                            ? `3px solid ${EC[item.time_type]}`
+                                            : `3px dashed ${EC[item.time_type]}80`,
+                                      }}
+                                    >
+                                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: EC[item.time_type], flexShrink: 0 }} />
+                                      <span style={{
+                                        fontSize: 9,
+                                        flex: 1,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        color: item.status === 'completed' ? '#5A9E6F' : '#2D2A26',
+                                        textDecoration: item.status === 'completed' ? 'line-through' : 'none',
+                                      }}>
+                                        {item.name}
+                                        {item.emotional_weight === 'heavy' && (
+                                          <span style={{ color: '#C4725A', marginLeft: 2, fontSize: 7 }}>◆</span>
+                                        )}
+                                      </span>
+                                      {item.status !== 'completed' && (
+                                        <button
+                                          onClick={() => markItemComplete(item, block, ds)}
+                                          style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #8A857D', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                                          title="Mark complete"
+                                        >✓</button>
+                                      )}
+                                      <button
+                                        onClick={() => returnToHopper(item, block, ds)}
+                                        style={{ width: 12, height: 12, borderRadius: 3, border: '1px solid #8A857D', background: 'transparent', cursor: 'pointer', fontSize: 7, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                                        title="Return to hopper"
+                                      >←</button>
+                                    </div>
+                                  ))}
+                                </>
+                              )
+                            })()}
 
                             {/* Drop placeholder */}
                             {isOver && draggingHopperItem && (
@@ -3065,26 +3191,6 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                                 <span style={{ fontSize: 9, color: '#4B82AF80', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {draggingHopperItem.name}
                                 </span>
-                              </div>
-                            )}
-
-                            {/* Fill indicator */}
-                            {block.items.length > 0 && !block.is_hard && (
-                              <div style={{
-                                position: 'absolute',
-                                bottom: 6,
-                                left: 4,
-                                right: 4,
-                                height: 2,
-                                background: '#F0EDE8',
-                                borderRadius: 1,
-                              }}>
-                                <div style={{
-                                  width: `${fillPct}%`,
-                                  height: '100%',
-                                  background: overFill ? '#D4564E' : '#5A9E6F',
-                                  borderRadius: 1,
-                                }} />
                               </div>
                             )}
 
@@ -3392,9 +3498,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       {/* ── Classification Popover ──────────────────────────────────────────── */}
       {classifying && (() => {
         const OPTS: { value: 'info' | 'fixed_commitment' | 'flexible_commitment'; icon: string; label: string; desc: string; color: string }[] = [
-          { value: 'fixed_commitment', icon: '🔒', label: 'Hard Commitment', desc: 'Blocks this time — shown as a solid event on the grid', color: '#9E6A46' },
-          { value: 'info', icon: '○', label: 'Background Info', desc: 'Just context — barely visible, won\'t affect scheduling', color: '#4B82AF' },
-          { value: 'flexible_commitment', icon: '→', label: 'Add to Hopper', desc: 'Turns into a task you can drag to a slot', color: '#5A9E6F' },
+          { value: 'fixed_commitment', icon: '✓', label: 'Schedule It', desc: 'Creates a scheduled item at this time on your calendar', color: '#5A9E6F' },
+          { value: 'info', icon: '○', label: 'Leave as Background', desc: 'Just context — barely visible, won\'t affect scheduling', color: '#4B82AF' },
+          { value: 'flexible_commitment', icon: '→', label: 'Add to Hopper', desc: 'Turns into a task you can drag to any slot', color: '#8A857D' },
         ]
         return (
           <div

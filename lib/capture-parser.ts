@@ -384,6 +384,16 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
     }
   }
 
+  // Match value names directly mentioned in the text (whole-word, case-insensitive)
+  const lowerInput = rawInput.toLowerCase()
+  for (const val of ctx.values) {
+    if (valueLinks.find(v => v.valueId === val.id)) continue // already linked
+    const pattern = new RegExp(`\\b${escapeRegex(val.normalizedName)}\\b`, 'i')
+    if (pattern.test(lowerInput)) {
+      valueLinks.push({ valueId: val.id, valueName: val.name, strength: 'moderate' })
+    }
+  }
+
   // ─── Confidence ──────────────────────────────────────────────────────────────
   let confidence = 0
   if (date || time) confidence += 0.2

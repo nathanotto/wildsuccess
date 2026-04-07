@@ -85,7 +85,7 @@ export default function DayCompletionPage({ displayName }: Props) {
     setCompleted(false)
     setAlreadyCompleted(false)
     const [todayRes, logsRes, loggedRes, valuesRes, dcRes] = await Promise.all([
-      fetch(`/api/today?date=${date}`),
+      fetch(`/api/today?date=${date}&mode=pinned`),
       fetch(`/api/action-log?date=${date}&event_type=completed`),
       fetch(`/api/action-log?date=${date}&event_type=logged`),
       fetch('/api/values'),
