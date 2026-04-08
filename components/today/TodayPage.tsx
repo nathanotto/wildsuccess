@@ -1526,16 +1526,25 @@ export default function TodayPage({ displayName }: Props) {
                   </div>
                 )}
 
-                {/* Two-column layout: todos left, schedule right (desktop only) */}
+                {/* Two-column layout: schedule left, todos right (desktop); schedule first on mobile */}
                 <style>{`
                   .today-columns { display: flex; flex-direction: column; }
                   @media (min-width: 768px) {
                     .today-columns { flex-direction: row; gap: 24px; }
-                    .today-col-todo { flex: 1; min-width: 0; }
                     .today-col-schedule { flex: 1; min-width: 0; }
+                    .today-col-todo { flex: 1; min-width: 0; }
                   }
                 `}</style>
                 <div className="today-columns">
+                  {/* Schedule column */}
+                  <div className="today-col-schedule">
+                    {scheduleItems.length > 0 && (
+                      <div style={{ marginBottom: 24 }}>
+                        {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
+                      </div>
+                    )}
+                  </div>
+
                   {/* To-do column */}
                   <div className="today-col-todo">
                     {todoItems.length > 0 && (
@@ -1552,15 +1561,6 @@ export default function TodayPage({ displayName }: Props) {
                             onSkip={() => handleStatusChange(item.id, 'skipped')}
                           />
                         ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Schedule column */}
-                  <div className="today-col-schedule">
-                    {scheduleItems.length > 0 && (
-                      <div style={{ marginBottom: 24 }}>
-                        {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
                       </div>
                     )}
                   </div>
