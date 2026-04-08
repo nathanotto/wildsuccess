@@ -757,6 +757,29 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       })
       if (!res.ok) return
       const newBlock = await res.json()
+
+      // Auto-create a committed action_item linked to this block
+      let blockItem: ActionItemLocal | null = null
+      const aiRes = await fetch('/api/action-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: blockType.name,
+          committed_date: ds,
+          time_block_id: newBlock.id,
+          scheduled_time: snapTime,
+          scheduled_end_time: endTime,
+          time_type: blockType.time_type,
+          emotional_weight: 'normal',
+          status: 'committed',
+          source: 'quick_capture',
+        }),
+      })
+      if (aiRes.ok) {
+        const ai = await aiRes.json()
+        blockItem = { id: ai.id, name: blockType.name, time_type: blockType.time_type, emotional_weight: 'normal', status: 'committed' }
+      }
+
       setDayBlocks(prev => {
         const existing = prev[ds] ?? []
         return {
@@ -772,7 +795,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
             block_type_id: blockType.id,
             block_type: blockType,
             source: 'manual',
-            items: [],
+            items: blockItem ? [blockItem] : [],
           }],
         }
       })
@@ -1210,9 +1233,12 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   async function renameBlock(blockId: string, ds: string, newLabel: string) {
     const trimmed = newLabel.trim()
     if (!trimmed) return
+    const block = (dayBlocks[ds] ?? []).find(b => b.id === blockId)
     setDayBlocks(prev => ({
       ...prev,
-      [ds]: (prev[ds] ?? []).map(b => b.id === blockId ? { ...b, label: trimmed } : b),
+      [ds]: (prev[ds] ?? []).map(b => b.id === blockId
+        ? { ...b, label: trimmed, items: b.items.map((item, i) => i === 0 && item.name === b.label ? { ...item, name: trimmed } : item) }
+        : b),
     }))
     setEditingBlockLabel(null)
     await fetch(`/api/time-blocks/${blockId}`, {
@@ -1220,6 +1246,15 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: trimmed }),
     })
+    // Also rename the primary action_item (the one whose name matches the old block label)
+    const primaryItem = block?.items.find(i => i.name === block.label)
+    if (primaryItem) {
+      await fetch(`/api/action-items/${primaryItem.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      })
+    }
   }
 
   async function deleteBlock(blockId: string, ds: string) {
@@ -1339,8 +1374,10 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       const newBlock = await res.json()
 
       // Duplicate each action item onto the new block (new action_items with committed status)
+      // If original block has no items, create one from the block label
       const newItems: ActionItemLocal[] = []
-      await Promise.all(block.items.map(async item => {
+      const itemsToDuplicate = block.items.length > 0 ? block.items : [{ name: block.label, time_type: block.block_type?.time_type ?? 'B', emotional_weight: 'normal' as const }]
+      await Promise.all(itemsToDuplicate.map(async item => {
         const aiRes = await fetch('/api/action-items', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
