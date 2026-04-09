@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
         .select('*, item_notes(*)')
         .eq('user_id', user.id)
         .eq('completed_date', todayDate)
+        .eq('committed_date', todayDate)
         .eq('status', 'completed')
         .order('sort_order', { ascending: true })
     : null

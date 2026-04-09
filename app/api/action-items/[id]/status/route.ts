@@ -49,7 +49,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (status === 'completed') {
     update.completed_at = now.toISOString()
-    update.completed_date = today
+    update.completed_date = extra.view_date ?? today
   }
 
   if (status === 'parked') {
@@ -176,7 +176,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       action_item_id: id,
       activity_id: current.activity_id ?? null,
       task_suggestion_id: current.task_suggestion_id ?? null,
-      event_date: today,
+      event_date: extra.view_date ?? today,
     })
   }
 

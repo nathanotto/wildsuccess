@@ -1024,7 +1024,7 @@ export default function TodayPage({ displayName }: Props) {
     const res = await fetch(`/api/action-items/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, view_date: selectedDate }),
     })
     const data = await res.json()
     if (data.item) {
@@ -1124,12 +1124,13 @@ export default function TodayPage({ displayName }: Props) {
   // ── Yesterday's unfinished triage actions ──────────────────────────────────
 
   async function handleYesterdayDidIt(id: string) {
-    // Mark complete with yesterday's date
-    const yesterday = addDays(todayStr, -1)
+    // Mark complete on the item's original date (yesterday), not today
+    const item = yesterdayUnfinished.find(i => i.id === id)
+    const itemDate = item?.committed_date ?? addDays(todayStr, -1)
     await fetch(`/api/action-items/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'completed', committed_date: yesterday }),
+      body: JSON.stringify({ status: 'completed', view_date: itemDate }),
     })
     setYesterdayUnfinished(prev => prev.filter(i => i.id !== id))
   }
