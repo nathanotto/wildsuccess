@@ -40,6 +40,7 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [activities, setActivities] = useState<Activity[]>([])
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [overdueActivityIds, setOverdueActivityIds] = useState<string[]>([])
+  const [domainHeat, setDomainHeat] = useState<Record<string, { heat: number; overdue_count: number }>>({})
   const [loading, setLoading] = useState(true)
   const [markers, setMarkers] = useState<Marker[]>([])
   const [boMenu, setBoMenu] = useState<{ outcome: BigOutcome; pos: { x: number; y: number } } | null>(null)
@@ -99,6 +100,11 @@ export default function MapClient({ userId, userEmail }: Props) {
     if (Array.isArray(a)) setActivities(a)
     if (p && !p.error) setProfile(p)
     if (h && h.overdueActivityIds) setOverdueActivityIds(h.overdueActivityIds)
+    if (h && h.domainHeat) {
+      const dhMap: Record<string, { heat: number; overdue_count: number }> = {}
+      for (const dh of h.domainHeat) dhMap[dh.domain_id] = { heat: dh.heat, overdue_count: dh.overdue_count }
+      setDomainHeat(dhMap)
+    }
     if (Array.isArray(hopper)) setHopperCount(hopper.length)
     if (Array.isArray(missions)) {
       const map: Record<string, string> = {}
@@ -289,6 +295,7 @@ export default function MapClient({ userId, userEmail }: Props) {
             activities={activities}
             outcomes={outcomes}
             overdueActivityIds={overdueActivityIds}
+            domainHeat={domainHeat}
             displayName={displayName}
             onEditDomain={(d) => setModal({ type: 'editDomain', domain: d })}
             onEditActivity={(a) => setModal({ type: 'editActivity', activity: a })}

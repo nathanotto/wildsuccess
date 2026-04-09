@@ -14,7 +14,7 @@ export async function GET() {
   cutoffDate.setDate(cutoffDate.getDate() - ROLLING_WINDOW_DAYS)
   const cutoffStr = cutoffDate.toISOString().split('T')[0]
 
-  const [{ data: values }, { data: links }, { data: logs }, { data: activities }, { data: scheduledItems }] = await Promise.all([
+  const [{ data: values }, { data: links }, { data: logs }, { data: activities }, { data: scheduledItems }, { data: domainLinks }] = await Promise.all([
     supabase.from('user_values').select('id'),
     supabase.from('activity_value_links').select('id, value_id, activity_id, contribution_strength'),
     // Fetch all logs in the rolling window + metadata for duration weighting
@@ -25,6 +25,8 @@ export async function GET() {
     supabase.from('activities').select('id, activity_type, frequency, status, is_preventive, alarm_threshold_days'),
     // Activities with a committed/in-progress action_item today or later — these are "addressed"
     supabase.from('action_items').select('activity_id').eq('user_id', user.id).not('activity_id', 'is', null).in('status', ['committed', 'in_progress']).gte('committed_date', todayStr),
+    // Activity-domain links for domain heat aggregation
+    supabase.from('activity_domain_links').select('activity_id, domain_id'),
   ])
 
   const scheduledActivityIds = new Set((scheduledItems ?? []).map(i => i.activity_id))
@@ -112,5 +114,52 @@ export async function GET() {
     if (daysSince >= alarmDays) overdueActivityIds.push(a.id)
   })
 
-  return NextResponse.json({ heat: heatData, overdueActivityIds })
+  // ── Domain heat: aggregate from value heat through activities ──────────────
+
+  // Build activity → domains map
+  const activityDomains: Record<string, string[]> = {}
+  domainLinks?.forEach(dl => {
+    if (!activityDomains[dl.activity_id]) activityDomains[dl.activity_id] = []
+    activityDomains[dl.activity_id].push(dl.domain_id)
+  })
+
+  // Build activity → values map (from the existing links data)
+  const activityValues: Record<string, string[]> = {}
+  links?.forEach(l => {
+    if (!activityValues[l.activity_id]) activityValues[l.activity_id] = []
+    activityValues[l.activity_id].push(l.value_id)
+  })
+
+  // Build value heat lookup
+  const valueHeatMap = new Map(heatData.map(h => [h.value_id, h.heat]))
+
+  // For each domain: find all linked activities, find their linked values, average the value heats
+  const domainIds = new Set((domainLinks ?? []).map(dl => dl.domain_id))
+  const domainHeatData: Array<{ domain_id: string; heat: number; overdue_count: number }> = []
+
+  for (const domainId of domainIds) {
+    const domainActivityIds = (domainLinks ?? [])
+      .filter(dl => dl.domain_id === domainId)
+      .map(dl => dl.activity_id)
+
+    // Collect value heats from all activities in this domain
+    const valueHeats: number[] = []
+    for (const actId of domainActivityIds) {
+      const valIds = activityValues[actId] ?? []
+      for (const vid of valIds) {
+        const h = valueHeatMap.get(vid)
+        if (h !== undefined) valueHeats.push(h)
+      }
+    }
+
+    const heat = valueHeats.length > 0
+      ? valueHeats.reduce((s, h) => s + h, 0) / valueHeats.length
+      : 0
+
+    const overdueCount = domainActivityIds.filter(id => overdueActivityIds.includes(id)).length
+
+    domainHeatData.push({ domain_id: domainId, heat, overdue_count: overdueCount })
+  }
+
+  return NextResponse.json({ heat: heatData, overdueActivityIds, domainHeat: domainHeatData })
 }

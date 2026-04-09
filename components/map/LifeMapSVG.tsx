@@ -8,6 +8,7 @@ interface Props {
   activities: Activity[]
   outcomes: BigOutcome[]
   overdueActivityIds: string[]
+  domainHeat?: Record<string, { heat: number; overdue_count: number }>
   displayName: string
   onEditDomain: (d: LifeDomain) => void
   onEditActivity: (a: Activity) => void
@@ -105,7 +106,7 @@ function computeActivityLayout(
 }
 
 export default function LifeMapSVG({
-  values, domains, activities, outcomes, overdueActivityIds, displayName,
+  values, domains, activities, outcomes, overdueActivityIds, domainHeat, displayName,
   onEditDomain, onEditActivity, onEditOutcome, onAddActivity, onAddDomain, onAddOutcome,
 }: Props) {
   const [selectedDomain, setSelectedDomain] = useState<LifeDomain | null>(null)
@@ -322,9 +323,16 @@ export default function LifeMapSVG({
         const isSel = selectedDomain?.id === d.id
         const isHl = hlDomains.includes(d.id)
         const isLeft = leftDomains.some(ld => ld.id === d.id)
-        const fillColor = isLeft ? '#9E6A4612' : '#4B82AF12'
-        const strokeColor = isLeft ? '#9E6A46' : '#4B82AF'
+        const dh = domainHeat?.[d.id]
+        const heat = dh?.heat ?? 0
+        const score = Math.round(1 + heat * 9)
+        const heatAlpha = Math.round(Math.min(0.25, heat * 0.3) * 255).toString(16).padStart(2, '0')
+        const baseColor = isLeft ? '#9E6A46' : '#4B82AF'
+        const fillColor = actCount === 0 ? '#FAFAF7' : `${baseColor}${heatAlpha}`
+        const strokeColor = baseColor
         const empty = actCount === 0
+        const heatLabel = empty ? '' : score >= 8 ? 'Thriving' : score >= 5 ? 'Handled' : score >= 2 ? 'Needs attention' : 'Dormant'
+        const heatLabelColor = score >= 8 ? '#5A9E6F' : score >= 5 ? '#8A857D' : score >= 2 ? '#C4725A' : '#B5B0A8'
 
         return (
           <g key={d.id}
@@ -352,21 +360,31 @@ export default function LifeMapSVG({
               <circle cx={dp.x} cy={dp.y} r={r + 6} fill="none" stroke={strokeColor} strokeWidth={1.5} strokeOpacity={0.3} filter="url(#glow-life)" />
             )}
             <circle cx={dp.x} cy={dp.y} r={r}
-              fill={empty ? '#FAFAF7' : fillColor}
+              fill={fillColor}
               stroke={strokeColor}
               strokeWidth={isSel ? 2.5 : 1.5}
               strokeOpacity={empty ? 0.2 : isSel ? 0.8 : 0.4}
               strokeDasharray={empty ? '4 3' : 'none'}
             />
-            <text x={dp.x} y={dp.y + 4} textAnchor="middle" dominantBaseline="central"
-              fontSize={actCount > 0 ? Math.min(r * 0.45, 13) : 11}
-              fontWeight={600} fill={empty ? '#C4BFB4' : isLeft ? '#9E6A46' : '#4B82AF'} opacity={empty ? 0.6 : 0.9}>
-              {actCount > 0 ? actCount : '·'}
+            <text x={dp.x} y={dp.y + (empty ? 4 : 0)} textAnchor="middle" dominantBaseline="central"
+              fontSize={empty ? 11 : Math.min(r * 0.55, 16)}
+              fontWeight={700} fill={empty ? '#C4BFB4' : baseColor} opacity={empty ? 0.6 : 0.9}>
+              {empty ? '·' : score}
             </text>
+            {!empty && (
+              <text x={dp.x} y={dp.y + 12} textAnchor="middle" fontSize={7} fill={baseColor} opacity={0.5}>
+                {actCount} {actCount === 1 ? 'activity' : 'activities'}
+              </text>
+            )}
             <text x={dp.x} y={dp.y + r + 13} textAnchor="middle" fontSize={10} fontWeight={700}
               fill={empty ? '#C4BFB4' : '#2D2A26'}>
               {d.name}
             </text>
+            {!empty && heatLabel && (
+              <text x={dp.x} y={dp.y + r + 24} textAnchor="middle" fontSize={8} fill={heatLabelColor}>
+                {heatLabel}
+              </text>
+            )}
           </g>
         )
       })}
