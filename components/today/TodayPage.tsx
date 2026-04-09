@@ -880,7 +880,7 @@ export default function TodayPage({ displayName }: Props) {
   // Derived — skipped scheduled items float up to the todo section
   const todoItems = items
     .filter(i => !i.scheduled_time || i.status === 'skipped')
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   const scheduleItems = items
     .filter(i => !!i.scheduled_time && i.status !== 'skipped')
