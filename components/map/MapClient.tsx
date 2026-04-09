@@ -542,8 +542,21 @@ export default function MapClient({ userId, userEmail }: Props) {
             {boMenuMode === 'menu' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#2D2A26', padding: '4px 8px', borderBottom: '1px solid #F0EDE8', marginBottom: 4 }}>{boMenu.outcome.name}</div>
-                <button onClick={() => setBoMenuMode('nudge')} style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#2D2A26', borderRadius: 4, fontFamily: 'inherit' }}>Nudge this week</button>
-                <button onClick={() => setBoMenuMode('close')} style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#2D2A26', borderRadius: 4, fontFamily: 'inherit' }}>Close…</button>
+                {boMenu.outcome.closure_type ? (
+                  <button onClick={async () => {
+                    await fetch(`/api/big-outcomes/${boMenu.outcome.id}`, {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'in_progress', closure_type: null, closed_on: null, completed_at: null }),
+                    })
+                    showToast('Reopened.')
+                    setBoMenu(null); await fetchAll()
+                  }} style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#2D2A26', borderRadius: 4, fontFamily: 'inherit' }}>Reopen</button>
+                ) : (
+                  <>
+                    <button onClick={() => setBoMenuMode('nudge')} style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#2D2A26', borderRadius: 4, fontFamily: 'inherit' }}>Nudge this week</button>
+                    <button onClick={() => setBoMenuMode('close')} style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#2D2A26', borderRadius: 4, fontFamily: 'inherit' }}>Close…</button>
+                  </>
+                )}
               </div>
             )}
 
