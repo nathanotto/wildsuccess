@@ -16,6 +16,7 @@ interface Props {
   onAddOutcome: () => void
   onShowReference: () => void
   onShowActivities: () => void
+  onAddMarker?: () => void
   onOutcomeMenu?: (o: BigOutcome, rect: { x: number; y: number }) => void
   missionsByOutcome?: Record<string, string>
 }
@@ -108,7 +109,7 @@ function computeActivityLayout(
 export default function WildSuccessMapSVG({
   values, activities, outcomes, overdueActivityIds, displayName,
   onEditValue, onEditActivity, onEditOutcome, onAddValue, onAddActivity, onAddOutcome, onShowReference, onShowActivities,
-  onOutcomeMenu,
+  onAddMarker, onOutcomeMenu,
   missionsByOutcome = {},
 }: Props) {
   const [selectedValue, setSelectedValue] = useState<UserValue | null>(null)
@@ -519,6 +520,13 @@ export default function WildSuccessMapSVG({
         <text x={CX + 310} y={142} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
         <text x={CX + 310} y={160} textAnchor="middle" fontSize={7} fill="#8A8578">value</text>
       </g>
+      {onAddMarker && (
+        <g onClick={(e) => { e.stopPropagation(); onAddMarker() }} style={{ cursor: 'pointer' }}>
+          <circle cx={CX + 310} cy={178} r={12} fill="#F8F7F4" stroke="#E8E4DC" strokeWidth={1} />
+          <text x={CX + 310} y={182} textAnchor="middle" fontSize={16} fill="#8A8578" fontWeight={300}>+</text>
+          <text x={CX + 310} y={200} textAnchor="middle" fontSize={7} fill="#8A8578">marker</text>
+        </g>
+      )}
     </svg>
   )
 }

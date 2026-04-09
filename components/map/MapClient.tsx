@@ -48,6 +48,8 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [closureNote, setClosureNote] = useState('')
   const [successorName, setSuccessorName] = useState('')
   const [nudgeInput, setNudgeInput] = useState('')
+  const [editingMarker, setEditingMarker] = useState<Marker | 'new' | null>(null)
+  const [markerForm, setMarkerForm] = useState({ title: '', occurred_on: '', marker_type: 'life_event' as string, in_moment_note: '' })
   const [modal, setModal] = useState<ModalState>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [mapMode, setMapMode] = useState<'values' | 'life'>('values')
@@ -268,12 +270,22 @@ export default function MapClient({ userId, userEmail }: Props) {
                 {markers.map(m => {
                   const typeColor: Record<string, string> = { accomplished: '#5A9E6F', declared_complete: '#4B6A82', closed_with_succession: '#4B6A82', abandoned: '#8A857D', life_event: '#C4725A' }
                   return (
-                    <div key={m.id} style={{ marginBottom: 6 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#2D2A26', lineHeight: 1.3 }}>{m.title}</div>
-                      <div style={{ fontSize: 9, color: typeColor[m.marker_type] ?? '#8A857D' }}>
-                        {new Date(m.occurred_on + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        {m.in_moment_note && ` · ${m.in_moment_note}`}
+                    <div key={m.id} style={{ marginBottom: 6, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#2D2A26', lineHeight: 1.3 }}>{m.title}</div>
+                        <div style={{ fontSize: 9, color: typeColor[m.marker_type] ?? '#8A857D' }}>
+                          {new Date(m.occurred_on + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          {m.in_moment_note && ` · ${m.in_moment_note}`}
+                        </div>
                       </div>
+                      <button
+                        onClick={() => {
+                          setMarkerForm({ title: m.title, occurred_on: m.occurred_on, marker_type: m.marker_type, in_moment_note: m.in_moment_note ?? '' })
+                          setEditingMarker(m)
+                        }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 2px', color: '#C4BFB4', fontSize: 11, flexShrink: 0, lineHeight: 1 }}
+                        title="Edit marker"
+                      >✎</button>
                     </div>
                   )
                 })}
@@ -297,6 +309,11 @@ export default function MapClient({ userId, userEmail }: Props) {
             onAddOutcome={() => setModal({ type: 'newOutcome' })}
             onShowReference={() => setReferenceOpen(true)}
             onShowActivities={() => setActivitiesEditorOpen(true)}
+            onAddMarker={() => {
+              const today = new Date().toISOString().split('T')[0]
+              setMarkerForm({ title: '', occurred_on: today, marker_type: 'life_event', in_moment_note: '' })
+              setEditingMarker('new')
+            }}
             onOutcomeMenu={(o, pos) => { setBoMenu({ outcome: o, pos }); setBoMenuMode('menu') }}
           />
         ) : (
@@ -678,6 +695,100 @@ export default function MapClient({ userId, userEmail }: Props) {
             )}
           </div>
         </>
+      )}
+
+      {/* ── Marker Edit/Create Modal ──────────────────────────────────────── */}
+      {editingMarker && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(45,42,38,0.2)' }}
+          onClick={e => { if (e.target === e.currentTarget) setEditingMarker(null) }}
+        >
+          <div style={{ background: '#FAFAF7', borderRadius: 14, padding: 24, width: 380, boxShadow: '0 8px 32px rgba(45,42,38,0.2)', fontFamily: '"Source Sans 3", sans-serif' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+              {editingMarker === 'new' ? 'New Marker' : 'Edit Marker'}
+            </div>
+            <input
+              value={markerForm.title}
+              onChange={e => setMarkerForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="Title"
+              style={{ width: '100%', fontSize: 14, fontWeight: 600, border: '1px solid #E0DDD6', borderRadius: 8, padding: '8px 10px', background: '#FFF', color: '#2D2A26', boxSizing: 'border-box', outline: 'none', marginBottom: 10 }}
+            />
+            <input
+              type="date"
+              value={markerForm.occurred_on}
+              onChange={e => setMarkerForm(f => ({ ...f, occurred_on: e.target.value }))}
+              style={{ width: '100%', fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 8, padding: '6px 10px', background: '#FFF', color: '#2D2A26', boxSizing: 'border-box', outline: 'none', marginBottom: 10 }}
+            />
+            {editingMarker === 'new' && (
+              <select
+                value={markerForm.marker_type}
+                onChange={e => setMarkerForm(f => ({ ...f, marker_type: e.target.value }))}
+                style={{ width: '100%', fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 8, padding: '6px 10px', background: '#FFF', color: '#2D2A26', boxSizing: 'border-box', outline: 'none', marginBottom: 10 }}
+              >
+                <option value="life_event">Life event</option>
+                <option value="accomplished">Accomplished</option>
+                <option value="declared_complete">Declared complete</option>
+                <option value="abandoned">Abandoned</option>
+              </select>
+            )}
+            <textarea
+              value={markerForm.in_moment_note}
+              onChange={e => setMarkerForm(f => ({ ...f, in_moment_note: e.target.value }))}
+              placeholder="Note (optional)"
+              rows={3}
+              style={{ width: '100%', fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 8, padding: '8px 10px', background: '#FFF', color: '#2D2A26', boxSizing: 'border-box', outline: 'none', marginBottom: 14, resize: 'vertical', fontFamily: 'inherit' }}
+            />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {editingMarker !== 'new' && (
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/markers/${(editingMarker as Marker).id}`, { method: 'DELETE' })
+                    showToast('Marker deleted.')
+                    setEditingMarker(null)
+                    fetch('/api/markers', { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(m => { if (Array.isArray(m)) setMarkers(m.slice(0, 8)) })
+                  }}
+                  style={{ fontSize: 11, color: '#C4504A', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                >Delete</button>
+              )}
+              <div style={{ flex: 1 }} />
+              <button onClick={() => setEditingMarker(null)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E0DDD6', background: 'transparent', cursor: 'pointer', fontSize: 12, color: '#5A5650', fontFamily: 'inherit' }}>Cancel</button>
+              <button
+                disabled={!markerForm.title.trim() || !markerForm.occurred_on}
+                onClick={async () => {
+                  if (editingMarker === 'new') {
+                    await fetch('/api/markers', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        title: markerForm.title.trim(),
+                        occurred_on: markerForm.occurred_on,
+                        marker_type: markerForm.marker_type,
+                        subject_type: 'life_event',
+                        subject_title_snapshot: markerForm.title.trim(),
+                        in_moment_note: markerForm.in_moment_note.trim() || null,
+                      }),
+                    })
+                    showToast('Marker created.')
+                  } else {
+                    await fetch(`/api/markers/${(editingMarker as Marker).id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        title: markerForm.title.trim(),
+                        occurred_on: markerForm.occurred_on,
+                        in_moment_note: markerForm.in_moment_note.trim() || null,
+                      }),
+                    })
+                    showToast('Marker updated.')
+                  }
+                  setEditingMarker(null)
+                  fetch('/api/markers', { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(m => { if (Array.isArray(m)) setMarkers(m.slice(0, 8)) })
+                }}
+                style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: markerForm.title.trim() ? '#2D2A26' : '#E8E4DC', cursor: markerForm.title.trim() ? 'pointer' : 'default', fontSize: 12, fontWeight: 700, color: '#FFF', fontFamily: 'inherit' }}
+              >{editingMarker === 'new' ? 'Create' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} />}
