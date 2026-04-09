@@ -600,9 +600,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
 
     const onMove = (e: MouseEvent) => {
       const dy = e.clientY - resizing.startY
-      const rawDelta = Math.round((dy / HOUR_HEIGHT) * 60 / 15) * 15
+      const rawDelta = Math.round((dy / HOUR_HEIGHT) * 60 / 5) * 5
       const newEndMin = Math.max(
-        resizing.initialStartMin + 15,
+        resizing.initialStartMin + 5,
         resizing.initialEndMin + rawDelta
       )
       const clampedEndMin = Math.min(GRID_END * 60, newEndMin)
@@ -626,8 +626,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
 
     const onUp = async (e: MouseEvent) => {
       const dy = e.clientY - resizing.startY
-      const rawDelta = Math.round((dy / HOUR_HEIGHT) * 60 / 15) * 15
-      const newEndMin = Math.min(GRID_END * 60, Math.max(resizing.initialStartMin + 15, resizing.initialEndMin + rawDelta))
+      const rawDelta = Math.round((dy / HOUR_HEIGHT) * 60 / 5) * 5
+      const newEndMin = Math.min(GRID_END * 60, Math.max(resizing.initialStartMin + 5, resizing.initialEndMin + rawDelta))
       const endTime = minutesToTime(newEndMin)
 
       // Get current block to compute duration (use ref to avoid effect re-subscription)
@@ -671,7 +671,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   }
 
   function blockHeightPx(durationMin: number): number {
-    return Math.max(20, durationMin * (HOUR_HEIGHT / 60))
+    return Math.max(4, durationMin * (HOUR_HEIGHT / 60))
   }
 
   // Compute overlap columns for blocks that share time ranges (Google Calendar style)
