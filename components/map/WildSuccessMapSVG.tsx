@@ -448,8 +448,10 @@ export default function WildSuccessMapSVG({
                 style={{ cursor: 'pointer' }}
               >
                 <rect x={ox} y={outcomeY} width={outcomeBoxW} height={boxH} rx={12}
-                  fill="#FFFFFF" stroke={isSel ? '#C4725A' : '#E8E4DC'} strokeWidth={isSel ? 1.5 : 1}
-                  opacity={isClosed ? 0.5 : 1}
+                  fill="#FFFFFF"
+                  stroke={isClosed && o.closure_type === 'accomplished' ? '#5A9E6F' : isSel ? '#C4725A' : '#E8E4DC'}
+                  strokeWidth={isClosed && o.closure_type === 'accomplished' ? 1.5 : isSel ? 1.5 : 1}
+                  opacity={isClosed ? 0.7 : 1}
                 />
                 {/* … menu button */}
                 <text
