@@ -1783,28 +1783,55 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
   const isSkipped = item.status === 'skipped'
   const muted = isCompleted || isParked || isSkipped || (isPast && !isCompleted)
 
+  const steps = (item.item_notes ?? []).filter(n => n.note_type === 'step').sort((a, b) => a.sort_order - b.sort_order)
+  const notes = (item.item_notes ?? []).filter(n => n.note_type === 'note').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
   return (
     <div
       onClick={onFocus}
       style={{
-        display: 'flex', alignItems: 'flex-start', gap: 8,
         padding: '5px 0', cursor: 'pointer', userSelect: 'none',
         borderBottom: '1px solid #F8F7F4',
       }}
     >
-      <span style={{ fontSize: 12, color: '#8A8578', width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 1 }}>
-        {item.scheduled_time ? fmtTime(item.scheduled_time) : ''}
-      </span>
-      <Checkbox status={isCompleted ? 'completed' : isPast ? 'committed' : item.status} onClick={isPast ? undefined : onCheckbox} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{
-          fontSize: 14,
-          color: muted ? '#B5B0A8' : '#2D2A26',
-          textDecoration: isCompleted ? 'line-through' : 'none',
-        }}>
-          {item.name}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <span style={{ fontSize: 12, color: '#8A8578', width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 1 }}>
+          {item.scheduled_time ? fmtTime(item.scheduled_time) : ''}
         </span>
+        <Checkbox status={isCompleted ? 'completed' : isPast ? 'committed' : item.status} onClick={isPast ? undefined : onCheckbox} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{
+            fontSize: 14,
+            color: muted ? '#B5B0A8' : '#2D2A26',
+            textDecoration: isCompleted ? 'line-through' : 'none',
+          }}>
+            {item.name}
+          </span>
+        </div>
       </div>
+      {steps.length > 0 && item.status === 'in_progress' && (
+        <div style={{ paddingLeft: 66, marginTop: 3 }}>
+          {steps.map(s => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <span style={{
+                width: 10, height: 10, borderRadius: 1, flexShrink: 0,
+                border: s.is_completed ? 'none' : '1px solid #C8C3BB',
+                background: s.is_completed ? '#C8C3BB' : 'transparent',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 7, color: '#FFF',
+              }}>{s.is_completed ? '✓' : ''}</span>
+              <span style={{ fontSize: 12, color: s.is_completed ? '#C8C3BB' : '#5A5650', textDecoration: s.is_completed ? 'line-through' : 'none' }}>{s.content}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {notes.length > 0 && item.status === 'in_progress' && (
+        <div style={{ paddingLeft: 66, marginTop: 3 }}>
+          {notes.map(n => (
+            <div key={n.id} style={{ fontSize: 11, color: '#8A8578', marginBottom: 2, lineHeight: 1.4 }}>{n.content}</div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
