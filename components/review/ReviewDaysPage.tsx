@@ -278,8 +278,10 @@ export default function ReviewDaysPage({ displayName }: Props) {
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#8A857D' }}>Day closed</span>
                   {mood && <span style={{ fontSize: 12, color: mood.color }}>{mood.label}</span>}
                 </>
-              ) : (
+              ) : currentDate < todayStr ? (
                 <a href={`/today/complete?date=${currentDate}`} style={{ fontSize: 13, color: '#C4725A', textDecoration: 'none', cursor: 'pointer' }}>Close this day →</a>
+              ) : (
+                <span style={{ fontSize: 13, color: '#B5B0A8' }}>Today</span>
               )}
               <span style={{ flex: 1 }} />
               {isClosed && (
