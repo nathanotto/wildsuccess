@@ -80,6 +80,7 @@ interface CandidateItemLocal {
   duration_max: number
   values: string[]
   activity_id: string | null
+  big_outcome_id?: string | null
   preferred_time: string | null
   frequency: string | null
   meta?: { requestedBy?: string }
@@ -211,7 +212,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   // Core state
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()))
   const [blockTypes, setBlockTypes] = useState<BlockType[]>([])
-  const [outcomes, setOutcomes] = useState<{ id: string; name: string }[]>([])
+  const [outcomes, setOutcomes] = useState<{ id: string; name: string; status: string; completed_at: string | null }[]>([])
   const [focusMinutes, setFocusMinutes] = useState(50)
   const [dayBlocks, setDayBlocks] = useState<Record<string, TimeBlockLocal[]>>({})
   const [hopper, setHopper] = useState<CandidateItemLocal[]>([])
@@ -235,6 +236,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   const [rightTab, setRightTab] = useState<'summary' | 'completed'>('summary')
   const [classifying, setClassifying] = useState<ClassifyState | null>(null)
   const [showBlockTypeEditor, setShowBlockTypeEditor] = useState(false)
+  const [nudgingOutcomeId, setNudgingOutcomeId] = useState<string | null>(null)
+  const [nudgeInput, setNudgeInput] = useState('')
 
   // Drag state
   const [draggingBlockTypeId, setDraggingBlockTypeId] = useState<string | null>(null)
@@ -375,8 +378,12 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       setKnownPeople(Array.isArray(peopleData) ? peopleData : [])
       setEditingBlockTypes(bts)
 
-      const outcomesArr: { id: string; name: string; status: string }[] = Array.isArray(outcomesData) ? outcomesData : []
-      setOutcomes(outcomesArr.filter(o => o.status !== 'abandoned').map(o => ({ id: o.id, name: o.name })))
+      const outcomesArr: { id: string; name: string; status: string; completed_at: string | null }[] = Array.isArray(outcomesData) ? outcomesData : []
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+      setOutcomes(outcomesArr.filter(o =>
+        o.status === 'aspirational' || o.status === 'in_progress' ||
+        (o.completed_at && o.completed_at >= sevenDaysAgo)
+      ).map(o => ({ id: o.id, name: o.name, status: o.status, completed_at: o.completed_at ?? null })))
 
       // Build dayBlocks from time_blocks + action_items
       const blocks: TimeBlockLocal[] = Array.isArray(tbData) ? tbData : []
@@ -470,6 +477,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         priority_score?: number
         enrichment_status?: string
         enrichment_data?: Record<string, unknown> | null
+        big_outcome_id?: string | null
       }> = Array.isArray(hopperData) ? hopperData : []
 
       const hopperItems: CandidateItemLocal[] = rawHopper
@@ -488,6 +496,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
           duration_max: h.activity?.duration_range_max ?? 60,
           values: [],
           activity_id: h.activity_id ?? null,
+          big_outcome_id: h.big_outcome_id ?? null,
           preferred_time: h.activity?.preferred_time ?? null,
           frequency: h.activity?.frequency ?? null,
           meta: h.metadata as { requestedBy?: string } | undefined,
@@ -2367,6 +2376,66 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
           </div>
         )}
 
+        {/* ── Active Outcomes bar ──────────────────────────────────────────── */}
+        {outcomes.length > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+            padding: '6px 18px', background: '#FBFAF6', borderBottom: '1px solid #E8E4DC', flexShrink: 0,
+          }}>
+            <span style={{ fontSize: 10, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>Outcomes</span>
+            {outcomes.map(o => {
+              const isClosed = o.status === 'achieved' || o.status === 'abandoned'
+              const closedDate = o.completed_at ? new Date(o.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
+              const closedLabel = o.status === 'achieved' ? `accomplished ${closedDate}` : o.status === 'abandoned' ? `abandoned ${closedDate}` : ''
+              return (
+                <span key={o.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{
+                    fontSize: 12,
+                    color: isClosed ? '#8A857D' : '#2D2A26',
+                    textDecoration: isClosed ? 'line-through' : 'none',
+                  }}>
+                    {o.name}
+                  </span>
+                  {isClosed ? (
+                    <span style={{ fontSize: 10, color: o.status === 'achieved' ? '#5A9E6F' : '#8A857D' }}>{closedLabel}</span>
+                  ) : nudgingOutcomeId === o.id ? (
+                    <input
+                      autoFocus
+                      value={nudgeInput}
+                      onChange={e => setNudgeInput(e.target.value)}
+                      onKeyDown={async e => {
+                        if (e.key === 'Escape') { setNudgingOutcomeId(null); setNudgeInput('') }
+                        if (e.key === 'Enter' && nudgeInput.trim()) {
+                          e.preventDefault()
+                          const res = await fetch('/api/action-items', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: nudgeInput.trim(), source: 'quick_capture', status: 'candidate', big_outcome_id: o.id, time_type: 'B', emotional_weight: 'normal' }),
+                          })
+                          if (res.ok) {
+                            const ai = await res.json()
+                            setHopper(prev => [{ id: ai.id, name: ai.name, source: 'quick_capture', time_type: 'B', emotional_weight: 'normal', priority_tier: 'normal', priority_score: 50, block_type_hint: null, duration_min: 20, duration_max: 60, values: [], activity_id: null, big_outcome_id: o.id, preferred_time: null, frequency: null }, ...prev])
+                          }
+                          setNudgingOutcomeId(null)
+                          setNudgeInput('')
+                        }
+                      }}
+                      onBlur={() => { setNudgingOutcomeId(null); setNudgeInput('') }}
+                      placeholder="Nudge: …"
+                      style={{ fontSize: 11, border: '1px solid #E0DDD6', borderRadius: 4, padding: '2px 6px', background: '#FFF', color: '#2D2A26', outline: 'none', width: 160 }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => { setNudgingOutcomeId(o.id); setNudgeInput('') }}
+                      style={{ fontSize: 12, color: '#4B6A82', cursor: 'pointer' }}
+                    >Nudge →</span>
+                  )}
+                </span>
+              )
+            })}
+          </div>
+        )}
+
         {/* ── Body: 3-panel layout ────────────────────────────────────────── */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
@@ -2484,6 +2553,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                       <HopperItemCard
                         key={item.id}
                         item={item}
+                        outcomes={outcomes}
                         onDismiss={() => dismissHopperItem(item.id)}
                         onLog={() => handleLogHopperItem(item.id, item.name)}
                         onDragStart={() => setDraggingHopperItem(item)}
@@ -2514,6 +2584,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                       <HopperItemCard
                         key={item.id}
                         item={item}
+                        outcomes={outcomes}
                         onDismiss={() => dismissHopperItem(item.id)}
                         isVirtual={item.id.startsWith('activity:')}
                         onDragStart={() => setDraggingHopperItem(item)}
@@ -3759,6 +3830,7 @@ interface HopperItemCardProps {
   onTimeShift?: (date: string) => void
   onDelete?: () => void
   onCommitToday?: () => void
+  outcomes?: { id: string; name: string }[]
   isVirtual?: boolean
   dragging: boolean
   armed?: boolean
@@ -3790,7 +3862,7 @@ const TIME_OPTIONS = ['morning', 'afternoon', 'evening'] as const
 const TIME_LABELS: Record<string, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
 const DUR_OPTIONS = [15, 30, 45, 60, 90]
 
-const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onLog, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, onTimeShift, onDelete, onCommitToday, isVirtual, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
+const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive, onLog, onDragStart, onDragEnd, onContextMenu, onDoubleClick, onMakeActivity, onAutoPlace, onTimeShift, onDelete, onCommitToday, outcomes, isVirtual, dragging, armed, muted, isExiting, isReturning }: HopperItemCardProps) {
   const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [showLaterMenu, setShowLaterMenu] = useState(false)
   const [showOverflow, setShowOverflow] = useState(false)
@@ -3856,6 +3928,10 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
           {item.name}
           {item.emotional_weight === 'heavy' && <span style={{ color: '#C4725A', marginLeft: 3, fontSize: 8 }}>◆</span>}
         </div>
+        {item.big_outcome_id && outcomes && (() => {
+          const bo = outcomes.find(o => o.id === item.big_outcome_id)
+          return bo ? <div style={{ fontSize: 9, color: '#8A857D', lineHeight: 1.2 }}>↳ {bo.name}</div> : null
+        })()}
 
         {/* Actions row */}
         <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center' }}>
