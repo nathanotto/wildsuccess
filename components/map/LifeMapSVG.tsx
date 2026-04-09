@@ -224,8 +224,8 @@ export default function LifeMapSVG({
       </defs>
 
       {/* SUSTAINING / FLOURISHING labels */}
-      <text x={CX - 310} y={38} textAnchor="middle" fontSize={10} fontWeight={700} fill="#9E6A46" letterSpacing="2" opacity={0.5}>SUSTAINING</text>
-      <text x={CX + 310} y={38} textAnchor="middle" fontSize={10} fontWeight={700} fill="#4B82AF" letterSpacing="2" opacity={0.5}>FLOURISHING</text>
+      <text x={CX - 310} y={38} textAnchor="middle" fontSize={10} fontWeight={700} fill="#8A857D" letterSpacing="2" opacity={0.4}>SUSTAINING</text>
+      <text x={CX + 310} y={38} textAnchor="middle" fontSize={10} fontWeight={700} fill="#8A857D" letterSpacing="2" opacity={0.4}>FLOURISHING</text>
 
       {/* Lines: center → domains */}
       {domains.map(d => {
@@ -304,15 +304,27 @@ export default function LifeMapSVG({
       })}
 
       {/* CENTER NODE */}
-      <circle cx={CX} cy={CY} r={52} fill="#FFFFFF" stroke="#E8E4DC" strokeWidth={2} />
-      <path d={`M ${CX} ${CY - 42} A 42 42 0 0 0 ${CX} ${CY + 42}`}
-        fill="none" stroke="#9E6A46" strokeWidth={5} strokeOpacity={leftCoverage} strokeLinecap="round" />
-      <path d={`M ${CX} ${CY - 42} A 42 42 0 0 1 ${CX} ${CY + 42}`}
-        fill="none" stroke="#4B82AF" strokeWidth={5} strokeOpacity={rightCoverage} strokeLinecap="round" />
-      <text x={CX} y={CY - 8} textAnchor="middle" fontSize={14} fontWeight={700} fill="#2D2A26">{displayName}</text>
-      <text x={CX - 18} y={CY + 10} textAnchor="middle" fontSize={9} fontWeight={600} fill="#9E6A46">{leftActive}/{leftDomains.length}</text>
-      <text x={CX + 18} y={CY + 10} textAnchor="middle" fontSize={9} fontWeight={600} fill="#4B82AF">{rightActive}/{rightDomains.length}</text>
-      <text x={CX} y={CY + 26} textAnchor="middle" fontSize={7.5} fontWeight={500} fill="#8A8578" opacity={0.8}>domains active</text>
+      {(() => {
+        // Compute average heat per side for arc color
+        const leftHeats = leftDomains.map(d => domainHeat?.[d.id]?.heat ?? 0)
+        const rightHeats = rightDomains.map(d => domainHeat?.[d.id]?.heat ?? 0)
+        const leftAvg = leftHeats.length > 0 ? leftHeats.reduce((s, h) => s + h, 0) / leftHeats.length : 0
+        const rightAvg = rightHeats.length > 0 ? rightHeats.reduce((s, h) => s + h, 0) / rightHeats.length : 0
+        const colorForHeat = (h: number) => { const s = Math.round(1 + h * 9); return s >= 8 ? '#5A9E6F' : s >= 5 ? '#8A857D' : s >= 2 ? '#C4725A' : '#B5B0A8' }
+        return (
+          <>
+            <circle cx={CX} cy={CY} r={52} fill="#FFFFFF" stroke="#E8E4DC" strokeWidth={2} />
+            <path d={`M ${CX} ${CY - 42} A 42 42 0 0 0 ${CX} ${CY + 42}`}
+              fill="none" stroke={colorForHeat(leftAvg)} strokeWidth={5} strokeOpacity={Math.max(0.2, leftCoverage)} strokeLinecap="round" />
+            <path d={`M ${CX} ${CY - 42} A 42 42 0 0 1 ${CX} ${CY + 42}`}
+              fill="none" stroke={colorForHeat(rightAvg)} strokeWidth={5} strokeOpacity={Math.max(0.2, rightCoverage)} strokeLinecap="round" />
+            <text x={CX} y={CY - 8} textAnchor="middle" fontSize={14} fontWeight={700} fill="#2D2A26">{displayName}</text>
+            <text x={CX - 18} y={CY + 10} textAnchor="middle" fontSize={9} fontWeight={600} fill={colorForHeat(leftAvg)}>{leftActive}/{leftDomains.length}</text>
+            <text x={CX + 18} y={CY + 10} textAnchor="middle" fontSize={9} fontWeight={600} fill={colorForHeat(rightAvg)}>{rightActive}/{rightDomains.length}</text>
+            <text x={CX} y={CY + 26} textAnchor="middle" fontSize={7.5} fontWeight={500} fill="#8A8578" opacity={0.8}>domains active</text>
+          </>
+        )
+      })()}
 
       {/* DOMAIN NODES */}
       {domains.map(d => {
@@ -322,17 +334,16 @@ export default function LifeMapSVG({
         const r = 28 + Math.min(actCount, 8) * 1.8
         const isSel = selectedDomain?.id === d.id
         const isHl = hlDomains.includes(d.id)
-        const isLeft = leftDomains.some(ld => ld.id === d.id)
         const dh = domainHeat?.[d.id]
         const heat = dh?.heat ?? 0
         const score = Math.round(1 + heat * 9)
-        const heatAlpha = Math.round(Math.min(0.25, heat * 0.3) * 255).toString(16).padStart(2, '0')
-        const baseColor = isLeft ? '#9E6A46' : '#4B82AF'
-        const fillColor = actCount === 0 ? '#FAFAF7' : `${baseColor}${heatAlpha}`
-        const strokeColor = baseColor
         const empty = actCount === 0
+        // Health-driven colors: red (neglected) → amber → green (thriving)
+        const healthColor = empty ? '#C4BFB4' : score >= 8 ? '#5A9E6F' : score >= 5 ? '#8A857D' : score >= 2 ? '#C4725A' : '#B5B0A8'
+        const fillAlpha = empty ? '00' : Math.round(Math.min(0.50, 0.15 + heat * 0.45) * 255).toString(16).padStart(2, '0')
+        const fillColor = empty ? '#FAFAF7' : `${healthColor}${fillAlpha}`
+        const strokeColor = healthColor
         const heatLabel = empty ? '' : score >= 8 ? 'Thriving' : score >= 5 ? 'Handled' : score >= 2 ? 'Needs attention' : 'Dormant'
-        const heatLabelColor = score >= 8 ? '#5A9E6F' : score >= 5 ? '#8A857D' : score >= 2 ? '#C4725A' : '#B5B0A8'
 
         return (
           <g key={d.id}
@@ -368,11 +379,11 @@ export default function LifeMapSVG({
             />
             <text x={dp.x} y={dp.y + (empty ? 4 : 0)} textAnchor="middle" dominantBaseline="central"
               fontSize={empty ? 11 : Math.min(r * 0.55, 16)}
-              fontWeight={700} fill={empty ? '#C4BFB4' : baseColor} opacity={empty ? 0.6 : 0.9}>
+              fontWeight={700} fill={empty ? '#C4BFB4' : healthColor} opacity={empty ? 0.6 : 0.9}>
               {empty ? '·' : score}
             </text>
             {!empty && (
-              <text x={dp.x} y={dp.y + 12} textAnchor="middle" fontSize={7} fill={baseColor} opacity={0.5}>
+              <text x={dp.x} y={dp.y + 12} textAnchor="middle" fontSize={7} fill={healthColor} opacity={0.5}>
                 {actCount} {actCount === 1 ? 'activity' : 'activities'}
               </text>
             )}
@@ -381,7 +392,7 @@ export default function LifeMapSVG({
               {d.name}
             </text>
             {!empty && heatLabel && (
-              <text x={dp.x} y={dp.y + r + 24} textAnchor="middle" fontSize={8} fill={heatLabelColor}>
+              <text x={dp.x} y={dp.y + r + 24} textAnchor="middle" fontSize={8} fill={healthColor}>
                 {heatLabel}
               </text>
             )}
