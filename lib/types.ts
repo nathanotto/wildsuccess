@@ -36,16 +36,42 @@ export interface BigOutcome {
   user_id: string
   name: string
   description: string | null
-  status: 'aspirational' | 'in_progress' | 'achieved' | 'abandoned'
+  status: 'aspirational' | 'in_progress' | 'achieved' | 'declared_complete' | 'closed_with_succession' | 'abandoned'
   target_date: string | null
   completed_at: string | null
   completion_note: string | null
   abandonment_reason: string | null
+  closure_type: 'accomplished' | 'declared_complete' | 'closed_with_succession' | 'abandoned' | null
+  closed_on: string | null
+  succeeds_big_outcome_id: string | null
+  succeeded_by_big_outcome_id: string | null
   sort_order: number
   created_at: string
   updated_at: string
   value_links?: ValueLink[]
   activity_count?: number
+}
+
+export interface Marker {
+  id: string
+  user_id: string
+  occurred_on: string
+  subject_type: 'big_outcome' | 'mission' | 'coa' | 'life_event' | null
+  subject_id: string | null
+  subject_title_snapshot: string
+  marker_type: 'accomplished' | 'declared_complete' | 'closed_with_succession' | 'abandoned' | 'life_event'
+  title: string
+  in_moment_note: string | null
+  reflection: string | null
+  reflection_status: 'pending' | 'reflected' | 'skipped'
+  significance: 1 | 2 | 3 | null
+  succeeded_by_type: 'big_outcome' | 'mission' | 'coa' | null
+  succeeded_by_id: string | null
+  linked_value_ids: string[]
+  linked_domain_ids: string[]
+  media_attachments: unknown | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Activity {

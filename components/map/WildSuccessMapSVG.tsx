@@ -16,6 +16,7 @@ interface Props {
   onAddOutcome: () => void
   onShowReference: () => void
   onShowActivities: () => void
+  onOutcomeMenu?: (o: BigOutcome, rect: { x: number; y: number }) => void
   missionsByOutcome?: Record<string, string>
 }
 
@@ -107,6 +108,7 @@ function computeActivityLayout(
 export default function WildSuccessMapSVG({
   values, activities, outcomes, overdueActivityIds, displayName,
   onEditValue, onEditActivity, onEditOutcome, onAddValue, onAddActivity, onAddOutcome, onShowReference, onShowActivities,
+  onOutcomeMenu,
   missionsByOutcome = {},
 }: Props) {
   const [selectedValue, setSelectedValue] = useState<UserValue | null>(null)
@@ -447,6 +449,21 @@ export default function WildSuccessMapSVG({
                 <rect x={ox} y={outcomeY} width={outcomeBoxW} height={boxH} rx={12}
                   fill="#FFFFFF" stroke={isSel ? '#C4725A' : '#E8E4DC'} strokeWidth={isSel ? 1.5 : 1}
                 />
+                {/* … menu button */}
+                <text
+                  x={ox + outcomeBoxW - 12} y={outcomeY + 14}
+                  textAnchor="middle" fontSize={12} fill="#8A857D" style={{ cursor: 'pointer' }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const svgEl = svgRef.current
+                    if (!svgEl || !onOutcomeMenu) return
+                    const svgRect = svgEl.getBoundingClientRect()
+                    const pt = svgEl.createSVGPoint()
+                    pt.x = ox + outcomeBoxW; pt.y = outcomeY
+                    const screenPt = pt.matrixTransform(svgEl.getScreenCTM()!)
+                    onOutcomeMenu(o, { x: screenPt.x - svgRect.left, y: screenPt.y - svgRect.top + boxH })
+                  }}
+                >…</text>
                 <text x={ox + outcomeBoxW / 2} y={outcomeY + 18} textAnchor="middle" fontSize={10} fontWeight={700} fill="#2D2A26">
                   {o.name.length > 18 ? o.name.slice(0, 17) + '…' : o.name}
                 </text>

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile, IntakeQuestion } from '@/lib/types'
+import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile, IntakeQuestion, Marker } from '@/lib/types'
 import WildSuccessMapSVG from './WildSuccessMapSVG'
 import LifeMapSVG from './LifeMapSVG'
 import TakeActionBox from './TakeActionBox'
@@ -41,6 +41,13 @@ export default function MapClient({ userId, userEmail }: Props) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [overdueActivityIds, setOverdueActivityIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [markers, setMarkers] = useState<Marker[]>([])
+  const [boMenu, setBoMenu] = useState<{ outcome: BigOutcome; pos: { x: number; y: number } } | null>(null)
+  const [boMenuMode, setBoMenuMode] = useState<'menu' | 'nudge' | 'close' | 'close-note' | 'successor'>('menu')
+  const [closureType, setClosureType] = useState<string | null>(null)
+  const [closureNote, setClosureNote] = useState('')
+  const [successorName, setSuccessorName] = useState('')
+  const [nudgeInput, setNudgeInput] = useState('')
   const [modal, setModal] = useState<ModalState>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [mapMode, setMapMode] = useState<'values' | 'life'>('values')
@@ -98,10 +105,13 @@ export default function MapClient({ userId, userEmail }: Props) {
       for (const m of missions) { if (m.big_outcome_id) map[m.big_outcome_id] = m.id }
       setMissionsByOutcome(map)
     }
-    // Fetch unclosed days
+    // Fetch unclosed days and recent markers
     fetch('/api/day-completion?unclosed=true', NC)
       .then(r => r.ok ? r.json() : [])
       .then(d => { if (Array.isArray(d)) setUnclosedDays(d) })
+    fetch('/api/markers', NC)
+      .then(r => r.ok ? r.json() : [])
+      .then(m => { if (Array.isArray(m)) setMarkers(m.slice(0, 8)) })
     setLoading(false)
   }, [])
 
@@ -270,6 +280,7 @@ export default function MapClient({ userId, userEmail }: Props) {
             onAddOutcome={() => setModal({ type: 'newOutcome' })}
             onShowReference={() => setReferenceOpen(true)}
             onShowActivities={() => setActivitiesEditorOpen(true)}
+            onOutcomeMenu={(o, pos) => { setBoMenu({ outcome: o, pos }); setBoMenuMode('menu') }}
           />
         ) : (
           <LifeMapSVG
@@ -516,6 +527,152 @@ export default function MapClient({ userId, userEmail }: Props) {
           }}
           onClose={() => setActivitiesEditorOpen(false)}
         />
+      )}
+
+      {/* ── BO Menu Overlay ──────────────────────────────────────────────── */}
+      {boMenu && (
+        <>
+          <div onClick={() => { setBoMenu(null); setBoMenuMode('menu'); setClosureType(null); setClosureNote(''); setSuccessorName(''); setNudgeInput('') }} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
+          <div style={{
+            position: 'absolute', left: boMenu.pos.x, top: boMenu.pos.y, zIndex: 201,
+            background: '#FAFAF7', border: '1px solid #E8E4DC', borderRadius: 8,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.1)', padding: 8, minWidth: 220,
+            fontFamily: '"Source Sans 3", sans-serif',
+          }}>
+            {boMenuMode === 'menu' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#2D2A26', padding: '4px 8px', borderBottom: '1px solid #F0EDE8', marginBottom: 4 }}>{boMenu.outcome.name}</div>
+                <button onClick={() => setBoMenuMode('nudge')} style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#2D2A26', borderRadius: 4, fontFamily: 'inherit' }}>Nudge this week</button>
+                <button onClick={() => setBoMenuMode('close')} style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#2D2A26', borderRadius: 4, fontFamily: 'inherit' }}>Close…</button>
+              </div>
+            )}
+
+            {boMenuMode === 'nudge' && (
+              <div>
+                <div style={{ fontSize: 11, color: '#8A857D', marginBottom: 6 }}>Nudge for {boMenu.outcome.name}</div>
+                <input
+                  autoFocus
+                  value={nudgeInput}
+                  onChange={e => setNudgeInput(e.target.value)}
+                  onKeyDown={async e => {
+                    if (e.key === 'Escape') { setBoMenu(null); setNudgeInput('') }
+                    if (e.key === 'Enter' && nudgeInput.trim()) {
+                      await fetch(`/api/big-outcomes/${boMenu.outcome.id}/nudge`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: nudgeInput.trim(), time_type: 'B' }),
+                      })
+                      showToast('Added to hopper.')
+                      setBoMenu(null); setNudgeInput('')
+                    }
+                  }}
+                  placeholder="Nudge: …"
+                  style={{ width: '100%', fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 6, padding: '6px 8px', background: '#FFF', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            )}
+
+            {boMenuMode === 'close' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: 11, color: '#8A857D', marginBottom: 4 }}>How does this end?</div>
+                {([
+                  { type: 'accomplished', label: 'Accomplished', desc: 'The outcome was achieved as intended.' },
+                  { type: 'declared_complete', label: 'Declared complete', desc: "I'm calling it done, even if the original vision shifted." },
+                  { type: 'closed_with_succession', label: 'Closed with a successor', desc: 'This form is complete; a new Big Outcome continues the arc.' },
+                  { type: 'abandoned', label: 'Abandoned', desc: "I'm letting this go without completing it." },
+                ] as const).map(opt => (
+                  <button key={opt.type} onClick={() => { setClosureType(opt.type); setBoMenuMode(opt.type === 'closed_with_succession' ? 'successor' : 'close-note') }}
+                    style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: '1px solid #E8E4DC', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#2D2A26' }}>{opt.label}</div>
+                    <div style={{ fontSize: 10, color: '#8A857D' }}>{opt.desc}</div>
+                  </button>
+                ))}
+                <div style={{ height: 1, background: '#E8E4DC', margin: '4px 0' }} />
+                <button onClick={async () => {
+                  if (!window.confirm('Delete this outcome entirely? No marker will be recorded.')) return
+                  await fetch(`/api/big-outcomes/${boMenu.outcome.id}`, { method: 'DELETE' })
+                  showToast('Outcome deleted.')
+                  setBoMenu(null); await fetchAll()
+                }} style={{ textAlign: 'left', padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#C4504A', fontFamily: 'inherit' }}>
+                  Delete — remove entirely, no marker
+                </button>
+              </div>
+            )}
+
+            {boMenuMode === 'successor' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 11, color: '#8A857D' }}>Successor Big Outcome</div>
+                <input autoFocus value={successorName} onChange={e => setSuccessorName(e.target.value)}
+                  placeholder="Name for the successor (required)"
+                  style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 6, padding: '6px 8px', background: '#FFF', outline: 'none' }} />
+                <input value={closureNote} onChange={e => setClosureNote(e.target.value)}
+                  placeholder="One line to capture this moment (optional)"
+                  style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 6, padding: '6px 8px', background: '#FFF', outline: 'none' }} />
+                <button disabled={!successorName.trim()} onClick={async () => {
+                  const res = await fetch(`/api/big-outcomes/${boMenu.outcome.id}/close`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ closure_type: closureType, in_moment_note: closureNote || null, successor: { name: successorName.trim() } }),
+                  })
+                  if (res.ok) { showToast('Closed with successor.'); setBoMenu(null); setClosureType(null); setClosureNote(''); setSuccessorName(''); await fetchAll() }
+                  else { const e = await res.json(); showToast(e.error, 'error') }
+                }} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: successorName.trim() ? '#2D2A26' : '#E8E4DC', color: '#FFF', cursor: successorName.trim() ? 'pointer' : 'default', fontSize: 12, fontFamily: 'inherit' }}>
+                  Close and create successor
+                </button>
+              </div>
+            )}
+
+            {boMenuMode === 'close-note' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 11, color: '#8A857D' }}>
+                  {closureType === 'accomplished' ? 'Accomplished' : closureType === 'declared_complete' ? 'Declared complete' : 'Abandoned'}
+                </div>
+                <input autoFocus value={closureNote} onChange={e => setClosureNote(e.target.value)}
+                  placeholder="One line to capture this moment (optional)"
+                  onKeyDown={async e => {
+                    if (e.key === 'Escape') { setBoMenu(null); setClosureType(null); setClosureNote('') }
+                    if (e.key === 'Enter') {
+                      const res = await fetch(`/api/big-outcomes/${boMenu.outcome.id}/close`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ closure_type: closureType, in_moment_note: closureNote || null }),
+                      })
+                      if (res.ok) {
+                        const label = closureType === 'accomplished' ? 'Marked accomplished.' : closureType === 'declared_complete' ? 'Marked complete.' : 'Marked abandoned.'
+                        showToast(label)
+                        setBoMenu(null); setClosureType(null); setClosureNote(''); await fetchAll()
+                      } else { const err = await res.json(); showToast(err.error, 'error') }
+                    }
+                  }}
+                  style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 6, padding: '6px 8px', background: '#FFF', outline: 'none' }} />
+                <div style={{ fontSize: 10, color: '#B5B0A8' }}>Enter to confirm, Esc to cancel</div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Recent Markers Strip ────────────────────────────────────────── */}
+      {markers.length > 0 && (
+        <div style={{ padding: '12px 20px 20px', maxWidth: 900 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Recent Markers</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {markers.map(m => {
+              const typeLabel: Record<string, string> = { accomplished: 'Accomplished', declared_complete: 'Declared complete', closed_with_succession: 'Closed → successor', abandoned: 'Abandoned', life_event: 'Life event' }
+              const typeColor: Record<string, string> = { accomplished: '#5A9E6F', declared_complete: '#4B6A82', closed_with_succession: '#4B6A82', abandoned: '#8A857D', life_event: '#C4725A' }
+              return (
+                <div key={m.id} style={{
+                  padding: '6px 10px', borderRadius: 6, border: '1px solid #E8E4DC', background: '#FFFFFF',
+                  minWidth: 120, maxWidth: 200,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#2D2A26', lineHeight: 1.3 }}>{m.title}</div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}>
+                    <span style={{ fontSize: 9, color: typeColor[m.marker_type] ?? '#8A857D' }}>{typeLabel[m.marker_type] ?? m.marker_type}</span>
+                    <span style={{ fontSize: 9, color: '#B5B0A8' }}>{new Date(m.occurred_on + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                  </div>
+                  {m.in_moment_note && <div style={{ fontSize: 10, color: '#8A857D', marginTop: 3, lineHeight: 1.3 }}>{m.in_moment_note}</div>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} />}
