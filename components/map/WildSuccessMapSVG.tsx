@@ -467,10 +467,11 @@ export default function WildSuccessMapSVG({
                   }}
                 >…</text>
                 <text x={ox + outcomeBoxW / 2} y={outcomeY + 18} textAnchor="middle" fontSize={10} fontWeight={700}
-                  fill={isClosed ? '#8A857D' : '#2D2A26'} textDecoration={isClosed ? 'line-through' : 'none'}>
+                  fill={isClosed ? '#8A857D' : '#2D2A26'}>
                   {o.name.length > 18 ? o.name.slice(0, 17) + '…' : o.name}
                 </text>
-                <text x={ox + outcomeBoxW / 2} y={outcomeY + 31} textAnchor="middle" fontSize={8} fill="#8A8578">
+                <text x={ox + outcomeBoxW / 2} y={outcomeY + 31} textAnchor="middle" fontSize={8}
+                  fill={isClosed && o.closure_type === 'accomplished' ? '#5A9E6F' : '#8A8578'}>
                   {isClosed ? (o.closure_type === 'accomplished' ? 'Accomplished' : o.closure_type === 'declared_complete' ? 'Declared complete' : o.closure_type === 'abandoned' ? 'Abandoned' : 'Closed') : `${o.status} · ${o.activity_count ?? 0} ${(o.activity_count ?? 0) === 1 ? 'activity' : 'activities'}`}
                 </text>
                 {isClosed && o.closed_on && (
