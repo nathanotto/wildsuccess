@@ -3089,23 +3089,27 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
 
                       {/* Time blocks */}
                       {blocks.map(block => {
-                        const isOver = dragOverBlockId === block.id && !block.is_hard
-                        const blockColor = block.is_hard ? '#9E6A46' : (block.block_type?.color ?? '#4B82AF')
+                        const isOver = dragOverBlockId === block.id
+                        const blockColor = block.block_type?.color ?? '#4B82AF'
                         return (
                           <div
                             key={block.id}
-                            draggable={!block.is_hard}
-                            onContextMenu={!block.is_hard ? e => { e.preventDefault(); setDuplicateArmed(prev => prev === block.id ? null : block.id) } : undefined}
-                            onDragStart={!block.is_hard ? e => {
+                            draggable
+                            onContextMenu={e => { e.preventDefault(); setDuplicateArmed(prev => prev === block.id ? null : block.id) }}
+                            onDragStart={e => {
                               e.stopPropagation()
                               setBlockTooltip(null)
+                              // Transparent drag image — rely on the placeholder rectangle instead
+                              const img = new Image()
+                              img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs='
+                              e.dataTransfer.setDragImage(img, 0, 0)
                               // Capture cursor offset within block so drop aligns to block top
                               const blockEl = e.currentTarget as HTMLElement
                               dragOffsetYRef.current = e.clientY - blockEl.getBoundingClientRect().top
                               const isDuplicate = duplicateArmed === block.id
                               setDraggingBlock({ block, date: ds, isDuplicate })
                               setDuplicateArmed(null)
-                            } : undefined}
+                            }}
                             onDragEnd={() => { setDraggingBlock(null); setDuplicateArmed(null) }}
                             onMouseEnter={e => { if (!draggingBlock && !draggingBlockTypeId && !draggingHopperItem) setBlockTooltip({ label: block.label, time: `${formatTime12(block.start_time)} · ${block.duration_minutes}m`, x: e.clientX, y: e.clientY }) }}
                             onMouseMove={e => { if (draggingBlock || draggingBlockTypeId || draggingHopperItem) { setBlockTooltip(null); return } setBlockTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null) }}
@@ -3120,36 +3124,34 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                               return {
                               position: 'absolute' as const,
                               top: blockTopPx(block.start_time),
-                              height: Math.max(timeHeight, contentHeight),
+                              // During resize, use time-based height only (skip content expansion)
+                              height: resizing?.blockId === block.id ? timeHeight : Math.max(timeHeight, contentHeight),
                               left: `calc(${(col / totalCols) * 100}% + 2px)`,
                               width: `calc(${100 / totalCols}% - 4px)`,
                               borderRadius: 8,
-                              background: isOver
-                                ? blockColor + '15'
-                                : (block.is_hard ? '#9E6A4610' : blockColor + '12'),
+                              background: isOver ? blockColor + '15' : blockColor + '12',
                               border: `1.5px solid ${isOver ? blockColor : blockColor + '40'}`,
                               overflow: 'hidden',
-                              zIndex: block.is_hard ? 0 : 1,
-                              pointerEvents: block.is_hard ? 'none' : undefined,
+                              zIndex: 1,
                               opacity: (draggingBlock?.block.id === block.id && !draggingBlock.isDuplicate) ? 0.4 : 1,
-                              cursor: block.is_hard ? 'default' : 'grab',
+                              cursor: 'grab',
                               outline: duplicateArmed === block.id ? `2px dashed ${blockColor}` : 'none',
                               outlineOffset: 2,
                               animation: exitingBlockIds.has(block.id) ? 'block-exit 260ms ease-out forwards' : newlyPlacedIds.has(block.id) ? 'auto-place-pulse 2s ease-out' : undefined,
                             }})()}
-                            onDragOver={!block.is_hard ? e => {
+                            onDragOver={e => {
                               e.preventDefault()
                               if (draggingHopperItem) setDragOverBlockId(block.id)
-                            } : undefined}
+                            }}
                             onDragLeave={() => { if (dragOverBlockId === block.id) setDragOverBlockId(null) }}
-                            onDrop={!block.is_hard ? e => {
+                            onDrop={e => {
                               e.preventDefault()
                               if (draggingHopperItem) {
                                 e.stopPropagation()
                                 handleDropOnBlock(block, ds)
                               }
                               // draggingBlock drops bubble up to the column
-                            } : undefined}
+                            }}
                           >
                             {/* Duplicate-armed indicator */}
                             {duplicateArmed === block.id && (
@@ -3180,7 +3182,6 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                                     gap: 4,
                                     padding: '4px 6px',
                                     borderBottom: extraItems.length > 0 ? '1px solid #F0EDE8' : 'none',
-                                    pointerEvents: block.is_hard ? 'auto' : undefined,
                                     background: headerCompleted ? '#5A9E6F08' : 'transparent',
                                   }}>
                                     <div style={{ width: 3, height: 14, borderRadius: 2, background: headerCompleted ? '#5A9E6F' : blockColor, flexShrink: 0 }} />
@@ -3211,7 +3212,6 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                                       </span>
                                     )}
                                     <span style={{ fontSize: 9, color: '#8A857D', flexShrink: 0 }}>{formatTime12(block.start_time)}</span>
-                                    {block.is_hard && <span style={{ fontSize: 8, color: '#9E6A46' }}>🔒</span>}
                                     {primaryItem && primaryItem.status !== 'completed' && (
                                       <button
                                         onClick={() => markItemComplete(primaryItem, block, ds)}
@@ -3300,20 +3300,18 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                             )}
 
                             {/* Resize handle */}
-                            {!block.is_hard && (
-                              <div
-                                onMouseDown={e => startResize(e, block, ds)}
-                                style={{
-                                  position: 'absolute',
-                                  bottom: 0,
-                                  left: 0,
-                                  right: 0,
-                                  height: 6,
-                                  cursor: 'ns-resize',
-                                  background: 'transparent',
-                                }}
-                              />
-                            )}
+                            <div
+                              onMouseDown={e => startResize(e, block, ds)}
+                              style={{
+                                position: 'absolute',
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                height: 6,
+                                cursor: 'ns-resize',
+                                background: 'transparent',
+                              }}
+                            />
                           </div>
                         )
                       })}
