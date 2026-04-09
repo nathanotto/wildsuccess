@@ -2690,29 +2690,18 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                     key={ds}
                     style={{
                       flex: 1,
-                      padding: '8px 4px',
+                      padding: '4px 4px',
                       textAlign: 'center',
                       borderLeft: i === 0 ? 'none' : '1px solid #F0EDE8',
                     }}
                   >
-                    <div style={{
+                    <span style={{
                       fontSize: 11,
-                      fontWeight: isToday ? 700 : 500,
+                      fontWeight: isToday ? 700 : 400,
                       color: isToday ? '#C4725A' : '#5A5650',
                     }}>
-                      {DAY_LABELS[i]}
-                    </div>
-                    <div style={{
-                      fontSize: 14,
-                      fontWeight: isToday ? 700 : 400,
-                      color: isToday ? '#C4725A' : '#2D2A26',
-                      lineHeight: 1.2,
-                    }}>
-                      {d.getDate()}
-                    </div>
-                    {blockCount > 0 && (
-                      <div style={{ fontSize: 9, color: '#B5B0A8', marginTop: 1 }}>{blockCount} block{blockCount !== 1 ? 's' : ''}</div>
-                    )}
+                      {DAY_LABELS[i]} {d.getDate()}
+                    </span>
                   </div>
                 )
               })}
