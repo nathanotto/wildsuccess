@@ -1425,35 +1425,34 @@ export default function TodayPage({ displayName }: Props) {
         ) : (
           <>
             {/* Day tabs */}
-            <div style={{ display: 'flex', gap: 20, paddingTop: 16, paddingBottom: 8 }}>
-              <span
-                onClick={() => setSelectedDate(addDays(todayStr, -1))}
-                style={{
-                  fontSize: 14, cursor: 'pointer',
-                  color: isYesterday ? '#B8443E' : '#8A8578',
-                  fontWeight: isYesterday ? 700 : 400,
-                }}>
-                Yesterday
-              </span>
-              <span
-                onClick={() => setSelectedDate(todayStr)}
-                style={{
-                  fontSize: 14, cursor: 'pointer',
-                  color: isToday ? '#2D2A26' : '#8A8578',
-                  fontWeight: isToday ? 700 : 400,
-                }}>
-                Today
-              </span>
-              <span
-                onClick={() => setSelectedDate(addDays(todayStr, 1))}
-                style={{
-                  fontSize: 14, cursor: 'pointer',
-                  color: isTomorrow ? '#4B6A82' : '#8A8578',
-                  fontWeight: isTomorrow ? 700 : 400,
-                }}>
-                Tomorrow
-              </span>
-            </div>
+            {(() => {
+              const fmtDate = (d: string) => {
+                const dt = new Date(d + 'T12:00:00')
+                return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+              }
+              return (
+                <div style={{ display: 'flex', gap: 20, paddingTop: 16, paddingBottom: 8 }}>
+                  <span
+                    onClick={() => setSelectedDate(addDays(todayStr, -1))}
+                    style={{ cursor: 'pointer', textAlign: 'center' }}>
+                    <div style={{ fontSize: 14, color: isYesterday ? '#B8443E' : '#8A8578', fontWeight: isYesterday ? 700 : 400 }}>Yesterday</div>
+                    <div style={{ fontSize: 11, color: '#B5B0A8' }}>{fmtDate(addDays(todayStr, -1))}</div>
+                  </span>
+                  <span
+                    onClick={() => setSelectedDate(todayStr)}
+                    style={{ cursor: 'pointer', textAlign: 'center' }}>
+                    <div style={{ fontSize: 14, color: isToday ? '#2D2A26' : '#8A8578', fontWeight: isToday ? 700 : 400 }}>Today</div>
+                    <div style={{ fontSize: 11, color: '#B5B0A8' }}>{fmtDate(todayStr)}</div>
+                  </span>
+                  <span
+                    onClick={() => setSelectedDate(addDays(todayStr, 1))}
+                    style={{ cursor: 'pointer', textAlign: 'center' }}>
+                    <div style={{ fontSize: 14, color: isTomorrow ? '#4B6A82' : '#8A8578', fontWeight: isTomorrow ? 700 : 400 }}>Tomorrow</div>
+                    <div style={{ fontSize: 11, color: '#B5B0A8' }}>{fmtDate(addDays(todayStr, 1))}</div>
+                  </span>
+                </div>
+              )
+            })()}
 
             {/* Capture — only on today and future views */}
             {!isPast && (
