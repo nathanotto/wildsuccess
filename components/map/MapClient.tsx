@@ -4,7 +4,6 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { UserValue, LifeDomain, BigOutcome, Activity, UserProfile, IntakeQuestion, Marker } from '@/lib/types'
 import WildSuccessMapSVG from './WildSuccessMapSVG'
 import LifeMapSVG from './LifeMapSVG'
-import TakeActionBox from './TakeActionBox'
 import EditValueModal from './EditValueModal'
 import EditActivityModal from './EditActivityModal'
 import EditBigOutcomeModal from './EditBigOutcomeModal'
@@ -244,28 +243,40 @@ export default function MapClient({ userId, userEmail }: Props) {
 
       <div style={{ display: 'flex', justifyContent: 'center', padding: '0 16px' }}>
         {mapMode === 'values' && (
-          <div style={{ width: 220, flexShrink: 0 }}>
-            <TakeActionBox values={values} activities={activities} overdueActivityIds={overdueActivityIds} />
+          <div style={{ width: 200, flexShrink: 0, paddingTop: 8 }}>
             {unclosedDays.length > 0 && (
-              <div style={{ paddingTop: 16 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#8A857D', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#8A857D', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>
                   Unclosed Days
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {unclosedDays.map(d => (
-                    <button
-                      key={d}
-                      onClick={() => router.push(`/today/complete?date=${d}`)}
-                      style={{
-                        padding: '4px 10px', borderRadius: 8, fontSize: 11, fontFamily: 'inherit',
-                        border: '1px solid #E8E4DC', background: '#FFF', color: '#8A8578',
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </button>
-                  ))}
+                {unclosedDays.map(d => (
+                  <a
+                    key={d}
+                    href={`/today/complete?date=${d}`}
+                    style={{ display: 'block', fontSize: 11, color: '#C4725A', textDecoration: 'none', padding: '2px 0', cursor: 'pointer' }}
+                  >
+                    {new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} →
+                  </a>
+                ))}
+              </div>
+            )}
+            {markers.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#8A857D', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>
+                  Recent Markers
                 </div>
+                {markers.map(m => {
+                  const typeColor: Record<string, string> = { accomplished: '#5A9E6F', declared_complete: '#4B6A82', closed_with_succession: '#4B6A82', abandoned: '#8A857D', life_event: '#C4725A' }
+                  return (
+                    <div key={m.id} style={{ marginBottom: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#2D2A26', lineHeight: 1.3 }}>{m.title}</div>
+                      <div style={{ fontSize: 9, color: typeColor[m.marker_type] ?? '#8A857D' }}>
+                        {new Date(m.occurred_on + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {m.in_moment_note && ` · ${m.in_moment_note}`}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -667,32 +678,6 @@ export default function MapClient({ userId, userEmail }: Props) {
             )}
           </div>
         </>
-      )}
-
-      {/* ── Recent Markers Strip ────────────────────────────────────────── */}
-      {markers.length > 0 && (
-        <div style={{ padding: '12px 20px 20px', maxWidth: 900 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Recent Markers</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {markers.map(m => {
-              const typeLabel: Record<string, string> = { accomplished: 'Accomplished', declared_complete: 'Declared complete', closed_with_succession: 'Closed → successor', abandoned: 'Abandoned', life_event: 'Life event' }
-              const typeColor: Record<string, string> = { accomplished: '#5A9E6F', declared_complete: '#4B6A82', closed_with_succession: '#4B6A82', abandoned: '#8A857D', life_event: '#C4725A' }
-              return (
-                <div key={m.id} style={{
-                  padding: '6px 10px', borderRadius: 6, border: '1px solid #E8E4DC', background: '#FFFFFF',
-                  minWidth: 120, maxWidth: 200,
-                }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#2D2A26', lineHeight: 1.3 }}>{m.title}</div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}>
-                    <span style={{ fontSize: 9, color: typeColor[m.marker_type] ?? '#8A857D' }}>{typeLabel[m.marker_type] ?? m.marker_type}</span>
-                    <span style={{ fontSize: 9, color: '#B5B0A8' }}>{new Date(m.occurred_on + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                  </div>
-                  {m.in_moment_note && <div style={{ fontSize: 10, color: '#8A857D', marginTop: 3, lineHeight: 1.3 }}>{m.in_moment_note}</div>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} />}
