@@ -19,9 +19,9 @@ interface ActivityLocal {
 }
 
 // ── Design constants ──────────────────────────────────────────────────────────
-const HOUR_HEIGHT = 60
+const HOUR_HEIGHT = 44
 const GRID_START = 5
-const GRID_END = 21
+const GRID_END = 22
 const GRID_HOURS = GRID_END - GRID_START
 const GRID_HEIGHT = GRID_HOURS * HOUR_HEIGHT
 
