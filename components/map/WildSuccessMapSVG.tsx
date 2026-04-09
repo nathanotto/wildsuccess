@@ -431,9 +431,10 @@ export default function WildSuccessMapSVG({
           {outcomes.map((o, idx) => {
             const ox = outcomeStartX + idx * (outcomeBoxW + 10)
             const isSel = selectedOutcome?.id === o.id
-            const needsActivities = (o.activity_count ?? 0) <= 1
-            const hasPlan = !!missionsByOutcome[o.id]
-            const extraLines = (needsActivities ? 1 : 0) + (hasPlan ? 1 : 0)
+            const isClosed = !!o.closure_type
+            const needsActivities = !isClosed && (o.activity_count ?? 0) <= 1
+            const hasPlan = !isClosed && !!missionsByOutcome[o.id]
+            const extraLines = (needsActivities ? 1 : 0) + (hasPlan ? 1 : 0) + (isClosed ? 1 : 0)
             const boxH = outcomeBoxH + extraLines * 12
             return (
               <g key={o.id}
@@ -448,6 +449,7 @@ export default function WildSuccessMapSVG({
               >
                 <rect x={ox} y={outcomeY} width={outcomeBoxW} height={boxH} rx={12}
                   fill="#FFFFFF" stroke={isSel ? '#C4725A' : '#E8E4DC'} strokeWidth={isSel ? 1.5 : 1}
+                  opacity={isClosed ? 0.5 : 1}
                 />
                 {/* … menu button */}
                 <text
@@ -464,12 +466,18 @@ export default function WildSuccessMapSVG({
                     onOutcomeMenu(o, { x: screenPt.x - svgRect.left, y: screenPt.y - svgRect.top + boxH })
                   }}
                 >…</text>
-                <text x={ox + outcomeBoxW / 2} y={outcomeY + 18} textAnchor="middle" fontSize={10} fontWeight={700} fill="#2D2A26">
+                <text x={ox + outcomeBoxW / 2} y={outcomeY + 18} textAnchor="middle" fontSize={10} fontWeight={700}
+                  fill={isClosed ? '#8A857D' : '#2D2A26'} textDecoration={isClosed ? 'line-through' : 'none'}>
                   {o.name.length > 18 ? o.name.slice(0, 17) + '…' : o.name}
                 </text>
                 <text x={ox + outcomeBoxW / 2} y={outcomeY + 31} textAnchor="middle" fontSize={8} fill="#8A8578">
-                  {o.status} · {o.activity_count ?? 0} {(o.activity_count ?? 0) === 1 ? 'activity' : 'activities'}
+                  {isClosed ? (o.closure_type === 'accomplished' ? 'Accomplished' : o.closure_type === 'declared_complete' ? 'Declared complete' : o.closure_type === 'abandoned' ? 'Abandoned' : 'Closed') : `${o.status} · ${o.activity_count ?? 0} ${(o.activity_count ?? 0) === 1 ? 'activity' : 'activities'}`}
                 </text>
+                {isClosed && o.closed_on && (
+                  <text x={ox + outcomeBoxW / 2} y={outcomeY + 44} textAnchor="middle" fontSize={7.5} fill="#5A9E6F">
+                    {new Date(o.closed_on + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </text>
+                )}
                 {needsActivities && (
                   <text x={ox + outcomeBoxW / 2} y={outcomeY + 44} textAnchor="middle" fontSize={7.5} fill="#C4504A">
                     Needs more activities

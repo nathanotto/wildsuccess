@@ -95,7 +95,7 @@ export default function MapClient({ userId, userEmail }: Props) {
       }))
     }
     if (Array.isArray(d)) setDomains(d)
-    if (Array.isArray(o)) setOutcomes(o.filter((bo: BigOutcome) => !bo.closure_type))
+    if (Array.isArray(o)) setOutcomes(o)
     if (Array.isArray(a)) setActivities(a)
     if (p && !p.error) setProfile(p)
     if (h && h.overdueActivityIds) setOverdueActivityIds(h.overdueActivityIds)
