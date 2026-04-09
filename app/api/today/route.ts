@@ -51,15 +51,19 @@ export async function GET(req: NextRequest) {
           .lte('committed_date', date)
           .not('status', 'in', '("rescheduled","dismissed","archived")')
           .or(`completed_date.is.null,completed_date.gte.${date}`)
+          .or(`committed_date.eq.${date},scheduled_time.is.null`)
           .or(`status.neq.parked,parked_until.lte.${date}`)
           .order('sort_order', { ascending: true })
       : // Today: rolling active items
+        // Only unscheduled items roll forward from past dates.
+        // Scheduled items stay pinned to their date (handled by "yesterday's unfinished" triage).
         supabase
           .from('action_items')
           .select('*, item_notes(*)')
           .eq('user_id', user.id)
           .lte('committed_date', todayDate)
           .not('status', 'in', '("completed","skipped","rescheduled","dismissed","archived")')
+          .or(`committed_date.eq.${todayDate},scheduled_time.is.null`)
           .or(`status.neq.parked,parked_until.lte.${todayDate}`)
           .order('sort_order', { ascending: true })
 
