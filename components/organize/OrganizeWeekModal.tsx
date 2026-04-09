@@ -1840,6 +1840,25 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
             return
           }
 
+          // Create a time_block first, then link the action_item to it
+          const durationMin = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000))
+          const blockRes = await fetch('/api/time-blocks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              block_date: scheduledDate,
+              label,
+              start_time: scheduledTime,
+              end_time: scheduledEndTime,
+              duration_minutes: durationMin,
+              is_hard: false,
+              sort_order: 0,
+              source: 'calendar_import',
+              time_type: energyLevel ?? 'B',
+            }),
+          })
+          const newBlock = blockRes.ok ? await blockRes.json() : null
+
           await fetch('/api/action-items', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1848,6 +1867,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
               committed_date: scheduledDate,
               scheduled_time: scheduledTime,
               scheduled_end_time: scheduledEndTime,
+              time_block_id: newBlock?.id ?? null,
               flexibility: 'soft_scheduled',
               time_type: energyLevel ?? 'B',
               bounding_type: 'time',
