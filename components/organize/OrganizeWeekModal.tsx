@@ -2852,7 +2852,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                   // Use visual duration (accounts for item overflow) for overlap computation
                   const blocksWithVisualDuration = blocks.map(b => ({
                     ...b,
-                    duration_minutes: Math.max(b.duration_minutes, (b.items.length * 22 + 24) / (HOUR_HEIGHT / 60)),
+                    duration_minutes: Math.max(b.duration_minutes, (b.items.filter(i => i.name.trim().toLowerCase() !== b.label.trim().toLowerCase()).length * 22 + 24) / (HOUR_HEIGHT / 60)),
                   }))
                   const overlapLayout = computeOverlapLayout(blocksWithVisualDuration)
                   const blockLabels = blocks.map(b => b.label.trim().toLowerCase())
@@ -3127,9 +3127,12 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                               const ol = overlapLayout.get(block.id)
                               const col = ol?.col ?? 0
                               const totalCols = ol?.totalCols ?? 1
-                              // Height: max of time-based height and content-needed height (header ~24px + ~22px per item)
+                              // Height: max of time-based height and content-needed height
+                              // Only count extra items (not matching block label) since the primary merges into header
                               const timeHeight = blockHeightPx(block.duration_minutes)
-                              const contentHeight = 24 + block.items.length * 22
+                              const labelLower = block.label.trim().toLowerCase()
+                              const extraCount = block.items.filter(i => i.name.trim().toLowerCase() !== labelLower).length
+                              const contentHeight = 24 + extraCount * 22
                               return {
                               position: 'absolute' as const,
                               top: blockTopPx(block.start_time),
