@@ -79,8 +79,21 @@ export async function GET(req: NextRequest) {
         .order('sort_order', { ascending: true })
     : null
 
+  // For today view: fetch yesterday's incomplete scheduled items for the triage box
+  const yesterdayStr = new Date(new Date(todayDate + 'T12:00:00').getTime() - 86400000).toISOString().split('T')[0]
+  const yesterdayUnfinishedQuery = !isPast && !isFuture
+    ? supabase
+        .from('action_items')
+        .select('*, item_notes(*)')
+        .eq('user_id', user.id)
+        .eq('committed_date', yesterdayStr)
+        .not('scheduled_time', 'is', null)
+        .not('status', 'in', '("completed","skipped","rescheduled","dismissed","archived")')
+        .order('scheduled_time', { ascending: true })
+    : null
+
   // Fetch action_items, time_blocks, logged entries, and hopper data in parallel
-  const [itemsRes, blocksRes, loggedRes, completedTodayRes, ...hopperResults] = await Promise.all([
+  const [itemsRes, blocksRes, loggedRes, completedTodayRes, yesterdayUnfinishedRes, ...hopperResults] = await Promise.all([
     itemsQuery,
     supabase
       .from('time_blocks')
@@ -96,6 +109,7 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: true }),
     // Completed-today items (only for today view, null placeholder otherwise)
     completedTodayQuery ?? Promise.resolve({ data: null, error: null }),
+    yesterdayUnfinishedQuery ?? Promise.resolve({ data: null, error: null }),
     // Hopper: candidate items for this week (non-template)
     ...(showHopper ? [
       supabase
@@ -143,14 +157,11 @@ export async function GET(req: NextRequest) {
     items = [...items, ...completedToday.filter(i => !existingIds.has(i.id))]
   }
 
-  // For today view: separate rolled-forward scheduled items from past dates
-  // into a "yesterday's unfinished" triage list instead of mixing into today's list
-  let yesterdayUnfinished: typeof items = []
+  // Yesterday's incomplete scheduled items — fetched separately for triage box
+  const yesterdayUnfinished = (yesterdayUnfinishedRes as { data: typeof items | null })?.data ?? []
+
+  // Remove any yesterday items that somehow ended up in the main items list
   if (!isPast && !isFuture) {
-    yesterdayUnfinished = items.filter(i =>
-      i.committed_date && i.committed_date < todayDate && i.scheduled_time
-      && i.status !== 'completed' && i.status !== 'skipped'
-    )
     const yesterdayIds = new Set(yesterdayUnfinished.map(i => i.id))
     items = items.filter(i => !yesterdayIds.has(i.id))
   }

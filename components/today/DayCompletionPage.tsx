@@ -38,6 +38,8 @@ interface ActionItemLocal {
   status: string
   scheduled_time: string | null
   activity_id: string | null
+  committed_date: string | null
+  completed_date: string | null
 }
 
 interface ActionLogEntry {
@@ -132,7 +134,10 @@ export default function DayCompletionPage({ displayName }: Props) {
   // Items grouped by status
   const completedItems = items.filter(i => i.status === 'completed')
   const skippedItems = items.filter(i => i.status === 'skipped')
-  const otherItems = items.filter(i => i.status !== 'completed' && i.status !== 'skipped')
+  // Incomplete scheduled items (committed for this date with a time) — can be completed from here
+  const incompleteScheduled = items.filter(i => i.status !== 'completed' && i.status !== 'skipped' && i.scheduled_time && i.committed_date === date)
+  // Unscheduled/rolled items — informational only
+  const otherItems = items.filter(i => i.status !== 'completed' && i.status !== 'skipped' && !(i.scheduled_time && i.committed_date === date))
 
   // Find action_log entry for a completed action_item
   function logForItem(itemId: string) {
@@ -153,6 +158,15 @@ export default function DayCompletionPage({ displayName }: Props) {
       body: JSON.stringify({ status: 'completed', view_date: date }),
     })
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'completed' as const, completed_date: date } : i))
+  }
+
+  async function handleMarkSkipped(itemId: string) {
+    await fetch(`/api/action-items/${itemId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'skipped', view_date: date }),
+    })
+    setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'skipped' as const } : i))
   }
 
   async function handleValueTagChange(logId: string, valueIds: string[]) {
@@ -309,18 +323,35 @@ export default function DayCompletionPage({ displayName }: Props) {
             <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>skipped</span>
           </div>
         ))}
+        {/* Incomplete scheduled items — can be completed or skipped from here */}
+        {incompleteScheduled.map(item => (
+          <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => handleMarkComplete(item.id)}
+                title="I did it"
+                style={{ background: 'none', border: '1.5px solid #8A857D', borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: '#5A9E6F', padding: 0 }}
+              >✓</button>
+              <span style={{ fontSize: 14, color: '#2D2A26' }}>
+                {item.scheduled_time && <span style={{ color: '#8A8578', marginRight: 6 }}>{fmtTime(item.scheduled_time)}</span>}
+                {item.name}
+              </span>
+              <button
+                onClick={() => handleMarkSkipped(item.id)}
+                title="Didn't happen"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#B5B0A8', marginLeft: 'auto', flexShrink: 0, fontFamily: 'inherit' }}
+              >✕ skip</button>
+            </div>
+          </div>
+        ))}
+        {/* Unscheduled / rolled items — informational only */}
         {otherItems.map(item => (
           <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#D4885A', fontSize: 11 }}>○</span>
-            <span style={{ fontSize: 14, color: '#8A8578', flex: 1 }}>
+            <span style={{ color: '#B5B0A8', fontSize: 11 }}>○</span>
+            <span style={{ fontSize: 14, color: '#B5B0A8' }}>
               {item.name}
             </span>
-            <button
-              onClick={() => handleMarkComplete(item.id)}
-              title="Mark as done"
-              style={{ background: 'none', border: '1px solid #8A857D', borderRadius: 3, cursor: 'pointer', fontSize: 9, color: '#5A9E6F', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-            >✓</button>
-            <span style={{ fontSize: 9, color: '#D4885A', flexShrink: 0 }}>{item.status}</span>
+            <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>rolled to today</span>
           </div>
         ))}
       </div>
