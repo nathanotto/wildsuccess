@@ -136,6 +136,7 @@ export default function DayCompletionPage({ displayName }: Props) {
   const skippedItems = items.filter(i => i.status === 'skipped')
   // Incomplete scheduled items (committed for this date with a time) — can be completed from here
   const incompleteScheduled = items.filter(i => i.status !== 'completed' && i.status !== 'skipped' && i.scheduled_time && i.committed_date === date)
+    .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
   // Unscheduled/rolled items — informational only
   const otherItems = items.filter(i => i.status !== 'completed' && i.status !== 'skipped' && !(i.scheduled_time && i.committed_date === date))
 
