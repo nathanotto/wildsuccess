@@ -326,7 +326,7 @@ interface FocusViewProps {
   onAddNote: (actionItemId: string, noteType: 'note' | 'step', content: string) => Promise<ItemNote>
   onCompleteStep: (noteId: string) => Promise<void>
   onAddFollowUp: (content: string, sourceId: string) => Promise<void>
-  onMoveToTomorrow: (id: string) => Promise<void>
+  onPickUpLater: (id: string, date: string) => Promise<void>
   onMarkDoneAndCapture: (id: string, followUpText: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onSchedule: (id: string, time: string, endTime: string | null) => Promise<void>
@@ -338,7 +338,7 @@ interface FocusViewProps {
 }
 
 function FocusView({
-  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onMoveToTomorrow, onMarkDoneAndCapture, onDelete, onSchedule, onUnschedule, nextUp, isToday, isPast, selectedDate,
+  item, onBack, onStatusChange, onTitleChange, onAddNote, onCompleteStep, onAddFollowUp, onPickUpLater, onMarkDoneAndCapture, onDelete, onSchedule, onUnschedule, nextUp, isToday, isPast, selectedDate,
 }: FocusViewProps) {
   const [title, setTitle] = useState(item.name)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -349,6 +349,8 @@ function FocusView({
   const [followUpInput, setFollowUpInput] = useState('')
   const [captureFollowUp, setCaptureFollowUp] = useState('')
   const [showCaptureFollowUp, setShowCaptureFollowUp] = useState(false)
+  const [showPickUpLater, setShowPickUpLater] = useState(false)
+  const [pickUpDate, setPickUpDate] = useState(() => addDays(toDateStr(new Date()), 1))
   const [showScheduler, setShowScheduler] = useState(false)
   const [showSteps, setShowSteps] = useState(true)
   const [pickedTime, setPickedTime] = useState<string | null>(null)
@@ -597,16 +599,30 @@ function FocusView({
           style={actionBtnStyle}>
           → It is done
         </button>
-        <button
-          onClick={() => onStatusChange(item.id, 'parked').then(onBack)}
-          style={actionBtnStyle}>
-          → Done working on it today
-        </button>
-        <button
-          onClick={() => onMoveToTomorrow(item.id).then(onBack)}
-          style={actionBtnStyle}>
-          → Defer to tomorrow
-        </button>
+        {showPickUpLater ? (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="date"
+              value={pickUpDate}
+              onChange={e => setPickUpDate(e.target.value)}
+              style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 6, padding: '5px 8px', background: '#FFF', color: '#2D2A26', outline: 'none', flex: 1 }}
+            />
+            <button
+              onClick={() => { onPickUpLater(item.id, pickUpDate).then(onBack) }}
+              style={{ ...actionBtnStyle, padding: '5px 12px' }}>
+              Go
+            </button>
+            <button
+              onClick={() => setShowPickUpLater(false)}
+              style={{ ...actionBtnStyle, padding: '5px 8px', color: '#B5B0A8' }}>
+              ✕
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setShowPickUpLater(true)} style={actionBtnStyle}>
+            → Pick up later…
+          </button>
+        )}
         {showCaptureFollowUp ? (
           <input
             value={captureFollowUp}
@@ -637,13 +653,13 @@ function FocusView({
           <button
             onClick={() => onStatusChange(item.id, 'rescheduled').then(onBack)}
             style={actionBtnStyle}>
-            ↺ Put it back in the hopper
+            ↺ Un-commit but remember
           </button>
         )}
         <button
           onClick={() => onStatusChange(item.id, 'skipped').then(onBack)}
           style={actionBtnStyle}>
-          ✕ Never getting done
+          ✕ Drop it
         </button>
         <button
           onClick={() => { if (window.confirm('Delete this item permanently?')) onDelete(item.id).then(onBack) }}
@@ -1104,21 +1120,18 @@ export default function TodayPage({ displayName }: Props) {
     }
   }
 
-  async function handleMoveToTomorrow(id: string) {
+  async function handlePickUpLater(id: string, date: string) {
     const item = items.find(i => i.id === id)
     // Delete the old time_block first to prevent orphan reconciliation creating duplicates
     if (item?.time_block_id) {
       await fetch(`/api/time-blocks/${item.time_block_id}`, { method: 'DELETE' })
     }
-    const tomorrow = addDays(todayStr, 1)
-    const res = await fetch(`/api/action-items/${id}`, {
+    await fetch(`/api/action-items/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ committed_date: tomorrow, scheduled_time: null, scheduled_end_time: null, time_block_id: null }),
+      body: JSON.stringify({ parked_until: date, status: 'parked', scheduled_time: null, scheduled_end_time: null, time_block_id: null }),
     })
-    if (res.ok) {
-      setItems(prev => prev.filter(i => i.id !== id))
-    }
+    setItems(prev => prev.filter(i => i.id !== id))
   }
 
   // ── Yesterday's unfinished triage actions ──────────────────────────────────
@@ -1412,7 +1425,7 @@ export default function TodayPage({ displayName }: Props) {
             onAddNote={handleAddNote}
             onCompleteStep={handleCompleteStep}
             onAddFollowUp={handleAddFollowUp}
-            onMoveToTomorrow={handleMoveToTomorrow}
+            onPickUpLater={handlePickUpLater}
             onMarkDoneAndCapture={handleMarkDoneAndCapture}
             onDelete={handleDelete}
             onSchedule={handleSchedule}
