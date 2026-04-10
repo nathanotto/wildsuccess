@@ -131,14 +131,12 @@ export default function DayCompletionPage({ displayName }: Props) {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Items grouped by status
-  const completedItems = items.filter(i => i.status === 'completed')
-  const skippedItems = items.filter(i => i.status === 'skipped')
-  // Incomplete scheduled items (committed for this date with a time) — can be completed from here
-  const incompleteScheduled = items.filter(i => i.status !== 'completed' && i.status !== 'skipped' && i.scheduled_time && i.committed_date === date)
+  // All scheduled items (completed, skipped, or incomplete) in one chronological list
+  const scheduledItems = items
+    .filter(i => i.scheduled_time && i.committed_date === date)
     .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
   // Unscheduled/rolled items — informational only
-  const otherItems = items.filter(i => i.status !== 'completed' && i.status !== 'skipped' && !(i.scheduled_time && i.committed_date === date))
+  const otherItems = items.filter(i => !(i.scheduled_time && i.committed_date === date))
 
   // Find action_log entry for a completed action_item
   function logForItem(itemId: string) {
@@ -285,23 +283,43 @@ export default function DayCompletionPage({ displayName }: Props) {
       {/* Day in Review */}
       <div style={sectionStyle}>
         <div style={headingStyle}>What You Did</div>
-        {completedItems.length === 0 && skippedItems.length === 0 && otherItems.length === 0 && (
+        {scheduledItems.length === 0 && otherItems.length === 0 && (
           <div style={{ fontSize: 13, color: '#B5B0A8', padding: '8px 0' }}>No items scheduled for this day.</div>
         )}
-        {completedItems.map(item => {
+        {/* All scheduled items in chronological order — completed, skipped, and incomplete together */}
+        {scheduledItems.map(item => {
+          const isCompleted = item.status === 'completed'
+          const isSkipped = item.status === 'skipped'
+          const isIncomplete = !isCompleted && !isSkipped
           const log = logForItem(item.id)
-          const showTagger = needsValueTag(item)
+          const showTagger = isCompleted && needsValueTag(item) && log
           return (
             <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#5A9E6F', fontSize: 13 }}>✓</span>
-                <span style={{ fontSize: 14, color: '#2D2A26' }}>
+                {isCompleted && <span style={{ color: '#5A9E6F', fontSize: 13 }}>✓</span>}
+                {isSkipped && <span style={{ color: '#B5B0A8', fontSize: 13 }}>—</span>}
+                {isIncomplete && (
+                  <button
+                    onClick={() => handleMarkComplete(item.id)}
+                    title="I did it"
+                    style={{ background: 'none', border: '1.5px solid #B5B0A8', borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  />
+                )}
+                <span style={{ fontSize: 14, color: isSkipped ? '#B5B0A8' : '#2D2A26', textDecoration: isSkipped ? 'line-through' : 'none' }}>
                   {item.scheduled_time && <span style={{ color: '#8A8578', marginRight: 6 }}>{fmtTime(item.scheduled_time)}</span>}
                   {item.name}
                 </span>
-                {item.activity_id && <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>auto-linked</span>}
+                {isCompleted && item.activity_id && <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>auto-linked</span>}
+                {isSkipped && <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>skipped</span>}
+                {isIncomplete && (
+                  <button
+                    onClick={() => handleMarkSkipped(item.id)}
+                    title="Didn't happen"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#B5B0A8', marginLeft: 'auto', flexShrink: 0, fontFamily: 'inherit' }}
+                  >✕ skip</button>
+                )}
               </div>
-              {showTagger && log && (
+              {showTagger && (
                 <div style={{ marginTop: 6, marginLeft: 21 }}>
                   <div style={{ fontSize: 10, color: '#8A8578', marginBottom: 4 }}>What values did this serve?</div>
                   <ValueTagger
@@ -315,36 +333,6 @@ export default function DayCompletionPage({ displayName }: Props) {
             </div>
           )
         })}
-        {skippedItems.map(item => (
-          <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#B5B0A8', fontSize: 13 }}>—</span>
-            <span style={{ fontSize: 14, color: '#B5B0A8', textDecoration: 'line-through' }}>
-              {item.name}
-            </span>
-            <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>skipped</span>
-          </div>
-        ))}
-        {/* Incomplete scheduled items — can be completed or skipped from here */}
-        {incompleteScheduled.map(item => (
-          <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                onClick={() => handleMarkComplete(item.id)}
-                title="I did it"
-                style={{ background: 'none', border: '1.5px solid #B5B0A8', borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: 'transparent', padding: 0 }}
-              > </button>
-              <span style={{ fontSize: 14, color: '#2D2A26' }}>
-                {item.scheduled_time && <span style={{ color: '#8A8578', marginRight: 6 }}>{fmtTime(item.scheduled_time)}</span>}
-                {item.name}
-              </span>
-              <button
-                onClick={() => handleMarkSkipped(item.id)}
-                title="Didn't happen"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#B5B0A8', marginLeft: 'auto', flexShrink: 0, fontFamily: 'inherit' }}
-              >✕ skip</button>
-            </div>
-          </div>
-        ))}
         {/* Unscheduled / rolled items — informational only */}
         {otherItems.map(item => (
           <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4', display: 'flex', alignItems: 'center', gap: 8 }}>
