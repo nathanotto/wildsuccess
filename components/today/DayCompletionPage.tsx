@@ -330,8 +330,8 @@ export default function DayCompletionPage({ displayName }: Props) {
               <button
                 onClick={() => handleMarkComplete(item.id)}
                 title="I did it"
-                style={{ background: 'none', border: '1.5px solid #8A857D', borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: '#5A9E6F', padding: 0 }}
-              >✓</button>
+                style={{ background: 'none', border: '1.5px solid #B5B0A8', borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: 'transparent', padding: 0 }}
+              > </button>
               <span style={{ fontSize: 14, color: '#2D2A26' }}>
                 {item.scheduled_time && <span style={{ color: '#8A8578', marginRight: 6 }}>{fmtTime(item.scheduled_time)}</span>}
                 {item.name}
