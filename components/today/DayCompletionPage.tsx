@@ -146,6 +146,15 @@ export default function DayCompletionPage({ displayName }: Props) {
     return !!log // Has a completion log entry we can tag
   }
 
+  async function handleMarkComplete(itemId: string) {
+    await fetch(`/api/action-items/${itemId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed', view_date: date }),
+    })
+    setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: 'completed' as const, completed_date: date } : i))
+  }
+
   async function handleValueTagChange(logId: string, valueIds: string[]) {
     setValueTags(prev => ({ ...prev, [logId]: valueIds }))
   }
@@ -303,10 +312,15 @@ export default function DayCompletionPage({ displayName }: Props) {
         {otherItems.map(item => (
           <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: '#D4885A', fontSize: 11 }}>○</span>
-            <span style={{ fontSize: 14, color: '#8A8578' }}>
+            <span style={{ fontSize: 14, color: '#8A8578', flex: 1 }}>
               {item.name}
             </span>
-            <span style={{ fontSize: 9, color: '#D4885A', marginLeft: 'auto' }}>{item.status}</span>
+            <button
+              onClick={() => handleMarkComplete(item.id)}
+              title="Mark as done"
+              style={{ background: 'none', border: '1px solid #8A857D', borderRadius: 3, cursor: 'pointer', fontSize: 9, color: '#5A9E6F', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            >✓</button>
+            <span style={{ fontSize: 9, color: '#D4885A', flexShrink: 0 }}>{item.status}</span>
           </div>
         ))}
       </div>

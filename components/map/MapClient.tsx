@@ -251,15 +251,20 @@ export default function MapClient({ userId, userEmail }: Props) {
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#8A857D', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>
                   Unclosed Days
                 </div>
-                {unclosedDays.map(d => (
-                  <a
-                    key={d}
-                    href={`/today/complete?date=${d}`}
-                    style={{ display: 'block', fontSize: 11, color: '#C4725A', textDecoration: 'none', padding: '2px 0', cursor: 'pointer' }}
-                  >
-                    {new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} →
-                  </a>
-                ))}
+                {unclosedDays.map(d => {
+                  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+                  const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`
+                  const label = d === yStr ? 'Yesterday' : new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                  return (
+                    <a
+                      key={d}
+                      href={`/today/complete?date=${d}`}
+                      style={{ display: 'block', fontSize: 11, color: '#C4725A', textDecoration: 'none', padding: '2px 0', cursor: 'pointer' }}
+                    >
+                      {label} →
+                    </a>
+                  )
+                })}
               </div>
             )}
             {markers.length > 0 && (
