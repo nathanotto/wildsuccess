@@ -605,7 +605,7 @@ function FocusView({
               type="date"
               value={pickUpDate}
               onChange={e => setPickUpDate(e.target.value)}
-              style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 6, padding: '5px 8px', background: '#FFF', color: '#2D2A26', outline: 'none', flex: 1 }}
+              style={{ fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 6, padding: '5px 8px', background: '#FFF', color: '#2D2A26', outline: 'none', width: 140 }}
             />
             <button
               onClick={() => { onPickUpLater(item.id, pickUpDate).then(onBack) }}
