@@ -213,6 +213,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()))
   const [blockTypes, setBlockTypes] = useState<BlockType[]>([])
   const [outcomes, setOutcomes] = useState<{ id: string; name: string; status: string; completed_at: string | null }[]>([])
+  const [thisWeekRecord, setThisWeekRecord] = useState<{ create_statement?: string | null; completed_at_ritual?: string | null; created_at_ritual?: string | null; organized_at?: string | null; deconflicted_at?: string | null } | null>(null)
   const [focusMinutes, setFocusMinutes] = useState(50)
   const [dayBlocks, setDayBlocks] = useState<Record<string, TimeBlockLocal[]>>({})
   const [hopper, setHopper] = useState<CandidateItemLocal[]>([])
@@ -586,6 +587,11 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     } catch (err) {
       console.error('OrganizeWeekModal loadData error:', err)
     } finally {
+      // Fetch week record for C&C link
+      fetch(`/api/weeks/${dateStr(weekStart)}`, { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : null)
+        .then(w => setThisWeekRecord(w))
+
       setLoading(false)
     }
   }, [weekStart])
@@ -2229,6 +2235,29 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
               </span>
             )}
           </div>
+          {/* C&C link + create statement */}
+          {(() => {
+            const today = new Date()
+            const dow = today.getDay() // 0=Sun
+            const showCCLink = dow === 0 || dow === 1 || dow === 5 || dow === 6 // Fri/Sat/Sun/Mon
+            const weekMonday = dateStr(weekStart)
+            const ccComplete = thisWeekRecord?.completed_at_ritual && thisWeekRecord?.created_at_ritual && thisWeekRecord?.organized_at && thisWeekRecord?.deconflicted_at
+            return (
+              <>
+                {thisWeekRecord?.create_statement && (
+                  <span title={thisWeekRecord.create_statement} style={{ fontSize: 12, color: '#8A857D', fontStyle: 'italic', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginLeft: 12 }}>
+                    {thisWeekRecord.create_statement.length > 70 ? thisWeekRecord.create_statement.slice(0, 67) + '…' : thisWeekRecord.create_statement}
+                  </span>
+                )}
+                {showCCLink && !ccComplete && (
+                  <a href={`/cc/${weekMonday}`} style={{ fontSize: 12, color: '#8A857D', textDecoration: 'none', marginLeft: 8, whiteSpace: 'nowrap' }}>· Complete this week →</a>
+                )}
+                {ccComplete && (
+                  <span style={{ fontSize: 12, color: '#B5B0A8', marginLeft: 8, whiteSpace: 'nowrap' }}>✓ Week created</span>
+                )}
+              </>
+            )
+          })()}
           <div style={{ flex: 1 }} />
           {loading && (
             <span style={{ fontSize: 11, color: '#B5B0A8', marginRight: 8 }}>Loading…</span>
