@@ -173,9 +173,22 @@ export async function GET(req: NextRequest) {
   const dateScopedItems = items.filter(i => i.committed_date === date)
   const linkedBlockIds = new Set(dateScopedItems.map(i => i.time_block_id).filter(Boolean))
 
+  // Also check for action_items linked to blocks that might not be in the rolling query results
+  const { data: allLinkedItems } = await supabase
+    .from('action_items')
+    .select('time_block_id')
+    .eq('user_id', user.id)
+    .eq('committed_date', date)
+    .not('time_block_id', 'is', null)
+    .not('status', 'in', '("archived")')
+  const allLinkedBlockIds = new Set([
+    ...linkedBlockIds,
+    ...((allLinkedItems ?? []).map(i => i.time_block_id).filter(Boolean)),
+  ])
+
   // Orphaned blocks: no linked action_item, not a calendar import, has a label
   const orphanedBlocks = blocks.filter(b =>
-    !linkedBlockIds.has(b.id) &&
+    !allLinkedBlockIds.has(b.id) &&
     b.source !== 'calendar_import' &&
     b.label?.trim()
   )
