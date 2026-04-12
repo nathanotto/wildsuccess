@@ -186,12 +186,7 @@ export default function CompleteAndCreatePage() {
           ) : (
             <div>
               {captures.map((c, i) => (
-                <div key={c.source_id + i} style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 11, color: '#C4BFB4', width: 60, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
-                    {fmtCapTimestamp(c.timestamp)}
-                  </span>
-                  <span style={{ fontSize: 15, lineHeight: 1.6, color: '#2D2A26' }}>{c.text}</span>
-                </div>
+                <CaptureEntry key={c.source_id + i} timestamp={c.timestamp} text={c.text} />
               ))}
             </div>
           )}
@@ -232,12 +227,7 @@ export default function CompleteAndCreatePage() {
           ) : (
             <div>
               {nextWeekItems.map((c, i) => (
-                <div key={c.source_id + i} style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 11, color: '#C4BFB4', width: 60, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
-                    {fmtCapTimestamp(c.timestamp)}
-                  </span>
-                  <span style={{ fontSize: 15, lineHeight: 1.6, color: '#2D2A26' }}>{c.text}</span>
-                </div>
+                <CaptureEntry key={c.source_id + i} timestamp={c.timestamp} text={c.text} />
               ))}
             </div>
           )}
@@ -274,6 +264,46 @@ export default function CompleteAndCreatePage() {
         <div style={{ display: 'flex', gap: 16 }}>
           <a href="/organize" style={{ fontSize: 12, color: '#8A8578', textDecoration: 'none' }}>Organize this week →</a>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Truncatable capture entry — 5 lines max, expand/collapse toggle
+const LINE_HEIGHT = 1.6
+const MAX_LINES = 5
+const MAX_HEIGHT = `calc(${MAX_LINES} * ${LINE_HEIGHT}em)`
+
+function CaptureEntry({ timestamp, text }: { timestamp: string; text: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const [needsTruncation, setNeedsTruncation] = useState(false)
+  const textRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const el = textRef.current
+    if (!el) return
+    setNeedsTruncation(el.scrollHeight > el.clientHeight + 2)
+  }, [text])
+
+  return (
+    <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-start' }}>
+      <span style={{ fontSize: 11, color: '#C4BFB4', width: 60, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
+        {fmtCapTimestamp(timestamp)}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span
+          ref={textRef}
+          style={{
+            fontSize: 15, lineHeight: LINE_HEIGHT, color: '#2D2A26', display: 'block',
+            maxHeight: expanded ? 'none' : MAX_HEIGHT, overflow: 'hidden',
+          }}
+        >{text}</span>
+        {(needsTruncation || expanded) && (
+          <button
+            onClick={() => setExpanded(e => !e)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#8A857D', padding: '2px 0', fontFamily: FONT }}
+          >{expanded ? '▲ less' : '▼ more'}</button>
+        )}
       </div>
     </div>
   )
