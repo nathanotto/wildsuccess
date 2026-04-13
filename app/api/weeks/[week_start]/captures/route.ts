@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserTimezone } from '@/lib/timezone'
 
 type Params = { params: Promise<{ week_start: string }> }
 
@@ -9,13 +10,19 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { week_start } = await params
+  const tz = await getUserTimezone(supabase, user.id)
 
-  // Compute week range: Monday 00:00 through Sunday 23:59
-  const start = new Date(week_start + 'T00:00:00')
-  const end = new Date(start)
-  end.setDate(end.getDate() + 7)
-  const startISO = start.toISOString()
-  const endISO = end.toISOString()
+  // Compute week range in the user's timezone: Monday 00:00 local through next Monday 00:00 local
+  // Use IANA timezone to get correct UTC offset for the boundaries
+  const startLocal = new Date(`${week_start}T00:00:00`)
+  const endDate = new Date(startLocal)
+  endDate.setDate(endDate.getDate() + 7)
+  const weekEndStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+
+  // For timestamptz queries, we need the UTC equivalent of local midnight boundaries
+  // Use Intl to find the UTC offset, then shift accordingly
+  const startISO = localMidnightToUTC(week_start, tz)
+  const endISO = localMidnightToUTC(weekEndStr, tz)
 
   // Fetch all capture-like content in parallel
   const [actionItemsRes, notesRes, logsRes, completionsRes] = await Promise.all([
@@ -49,7 +56,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       .select('id, completion_date, wins, friction, journal, completed_at')
       .eq('user_id', user.id)
       .gte('completion_date', week_start)
-      .lt('completion_date', end.toISOString().split('T')[0])
+      .lt('completion_date', weekEndStr)
       .order('completion_date', { ascending: true }),
   ])
 
@@ -113,4 +120,18 @@ export async function GET(req: NextRequest, { params }: Params) {
   stream.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 
   return NextResponse.json(stream)
+}
+
+/** Convert a local date string (YYYY-MM-DD) at midnight in the given timezone to a UTC ISO string. */
+function localMidnightToUTC(dateStr: string, tz: string): string {
+  // Create a date and use Intl to find the UTC offset at that date in that timezone
+  const d = new Date(dateStr + 'T12:00:00Z') // noon UTC as reference
+  const utcStr = d.toLocaleString('en-US', { timeZone: 'UTC' })
+  const localStr = d.toLocaleString('en-US', { timeZone: tz })
+  const utcMs = new Date(utcStr).getTime()
+  const localMs = new Date(localStr).getTime()
+  const offsetMs = localMs - utcMs // positive = east of UTC
+  // Local midnight = UTC midnight - offset
+  const midnightUTC = new Date(dateStr + 'T00:00:00Z')
+  return new Date(midnightUTC.getTime() - offsetMs).toISOString()
 }

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserToday } from '@/lib/timezone'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -9,7 +10,7 @@ export async function POST(req: NextRequest) {
   const { name, source_action_item_id = null } = await req.json()
   if (!name?.trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 })
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = await getUserToday(supabase, user.id)
   const text = name.trim()
 
   const { data: actionItem, error } = await supabase

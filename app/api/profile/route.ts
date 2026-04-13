@@ -21,11 +21,17 @@ export async function PATCH(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { full_name, preferred_name, display_name, intake_status, intake_progress } = body
+
+  // Build update object from only the fields present in the request
+  const allowedFields = ['full_name', 'preferred_name', 'display_name', 'intake_status', 'intake_progress', 'timezone', 'communication_preferences'] as const
+  const update: Record<string, unknown> = {}
+  for (const key of allowedFields) {
+    if (key in body) update[key] = body[key]
+  }
 
   const { data, error } = await supabase
     .from('user_profiles')
-    .update({ full_name, preferred_name, display_name, intake_status, intake_progress })
+    .update(update)
     .eq('id', user.id)
     .select()
     .single()

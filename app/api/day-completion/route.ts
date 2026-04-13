@@ -25,8 +25,10 @@ export async function GET(req: NextRequest) {
   }
 
   if (unclosed === 'true') {
-    const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]
-    const today = new Date().toISOString().split('T')[0]
+    const { getUserTimezone, localDateInTz, localDateOffsetInTz } = await import('@/lib/timezone')
+    const tz = await getUserTimezone(supabase, user.id)
+    const fourteenDaysAgo = localDateOffsetInTz(tz, -14)
+    const today = localDateInTz(tz)
 
     // Get all dates that have committed action_items in the last 14 days (excluding today)
     const { data: commitDates } = await supabase

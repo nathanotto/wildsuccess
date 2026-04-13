@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserTimezone, localDateInTz, localDateOffsetInTz } from '@/lib/timezone'
 
 // POST — compute priority_score and priority_tier for all candidate action_items
 export async function POST(_req: NextRequest) {
@@ -7,9 +8,10 @@ export async function POST(_req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const today = new Date().toISOString().split('T')[0]
-  const threeDaysOut = new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]
-  const weekOut = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+  const tz = await getUserTimezone(supabase, user.id)
+  const today = localDateInTz(tz)
+  const threeDaysOut = localDateOffsetInTz(tz, 3)
+  const weekOut = localDateOffsetInTz(tz, 7)
 
   // Fetch candidate action_items with their activity context
   const { data: items, error } = await supabase

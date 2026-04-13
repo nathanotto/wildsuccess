@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserToday } from '@/lib/timezone'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (!closure_type) return NextResponse.json({ error: 'closure_type is required' }, { status: 400 })
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = await getUserToday(supabase, user.id)
   const effectiveClosedOn = closed_on ?? today
 
   // 1. Load the Big Outcome

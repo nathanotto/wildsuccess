@@ -1,14 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserTimezone, localDateInTz } from '@/lib/timezone'
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const tz = await getUserTimezone(supabase, user.id)
   const sp = req.nextUrl.searchParams
-  const date = sp.get('date') ?? new Date().toISOString().split('T')[0]
-  const todayDate = new Date().toISOString().split('T')[0]
+  const date = sp.get('date') ?? localDateInTz(tz)
+  const todayDate = localDateInTz(tz)
   const showHopper = date >= todayDate // only for today + future
 
   // Compute end-of-week (Sunday) for hopper query

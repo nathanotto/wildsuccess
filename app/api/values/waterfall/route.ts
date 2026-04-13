@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getUserTimezone, localDateOffsetInTz } from '@/lib/timezone'
 
 const LAYER_ORDER = ['safety', 'security', 'freedom', 'opportunity'] as const
 
@@ -9,9 +10,10 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const threeWeeksAgo = new Date(Date.now() - 21 * 86400000).toISOString().split('T')[0]
-  const twoWeeksAgo   = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0]
-  const oneWeekAgo    = new Date(Date.now() - 7  * 86400000).toISOString().split('T')[0]
+  const tz = await getUserTimezone(supabase, user.id)
+  const threeWeeksAgo = localDateOffsetInTz(tz, -21)
+  const twoWeeksAgo   = localDateOffsetInTz(tz, -14)
+  const oneWeekAgo    = localDateOffsetInTz(tz, -7)
 
   const [valuesRes, activityLinksRes, taskLinksRes, completionsRes, spansRes, spanLinksRes] = await Promise.all([
     supabase.from('user_values').select('*').eq('user_id', user.id).eq('is_active', true).order('sort_order'),
@@ -81,7 +83,7 @@ export async function GET() {
     spanToLinks[sl.day_span_id].push({ value_id: sl.value_id, weight: strengthWeight(sl.contribution_strength) })
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = localDateOffsetInTz(tz, 0)
   for (const span of spans) {
     const links = spanToLinks[span.id]
     if (!links || links.length === 0) continue

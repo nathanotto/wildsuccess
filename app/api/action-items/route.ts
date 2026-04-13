@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserToday } from '@/lib/timezone'
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
   const rolledOver = sp.get('rolled_over')
   if (rolledOver === 'true') {
     const weekStart = sp.get('week_start')
-    const today = new Date().toISOString().split('T')[0]
+    const today = await getUserToday(supabase, user.id)
     if (weekStart) {
       query = query
         .lt('committed_date', weekStart)

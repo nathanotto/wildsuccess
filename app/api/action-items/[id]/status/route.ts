@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserToday } from '@/lib/timezone'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -31,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (fetchError || !current) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const now = new Date()
-  const today = now.toISOString().split('T')[0]
+  const today = await getUserToday(supabase, user.id)
   const update: Record<string, unknown> = { status }
 
   const isReopening = status === 'committed' && (current.status === 'completed' || current.status === 'skipped')
@@ -53,9 +54,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   if (status === 'parked') {
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    update.parked_until = extra.parked_until ?? tomorrow.toISOString().split('T')[0]
+    if (!extra.parked_until) {
+      const { localDateOffsetInTz, getUserTimezone } = await import('@/lib/timezone')
+      const tz = await getUserTimezone(supabase, user.id)
+      update.parked_until = localDateOffsetInTz(tz, 1)
+    } else {
+      update.parked_until = extra.parked_until
+    }
   }
 
   if (status === 'candidate') {

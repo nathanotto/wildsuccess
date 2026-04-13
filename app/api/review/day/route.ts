@@ -76,11 +76,12 @@ export async function GET(req: NextRequest) {
   const plan_status = isClosed ? 'closed' : (reflection?.plan_status ?? 'open')
 
   // Compute metadata
+  const { getUserTimezone, localDateInTz } = await import('@/lib/timezone')
+  const tz = await getUserTimezone(supabase, user.id)
+  const todayStr = localDateInTz(tz)
   const d = new Date(date + 'T12:00:00')
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.round((today.getTime() - target.getTime()) / 86400000)
+  const todayD = new Date(todayStr + 'T12:00:00')
+  const diffDays = Math.round((todayD.getTime() - d.getTime()) / 86400000)
   const dayOfWeek = d.toLocaleDateString('en-US', { weekday: 'long' })
 
   let daysAgoLabel = ''

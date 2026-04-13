@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getUserTimezone, localDateInTz, localDateOffsetInTz } from '@/lib/timezone'
 
 const ROLLING_WINDOW_DAYS = 30
 
@@ -8,11 +9,10 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const tz = await getUserTimezone(supabase, user.id)
   const now = new Date()
-  const todayStr = now.toISOString().split('T')[0]
-  const cutoffDate = new Date(now)
-  cutoffDate.setDate(cutoffDate.getDate() - ROLLING_WINDOW_DAYS)
-  const cutoffStr = cutoffDate.toISOString().split('T')[0]
+  const todayStr = localDateInTz(tz)
+  const cutoffStr = localDateOffsetInTz(tz, -ROLLING_WINDOW_DAYS)
 
   const [{ data: values }, { data: links }, { data: logs }, { data: activities }, { data: scheduledItems }, { data: domainLinks }] = await Promise.all([
     supabase.from('user_values').select('id'),

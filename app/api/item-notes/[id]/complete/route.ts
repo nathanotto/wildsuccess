@@ -30,11 +30,13 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Log the step completion
+  const { getUserToday } = await import('@/lib/timezone')
+  const eventDate = await getUserToday(supabase, user.id)
   await supabase.from('action_log').insert({
     user_id: user.id,
     event_type: 'completed',
     action_item_id: note.action_item_id,
-    event_date: new Date().toISOString().split('T')[0],
+    event_date: eventDate,
     metadata: { step_note_id: id, step_content: note.content },
   })
 

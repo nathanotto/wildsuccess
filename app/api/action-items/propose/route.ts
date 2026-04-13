@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserToday } from '@/lib/timezone'
 
 const CADENCE_DAYS: Record<string, number> = {
   daily: 1,
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
       return d.toISOString().split('T')[0]
     })
   } else {
-    targetDates = [body.target_date ?? new Date().toISOString().split('T')[0]]
+    targetDates = [body.target_date ?? await getUserToday(supabase, user.id)]
   }
 
   const isWeek = targetDates.length > 1
@@ -168,7 +169,7 @@ export async function POST(req: NextRequest) {
   const proposedActivityIdsThisRun = new Set<string>()
 
   // --- Load committed/in_progress/completed action_items for coverage check ---
-  const today = new Date().toISOString().split('T')[0]
+  const today = await getUserToday(supabase, user.id)
   const { data: coveredItems } = await supabase
     .from('action_items')
     .select('activity_id, committed_date')

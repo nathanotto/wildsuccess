@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { parseCapture, UserContext } from '@/lib/capture-parser'
+import { getUserToday } from '@/lib/timezone'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest) {
   const { rawInput, source = 'today' } = await req.json()
   if (!rawInput?.trim()) return NextResponse.json({ error: 'rawInput is required' }, { status: 400 })
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = await getUserToday(supabase, user.id)
   const now = new Date()
 
   // Load user context in parallel
