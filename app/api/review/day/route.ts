@@ -9,12 +9,21 @@ export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get('date')
   if (!date) return NextResponse.json({ error: 'date is required' }, { status: 400 })
 
+  // Snapshot query: items that were "alive" on this date
+  // - committed on or before this date
+  // - not yet resolved by this date (completed_date null or >= date)
+  // - scheduled items only from exact date; unscheduled roll from earlier dates
+  // - parked items only if parked_until <= date
   const [itemsRes, loggedRes, reflectionRes, completionRes] = await Promise.all([
     supabase
       .from('action_items')
-      .select('id, name, status, scheduled_time, completed_at, sort_order')
+      .select('id, name, status, scheduled_time, completed_at, completed_date, committed_date, parked_until, sort_order')
       .eq('user_id', user.id)
-      .eq('committed_date', date)
+      .lte('committed_date', date)
+      .not('status', 'in', '("rescheduled","dismissed","archived")')
+      .or(`completed_date.is.null,completed_date.gte.${date}`)
+      .or(`committed_date.eq.${date},scheduled_time.is.null`)
+      .or(`status.neq.parked,parked_until.lte.${date}`)
       .order('sort_order', { ascending: true }),
     supabase
       .from('action_log')
@@ -37,14 +46,21 @@ export async function GET(req: NextRequest) {
       .maybeSingle(),
   ])
 
-  const allItems = itemsRes.data ?? []
+  const allItems = (itemsRes.data ?? []).map(i => {
+    // Compute snapshot display status for this date
+    let displayStatus = i.status
+    if (i.completed_date && i.completed_date <= date) displayStatus = 'completed'
+    else if (i.completed_date && i.completed_date > date) displayStatus = 'committed'
+    else if (i.status === 'parked' && i.parked_until && i.parked_until <= date) displayStatus = 'committed'
+    return { ...i, displayStatus }
+  })
   const completed = allItems
-    .filter(i => i.status === 'completed')
+    .filter(i => i.displayStatus === 'completed')
     .sort((a, b) => {
       if (a.completed_at && b.completed_at) return a.completed_at.localeCompare(b.completed_at)
       return 0
     })
-  const incomplete = allItems.filter(i => i.status !== 'completed')
+  const incomplete = allItems.filter(i => i.displayStatus !== 'completed' && i.displayStatus !== 'skipped')
 
   const reflection = reflectionRes.data
   const completion = completionRes.data
