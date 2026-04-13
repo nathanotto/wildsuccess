@@ -166,6 +166,20 @@ export async function GET(req: NextRequest) {
     items = items.filter(i => !yesterdayIds.has(i.id))
   }
 
+  // Auto-transition expired parked items back to committed (today view only)
+  if (!isPast && !isFuture) {
+    const expiredParked = items.filter(i => i.status === 'parked' && i.parked_until && i.parked_until <= todayDate)
+    if (expiredParked.length > 0) {
+      const expiredIds = expiredParked.map(i => i.id)
+      await supabase
+        .from('action_items')
+        .update({ status: 'committed' })
+        .in('id', expiredIds)
+        .eq('user_id', user.id)
+      items = items.map(i => expiredIds.includes(i.id) ? { ...i, status: 'committed' } : i)
+    }
+  }
+
   const blockMap = Object.fromEntries(blocks.map(b => [b.id, b]))
 
   // Build a lookup of which block_ids already have a linked action_item

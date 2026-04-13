@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { UserValue } from '@/lib/types'
+import { computeDisplayStatus } from '@/lib/snapshot'
 import ValueTagger from '@/components/shared/ValueTagger'
 
 const FONT = "'Source Sans 3', 'Source Sans Pro', sans-serif"
@@ -40,6 +41,7 @@ interface ActionItemLocal {
   activity_id: string | null
   committed_date: string | null
   completed_date: string | null
+  parked_until: string | null
 }
 
 interface ActionLogEntry {
@@ -87,7 +89,7 @@ export default function DayCompletionPage({ displayName }: Props) {
     setCompleted(false)
     setAlreadyCompleted(false)
     const [todayRes, logsRes, loggedRes, valuesRes, dcRes] = await Promise.all([
-      fetch(`/api/today?date=${date}&mode=pinned`),
+      fetch(`/api/today?date=${date}`),
       fetch(`/api/action-log?date=${date}&event_type=completed`),
       fetch(`/api/action-log?date=${date}&event_type=logged`),
       fetch('/api/values'),
@@ -131,12 +133,20 @@ export default function DayCompletionPage({ displayName }: Props) {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // All scheduled items (completed, skipped, or incomplete) in one chronological list
-  const scheduledItems = items
+  // Compute display status for all items (snapshot of this day)
+  const displayItems = items.map(i => ({
+    ...i,
+    displayStatus: computeDisplayStatus(i, date),
+  }))
+
+  // Scheduled items committed on this exact date
+  const scheduledItems = displayItems
     .filter(i => i.scheduled_time && i.committed_date === date)
     .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
-  // Unscheduled/rolled items — informational only
-  const otherItems = items.filter(i => !(i.scheduled_time && i.committed_date === date))
+  // Rolling items from earlier dates (unscheduled items that were active on this day)
+  const rollingItems = displayItems
+    .filter(i => !(i.scheduled_time && i.committed_date === date))
+    .filter(i => i.displayStatus !== 'completed' || i.completed_date === date)
 
   // Find action_log entry for a completed action_item
   function logForItem(itemId: string) {
@@ -283,13 +293,13 @@ export default function DayCompletionPage({ displayName }: Props) {
       {/* Day in Review */}
       <div style={sectionStyle}>
         <div style={headingStyle}>What You Did</div>
-        {scheduledItems.length === 0 && otherItems.length === 0 && (
+        {scheduledItems.length === 0 && rollingItems.length === 0 && (
           <div style={{ fontSize: 13, color: '#B5B0A8', padding: '8px 0' }}>No items scheduled for this day.</div>
         )}
         {/* All scheduled items in chronological order — completed, skipped, and incomplete together */}
         {scheduledItems.map(item => {
-          const isCompleted = item.status === 'completed'
-          const isSkipped = item.status === 'skipped'
+          const isCompleted = item.displayStatus === 'completed'
+          const isSkipped = item.displayStatus === 'skipped'
           const isIncomplete = !isCompleted && !isSkipped
           const log = logForItem(item.id)
           const showTagger = isCompleted && needsValueTag(item) && log
@@ -333,16 +343,71 @@ export default function DayCompletionPage({ displayName }: Props) {
             </div>
           )
         })}
-        {/* Unscheduled / rolled items — informational only */}
-        {otherItems.map(item => (
-          <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#B5B0A8', fontSize: 11 }}>○</span>
-            <span style={{ fontSize: 14, color: '#B5B0A8' }}>
-              {item.name}
-            </span>
-            <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>rolled to today</span>
-          </div>
-        ))}
+        {/* Rolling items from earlier dates — actionable */}
+        {rollingItems.length > 0 && (
+          <>
+            {scheduledItems.length > 0 && (
+              <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 12, marginBottom: 6 }}>
+                Still Open
+              </div>
+            )}
+            {rollingItems.map(item => {
+              const isCompleted = item.displayStatus === 'completed'
+              const isSkipped = item.displayStatus === 'skipped'
+              const isIncomplete = !isCompleted && !isSkipped
+              const isInProgress = item.displayStatus === 'in_progress'
+              const log = logForItem(item.id)
+              const showTagger = isCompleted && needsValueTag(item) && log
+              return (
+                <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8F7F4' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {isCompleted && <span style={{ color: '#5A9E6F', fontSize: 13 }}>✓</span>}
+                    {isSkipped && <span style={{ color: '#B5B0A8', fontSize: 13 }}>—</span>}
+                    {isInProgress && !isCompleted && (
+                      <button
+                        onClick={() => handleMarkComplete(item.id)}
+                        title="I did it"
+                        style={{ background: 'none', border: '1.5px solid #C4725A', borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                      >
+                        <span style={{ width: 6, height: 6, background: '#C4725A', borderRadius: 1 }} />
+                      </button>
+                    )}
+                    {isIncomplete && !isInProgress && (
+                      <button
+                        onClick={() => handleMarkComplete(item.id)}
+                        title="I did it"
+                        style={{ background: 'none', border: '1.5px solid #B5B0A8', borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                      />
+                    )}
+                    <span style={{ fontSize: 14, color: isSkipped ? '#B5B0A8' : '#2D2A26', textDecoration: isSkipped ? 'line-through' : 'none' }}>
+                      {item.name}
+                    </span>
+                    {isCompleted && <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>done</span>}
+                    {isSkipped && <span style={{ fontSize: 9, color: '#B5B0A8', marginLeft: 'auto' }}>skipped</span>}
+                    {isIncomplete && (
+                      <button
+                        onClick={() => handleMarkSkipped(item.id)}
+                        title="Didn't happen"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#B5B0A8', marginLeft: 'auto', flexShrink: 0, fontFamily: 'inherit' }}
+                      >✕ skip</button>
+                    )}
+                  </div>
+                  {showTagger && (
+                    <div style={{ marginTop: 6, marginLeft: 21 }}>
+                      <div style={{ fontSize: 10, color: '#8A8578', marginBottom: 4 }}>What values did this serve?</div>
+                      <ValueTagger
+                        values={values}
+                        selected={valueTags[log.id] ?? []}
+                        onChange={(ids) => handleValueTagChange(log.id, ids)}
+                        compact
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </>
+        )}
       </div>
 
       {/* Logged captures — things the user recorded via capture but weren't scheduled */}

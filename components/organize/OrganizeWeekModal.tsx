@@ -217,6 +217,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   const [focusMinutes, setFocusMinutes] = useState(50)
   const [dayBlocks, setDayBlocks] = useState<Record<string, TimeBlockLocal[]>>({})
   const [hopper, setHopper] = useState<CandidateItemLocal[]>([])
+  const [carriedOverItems, setCarriedOverItems] = useState<{ id: string; name: string; status: string; committed_date: string; time_type: 'A' | 'B' | 'C' | 'D' | '0'; emotional_weight: 'light' | 'normal' | 'heavy' }[]>([])
   const [floatingItems, setFloatingItems] = useState<Record<string, FloatingActionItem[]>>({})
   const [calEvents, setCalEvents] = useState<CalEventLocal[]>([])
   const [calConnected, setCalConnected] = useState(false)
@@ -341,6 +342,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         coverageRes,
         spansRes,
         peopleRes,
+        carriedRes,
       ] = await Promise.all([
         fetch('/api/block-types'),
         fetch(`/api/time-blocks?range_start=${rangeStart}&range_end=${rangeEnd}`),
@@ -354,9 +356,10 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         fetch('/api/action-items/coverage'),
         fetch(`/api/day-spans?week_start=${rangeStart}&week_end=${rangeEnd}`),
         fetch('/api/known-people'),
+        fetch(`/api/action-items?rolled_over=true&week_start=${rangeStart}`),
       ])
 
-      const [btData, tbData, siData, hopperData, dismissedData, calData, calSettings, outcomesData, activitiesData, coverageData, spansData, peopleData] = await Promise.all([
+      const [btData, tbData, siData, hopperData, dismissedData, calData, calSettings, outcomesData, activitiesData, coverageData, spansData, peopleData, carriedData] = await Promise.all([
         btRes.ok ? btRes.json() : [],
         tbRes.ok ? tbRes.json() : [],
         siRes.ok ? siRes.json() : [],
@@ -369,6 +372,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         coverageRes.ok ? coverageRes.json() : [],
         spansRes.ok ? spansRes.json() : [],
         peopleRes.ok ? peopleRes.json() : [],
+        carriedRes.ok ? carriedRes.json() : [],
       ])
 
       const bts: BlockType[] = Array.isArray(btData) ? btData : []
@@ -505,6 +509,17 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       // Deduplicate by id — should never be needed but prevents key collisions if state gets polluted
       const seen = new Set<string>()
       setHopper(hopperItems.filter(h => seen.has(h.id) ? false : (seen.add(h.id), true)))
+
+      // Carried-over items: committed/in_progress items from before this week
+      const rawCarried: Array<{ id: string; name: string; status: string; committed_date: string; time_type?: string; emotional_weight?: string }> = Array.isArray(carriedData) ? carriedData : []
+      setCarriedOverItems(rawCarried.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        committed_date: c.committed_date,
+        time_type: (c.time_type ?? 'B') as 'A' | 'B' | 'C' | 'D' | '0',
+        emotional_weight: (c.emotional_weight ?? 'normal') as 'light' | 'normal' | 'heavy',
+      })))
 
       // Week-dismissed suggested items: template_proposal dismissed items whose metadata.dismissed_week === rangeStart
       const rawDismissed: Array<{
@@ -923,7 +938,10 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         }
       })
 
-      if (!isPersist) setHopper(prev => prev.filter(h => h.id !== resolvedItem.id))
+      if (!isPersist) {
+        setHopper(prev => prev.filter(h => h.id !== resolvedItem.id))
+        setCarriedOverItems(prev => prev.filter(c => c.id !== resolvedItem.id))
+      }
     } catch (err) {
       console.error('Hopper drop on column error:', err)
     }
@@ -1007,7 +1025,10 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       })
 
       // Only consume hopper item if not in persist mode
-      if (!isPersist) setHopper(prev => prev.filter(h => h.id !== resolvedItem.id))
+      if (!isPersist) {
+        setHopper(prev => prev.filter(h => h.id !== resolvedItem.id))
+        setCarriedOverItems(prev => prev.filter(c => c.id !== resolvedItem.id))
+      }
     } catch (err) {
       console.error('Drop on block error:', err)
     }
@@ -2508,9 +2529,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
               <span style={{ fontSize: 9, color: '#8A857D', writingMode: 'vertical-rl', transform: 'rotate(180deg)', letterSpacing: 1 }}>
                 HOPPER
               </span>
-              {hopper.length > 0 && (
+              {(hopper.length + carriedOverItems.length) > 0 && (
                 <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#C4725A', color: '#FFF', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-                  {hopper.length > 9 ? '9+' : hopper.length}
+                  {(hopper.length + carriedOverItems.length) > 9 ? '9+' : hopper.length + carriedOverItems.length}
                 </div>
               )}
             </div>
@@ -2584,9 +2605,74 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                 {loading && hopper.length === 0 && (
                   <div style={{ color: '#B5B0A8', fontSize: 11, textAlign: 'center', paddingTop: 20 }}>Loading…</div>
                 )}
-                {!loading && filteredHopper.length === 0 && suggestedHopper.length === 0 && (
+                {!loading && filteredHopper.length === 0 && suggestedHopper.length === 0 && carriedOverItems.length === 0 && (
                   <div style={{ color: '#B5B0A8', fontSize: 11, textAlign: 'center', paddingTop: 20 }}>
                     {hopper.length === 0 ? 'Hopper is empty' : 'No items match filter'}
+                  </div>
+                )}
+
+                {/* Carried Over — committed items from past weeks */}
+                {carriedOverItems.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: '#C4725A', letterSpacing: 1, marginBottom: 4, paddingLeft: 4 }}>
+                      CARRIED OVER
+                    </div>
+                    {carriedOverItems.map(item => {
+                      const fmtDate = new Date(item.committed_date + 'T12:00:00')
+                      const dateLabel = fmtDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      return (
+                        <div
+                          key={item.id}
+                          draggable
+                          onDragStart={() => setDraggingHopperItem({
+                            id: item.id,
+                            name: item.name,
+                            source: 'planning_function',
+                            time_type: item.time_type,
+                            emotional_weight: item.emotional_weight,
+                            priority_tier: 'urgent',
+                            priority_score: 100,
+                            block_type_hint: null,
+                            duration_min: 30,
+                            duration_max: 60,
+                            values: [],
+                            activity_id: null,
+                            preferred_time: null,
+                            frequency: null,
+                          })}
+                          onDragEnd={() => setDraggingHopperItem(null)}
+                          style={{
+                            padding: '6px 8px',
+                            marginBottom: 3,
+                            borderRadius: 6,
+                            background: '#FFF',
+                            border: '1px solid #E8E4DC',
+                            borderLeft: `3px solid ${EC[item.time_type] ?? '#B5B0A8'}`,
+                            cursor: 'grab',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          {item.status === 'in_progress' ? (
+                            <span style={{
+                              width: 10, height: 10, border: '1.5px solid #C4725A', borderRadius: 1,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            }}>
+                              <span style={{ width: 4, height: 4, background: '#C4725A', borderRadius: 1 }} />
+                            </span>
+                          ) : (
+                            <span style={{
+                              width: 10, height: 10, border: '1.5px solid #8A857D', borderRadius: 1, flexShrink: 0,
+                            }} />
+                          )}
+                          <span style={{ fontSize: 12, color: '#2D2A26', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.name}
+                          </span>
+                          <span style={{ fontSize: 9, color: '#B5B0A8', flexShrink: 0 }}>{dateLabel}</span>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
 

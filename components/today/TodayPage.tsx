@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ActionItemWithNotes, ItemNote } from '@/lib/types'
+import { computeDisplayStatus } from '@/lib/snapshot'
 import CaptureInput from '@/components/capture/CaptureInput'
 
 // ─── Hopper types & constants ────────────────────────────────────────────────
@@ -1703,12 +1704,12 @@ function TodoRow({
   const [showMenu, setShowMenu] = useState(false)
   const [showSteps, setShowSteps] = useState(true)
   const menuOpenedAt = useRef(0)
-  // For past views, derive display status from completed_date
-  const displayCompleted = isPast && selectedDate ? item.completed_date === selectedDate : item.status === 'completed'
-  const isCompleted = displayCompleted
-  const isParked = item.status === 'parked'
-  const isSkipped = item.status === 'skipped'
-  const muted = isCompleted || isParked || isSkipped || (isPast && !isCompleted)
+  // For past views, derive display status from snapshot logic
+  const displayStatus = isPast && selectedDate ? computeDisplayStatus(item, selectedDate) : item.status
+  const isCompleted = displayStatus === 'completed'
+  const isParked = displayStatus === 'parked'
+  const isSkipped = displayStatus === 'skipped'
+  const muted = isCompleted || isParked || isSkipped
 
   const steps = (item.item_notes ?? [])
     .filter(n => n.note_type === 'step')
@@ -1726,7 +1727,7 @@ function TodoRow({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <Checkbox status={isCompleted ? 'completed' : isPast ? 'committed' : item.status} onClick={isPast ? undefined : onCheckbox} />
+        <Checkbox status={displayStatus} onClick={isPast ? undefined : onCheckbox} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{
             fontSize: 14,
@@ -1737,7 +1738,7 @@ function TodoRow({
           </span>
         </div>
       </div>
-      {steps.length > 0 && item.status === 'in_progress' && (
+      {steps.length > 0 && displayStatus === 'in_progress' && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
           <div
             onClick={e => { e.stopPropagation(); setShowSteps(!showSteps) }}
@@ -1764,7 +1765,7 @@ function TodoRow({
           ))}
         </div>
       )}
-      {notes.length > 0 && item.status === 'in_progress' && (
+      {notes.length > 0 && displayStatus === 'in_progress' && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
           {notes.map(n => (
             <div key={n.id} style={{ fontSize: 11, color: '#8A8578', marginBottom: 2, lineHeight: 1.4 }}>
@@ -1789,11 +1790,11 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
   onSkip: () => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
-  const displayCompleted = isPast && selectedDate ? item.completed_date === selectedDate : item.status === 'completed'
-  const isCompleted = displayCompleted
-  const isParked = item.status === 'parked'
-  const isSkipped = item.status === 'skipped'
-  const muted = isCompleted || isParked || isSkipped || (isPast && !isCompleted)
+  const displayStatus = isPast && selectedDate ? computeDisplayStatus(item, selectedDate) : item.status
+  const isCompleted = displayStatus === 'completed'
+  const isParked = displayStatus === 'parked'
+  const isSkipped = displayStatus === 'skipped'
+  const muted = isCompleted || isParked || isSkipped
 
   const steps = (item.item_notes ?? []).filter(n => n.note_type === 'step').sort((a, b) => a.sort_order - b.sort_order)
   const notes = (item.item_notes ?? []).filter(n => n.note_type === 'note').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
@@ -1810,7 +1811,7 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
         <span style={{ fontSize: 12, color: '#8A8578', width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 1 }}>
           {item.scheduled_time ? fmtTime(item.scheduled_time) : ''}
         </span>
-        <Checkbox status={isCompleted ? 'completed' : isPast ? 'committed' : item.status} onClick={isPast ? undefined : onCheckbox} />
+        <Checkbox status={displayStatus} onClick={isPast ? undefined : onCheckbox} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{
             fontSize: 14,
@@ -1821,7 +1822,7 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
           </span>
         </div>
       </div>
-      {steps.length > 0 && item.status === 'in_progress' && (
+      {steps.length > 0 && displayStatus === 'in_progress' && (
         <div style={{ paddingLeft: 66, marginTop: 3 }}>
           {steps.map(s => (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -1837,7 +1838,7 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
           ))}
         </div>
       )}
-      {notes.length > 0 && item.status === 'in_progress' && (
+      {notes.length > 0 && displayStatus === 'in_progress' && (
         <div style={{ paddingLeft: 66, marginTop: 3 }}>
           {notes.map(n => (
             <div key={n.id} style={{ fontSize: 11, color: '#8A8578', marginBottom: 2, lineHeight: 1.4 }}>{n.content}</div>

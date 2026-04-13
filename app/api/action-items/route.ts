@@ -39,6 +39,20 @@ export async function GET(req: NextRequest) {
     query = query.gte('committed_date', rangeStart).lte('committed_date', rangeEnd)
   }
 
+  // Rolled-over items: active committed/in_progress items from before a given week
+  const rolledOver = sp.get('rolled_over')
+  if (rolledOver === 'true') {
+    const weekStart = sp.get('week_start')
+    const today = new Date().toISOString().split('T')[0]
+    if (weekStart) {
+      query = query
+        .lt('committed_date', weekStart)
+        .is('scheduled_time', null)
+        .not('status', 'in', '("completed","skipped","rescheduled","dismissed","archived")')
+        .or(`status.neq.parked,parked_until.lte.${today}`)
+    }
+  }
+
   // For candidates, optionally exclude future-snoozed items
   if (status === 'candidate') {
     const throughDate = sp.get('through_date')
