@@ -167,15 +167,35 @@ export async function POST(req: NextRequest) {
 
   } else if (parsed.outcome === 'scheduled_soft' || parsed.outcome === 'scheduled_hard') {
     const isHard = parsed.outcome === 'scheduled_hard'
+    const blockDate = parsed.date ?? today
+    const startTime = parsed.time ?? null
+    const endTime = parsed.endTime ?? null
+
+    // Create a time_block so the item is draggable/movable on /organize
+    let timeBlockId: string | null = null
+    if (startTime) {
+      const { data: block } = await supabase.from('time_blocks').insert({
+        user_id: user.id,
+        block_date: blockDate,
+        label: parsed.cleanedName,
+        start_time: startTime,
+        end_time: endTime,
+        source: 'manual',
+        time_type: parsed.timeType ?? 'B',
+      }).select('id').single()
+      timeBlockId = block?.id ?? null
+    }
+
     const { data } = await supabase.from('action_items').insert({
       user_id: user.id,
       name: parsed.cleanedName,
       raw_input: rawInput.trim(),
       source: 'quick_capture',
       status: 'committed',
-      committed_date: parsed.date ?? today,
-      scheduled_time: parsed.time ?? null,
-      scheduled_end_time: parsed.endTime ?? null,
+      committed_date: blockDate,
+      scheduled_time: startTime,
+      scheduled_end_time: endTime,
+      time_block_id: timeBlockId,
       flexibility: isHard ? 'hard_scheduled' : 'soft_scheduled',
       item_type: isHard ? 'appointment' : 'task',
       time_type: parsed.timeType ?? 'B',

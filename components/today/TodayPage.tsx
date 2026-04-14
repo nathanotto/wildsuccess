@@ -1472,7 +1472,11 @@ export default function TodayPage({ displayName }: Props) {
             {!isPast && (
               <CaptureInput
                 source="today"
-                onItemCreated={item => setItems(prev => [...prev, item])}
+                onItemCreated={item => {
+                  if (!item.committed_date || item.committed_date === selectedDate) {
+                    setItems(prev => [...prev, item])
+                  }
+                }}
                 onLogEntry={() => loadData(selectedDate)}
               />
             )}
