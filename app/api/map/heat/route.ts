@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { getUserTimezone, localDateInTz, localDateOffsetInTz } from '@/lib/timezone'
 
 const ROLLING_WINDOW_DAYS = 30
+const BIG_OUTCOME_DECAY_DAYS = 90
+const BIG_OUTCOME_BASE_WEIGHT = 4.0 // ~4x a single strong daily completion
 
 export async function GET() {
   const supabase = await createClient()
@@ -14,7 +16,9 @@ export async function GET() {
   const todayStr = localDateInTz(tz)
   const cutoffStr = localDateOffsetInTz(tz, -ROLLING_WINDOW_DAYS)
 
-  const [{ data: values }, { data: links }, { data: logs }, { data: activities }, { data: scheduledItems }, { data: domainLinks }] = await Promise.all([
+  const boCutoffStr = localDateOffsetInTz(tz, -BIG_OUTCOME_DECAY_DAYS)
+
+  const [{ data: values }, { data: links }, { data: logs }, { data: activities }, { data: scheduledItems }, { data: domainLinks }, { data: bigOutcomes }, { data: boValueLinks }] = await Promise.all([
     supabase.from('user_values').select('id'),
     supabase.from('activity_value_links').select('id, value_id, activity_id, contribution_strength'),
     // Fetch all logs in the rolling window + metadata for duration weighting
@@ -27,6 +31,15 @@ export async function GET() {
     supabase.from('action_items').select('activity_id').eq('user_id', user.id).not('activity_id', 'is', null).in('status', ['committed', 'in_progress']).gte('committed_date', todayStr),
     // Activity-domain links for domain heat aggregation
     supabase.from('activity_domain_links').select('activity_id, domain_id'),
+    // Accomplished Big Outcomes within the longer decay window
+    supabase.from('big_outcomes').select('id, closed_on')
+      .eq('user_id', user.id)
+      .in('closure_type', ['accomplished', 'declared_complete'])
+      .not('closed_on', 'is', null)
+      .gte('closed_on', boCutoffStr),
+    // Big Outcome → value links
+    supabase.from('big_outcome_value_links').select('big_outcome_id, value_id, contribution_strength')
+      .eq('user_id', user.id),
   ])
 
   const scheduledActivityIds = new Set((scheduledItems ?? []).map(i => i.activity_id))
@@ -96,6 +109,18 @@ export async function GET() {
       const age = (now.getTime() - new Date(log.event_date).getTime()) / (1000 * 60 * 60 * 24)
       const decay = Math.max(0, 1 - age / ROLLING_WINDOW_DAYS)
       sum += decay * 0.6 * durationWeight(log.metadata)
+    }
+
+    // Big Outcome contributions: accomplished outcomes linked to this value
+    // Uses a longer decay window (90 days) and higher base weight (~4x daily activity)
+    const boLinks = boValueLinks?.filter(l => l.value_id === v.id) ?? []
+    for (const link of boLinks) {
+      const bo = bigOutcomes?.find(b => b.id === link.big_outcome_id)
+      if (!bo?.closed_on) continue
+      const age = (now.getTime() - new Date(bo.closed_on).getTime()) / (1000 * 60 * 60 * 24)
+      const decay = Math.max(0, 1 - age / BIG_OUTCOME_DECAY_DAYS)
+      const strength = link.contribution_strength === 'strong' ? 1.0 : link.contribution_strength === 'moderate' ? 0.6 : 0.3
+      sum += decay * strength * BIG_OUTCOME_BASE_WEIGHT
     }
 
     // Soft-cap normalization: asymptotically approaches 1.0
