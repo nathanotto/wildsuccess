@@ -70,13 +70,13 @@ export async function GET(req: NextRequest) {
           .order('sort_order', { ascending: true })
 
   // For today view, also fetch items completed today (separate query)
+  // No committed_date filter — items completed today should show regardless of when committed
   const completedTodayQuery = !isPast && !isFuture
     ? supabase
         .from('action_items')
         .select('*, item_notes(*)')
         .eq('user_id', user.id)
         .eq('completed_date', todayDate)
-        .eq('committed_date', todayDate)
         .eq('status', 'completed')
         .order('sort_order', { ascending: true })
     : null
