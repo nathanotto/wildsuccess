@@ -1081,6 +1081,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         }
         setReturningHopperIds(prev => new Set([...prev, item.id]))
         setTimeout(() => setReturningHopperIds(prev => { const s = new Set(prev); s.delete(item.id); return s }), 2000)
+        if (hopperFilter !== 'all' && hopperFilter !== item.time_type) setHopperFilter('all')
+        if (hopperShrunk) setHopperShrunk(false)
         return [hopperItem, ...prev]
       })
     } catch (err) {
@@ -1557,6 +1559,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
           preferred_time: null,
           frequency: null,
         }
+        if (hopperFilter !== 'all' && hopperFilter !== hopperItem.time_type) setHopperFilter('all')
+        if (hopperShrunk) setHopperShrunk(false)
         setHopper(prev => [...prev, hopperItem])
       }
     } catch (err) {
