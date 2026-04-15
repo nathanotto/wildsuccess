@@ -192,17 +192,9 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
     if (working.toLowerCase().includes(p.normalizedName)) {
       person = { id: p.id, name: p.name }
       personValueLinks = p.valueLinks
-      // Strip "with [name]", "[name] asked me", etc. — keep name if it's the direct object
-      const strippable = [
-        new RegExp(`\\bwith\\s+${escapeRegex(p.name)}\\b`, 'gi'),
-        new RegExp(`\\bfrom\\s+${escapeRegex(p.name)}\\b`, 'gi'),
-        new RegExp(`\\b${escapeRegex(p.name)}\\s+asked\\s+me\\s+to\\b`, 'gi'),
-        new RegExp(`\\b${escapeRegex(p.name)}\\s+wants?\\s+me\\s+to\\b`, 'gi'),
-        new RegExp(`\\b${escapeRegex(p.name)}\\s+needs?\\b`, 'gi'),
-      ]
-      for (const re of strippable) {
-        working = working.replace(re, ' ').replace(/\s+/g, ' ').trim()
-      }
+      // Person is linked via the person field — don't strip their name from the item text.
+      // Previous stripping logic caused bugs when other names followed (e.g. "with Erin and Agnes"
+      // became "and Agnes"). The full original text is a better item name.
       break
     }
   }
