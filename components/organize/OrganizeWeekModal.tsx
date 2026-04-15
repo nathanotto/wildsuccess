@@ -1541,11 +1541,11 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
       }
 
       // For all other outcomes, add to hopper as before
-      const hi = data.hopperItem
+      const hi = data.actionItem
       if (hi) {
         const hopperItem: CandidateItemLocal = {
           id: hi.id,
-          name: parsed?.cleanedName ?? text,
+          name: parsed?.cleanedName ?? hi.name ?? text,
           source: 'quick_capture',
           time_type: parsed?.timeType ?? 'B',
           emotional_weight: 'normal',
