@@ -108,6 +108,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (log.action_item_id) {
       const item = itemsMap[log.action_item_id]
       if (item?.status === 'parked' && item.parked_until && item.parked_until >= weekEndStr) continue
+      // Skip items scheduled for a future week
+      if (item?.committed_date && item.committed_date >= weekEndStr) continue
     }
     const item = log.action_item_id ? itemsMap[log.action_item_id] : null
     const text = item?.name ?? (log.metadata as Record<string, unknown> | null)?.cleanedName as string ?? log.note ?? ''
