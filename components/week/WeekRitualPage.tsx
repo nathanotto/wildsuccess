@@ -122,12 +122,15 @@ export default function WeekRitualPage() {
     setCaptures(prev => prev.filter(c => c.source_id !== entry.source_id))
     setLandscape(prev => prev.filter(c => c.source_id !== entry.source_id))
 
-    // Delete the action_item if present
-    if (entry.action_item_id) {
-      await fetch(`/api/action-items/${entry.action_item_id}`, { method: 'DELETE' })
-    }
-    // Delete the action_log entry
-    if (entry.type === 'day_log' || entry.type === 'action_item' || entry.type === 'completed') {
+    if (entry.type === 'note') {
+      // Notes are item_notes — delete via the item-notes endpoint
+      await fetch(`/api/item-notes/${entry.source_id}`, { method: 'DELETE' })
+    } else {
+      // Delete the action_item if present
+      if (entry.action_item_id) {
+        await fetch(`/api/action-items/${entry.action_item_id}`, { method: 'DELETE' })
+      }
+      // Delete the action_log entry
       await fetch(`/api/action-log/${entry.source_id}`, { method: 'DELETE' })
     }
   }
@@ -351,7 +354,7 @@ function CaptureEntryRow({ entry, onDelete }: { entry: CaptureEntry; onDelete: (
   const isSubItem = tag === 'sub_item'
   const isScheduled = tag === 'scheduled'
   const isInProgress = tag === 'in_progress'
-  const isDeletable = type === 'action_item' || type === 'day_log' || type === 'completed'
+  const isDeletable = type === 'action_item' || type === 'day_log' || type === 'completed' || type === 'note'
   const [expanded, setExpanded] = useState(false)
   const [needsTruncation, setNeedsTruncation] = useState(false)
   const [hovered, setHovered] = useState(false)
