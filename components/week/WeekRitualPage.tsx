@@ -143,11 +143,12 @@ export default function WeekRitualPage() {
     setLandscape(all)
     setCompleteText(weekData?.complete_statement ?? '')
     setCreateText(nextWeekData?.create_statement ?? '')
+    // Default to Create tab if this week is already completed
+    setTab(weekData?.completed_at_ritual ? 'create' : 'complete')
     setLoading(false)
   }, [weekStart, nextWeekStart])
 
   useEffect(() => { loadData() }, [loadData])
-  useEffect(() => { setTab('complete') }, [weekStart])
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
 
