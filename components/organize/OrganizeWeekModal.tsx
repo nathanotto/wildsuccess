@@ -2340,7 +2340,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                   </span>
                 )}
                 {showCCLink && !ccComplete && (
-                  <a href={`/cc/${weekMonday}`} style={{ fontSize: 12, color: '#8A857D', textDecoration: 'none', marginLeft: 8, whiteSpace: 'nowrap' }}>· Complete this week →</a>
+                  <a href={`/week/${weekMonday}`} style={{ fontSize: 12, color: '#8A857D', textDecoration: 'none', marginLeft: 8, whiteSpace: 'nowrap' }}>· Complete this week →</a>
                 )}
                 {ccComplete && (
                   <span style={{ fontSize: 12, color: '#B5B0A8', marginLeft: 8, whiteSpace: 'nowrap' }}>✓ Week created</span>

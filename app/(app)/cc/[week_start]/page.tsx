@@ -1,11 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import CompleteAndCreatePage from '@/components/cc/CompleteAndCreatePage'
 
-export default async function CCWeekPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+type Props = { params: Promise<{ week_start: string }> }
 
-  return <CompleteAndCreatePage />
+export default async function CCWeekRedirect({ params }: Props) {
+  const { week_start } = await params
+  redirect(`/week/${week_start}`)
 }
