@@ -279,15 +279,15 @@ export default function WeekRitualPage() {
           const endD = new Date(item.end_date + 'T12:00:00')
           const fmtD = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
           const sameDay = item.start_date === item.end_date
-          const dateRange = sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`
           return (
             <div key={item.id} style={{
-              padding: '8px 12px', marginBottom: 6, borderRadius: 6,
-              background: '#FFF', border: '1px solid #E8E4DC',
+              padding: '4px 10px', marginBottom: 4,
+              borderRadius: 4,
+              background: `${item.color ?? '#8A857D'}18`,
               borderLeft: `3px solid ${item.color ?? '#8A857D'}`,
+              maxWidth: '75%',
             }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#2D2A26' }}>{item.name}</div>
-              <div style={{ fontSize: 11, color: '#8A8578', marginTop: 2 }}>{dateRange}</div>
+              <span style={{ fontSize: 12, color: '#2D2A26' }}>{item.name}</span>
             </div>
           )
         })}
