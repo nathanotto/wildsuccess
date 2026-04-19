@@ -1501,10 +1501,17 @@ export default function TodayPage({ displayName }: Props) {
               )
             })()}
 
-            {/* Capture — only on today and future views */}
-            {!isPast && (
+            {/* Capture — active on today and future, grayed out on past */}
+            {isPast ? (
+              <div style={{
+                padding: '8px 12px', marginBottom: 8, borderRadius: 10,
+                border: '1px solid #E8E4DC', background: '#F8F7F4', color: '#C8C3BB',
+                fontSize: 14, cursor: 'not-allowed', opacity: 0.5,
+              }}>capture...</div>
+            ) : (
               <CaptureInput
                 source="today"
+                selectedDate={selectedDate}
                 onItemCreated={item => {
                   if (!item.committed_date || item.committed_date === selectedDate) {
                     setItems(prev => [...prev, item])

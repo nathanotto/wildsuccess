@@ -8,10 +8,12 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { rawInput, source = 'today' } = await req.json()
+  const { rawInput, source = 'today', selectedDate, deferScheduling = false } = await req.json()
   if (!rawInput?.trim()) return NextResponse.json({ error: 'rawInput is required' }, { status: 400 })
 
   const today = await getUserToday(supabase, user.id)
+  // Use selectedDate as default committed_date when parser doesn't extract a date
+  const defaultDate = selectedDate ?? today
   const now = new Date()
 
   // Load user context in parallel
@@ -116,7 +118,7 @@ export async function POST(req: NextRequest) {
       raw_input: rawInput.trim(),
       source: 'quick_capture',
       status: isCommitted ? 'committed' : 'candidate',
-      committed_date: isCommitted ? today : null,
+      committed_date: isCommitted ? defaultDate : null,
       time_type: parsed.timeType ?? 'B',
       bounding_type: 'action',
       emotional_weight: 'normal',
@@ -145,7 +147,7 @@ export async function POST(req: NextRequest) {
       source: 'quick_capture',
       status: isCommitted ? 'committed' : 'candidate',
       proposed_date: isCommitted ? null : (parsed.date ?? null),
-      committed_date: isCommitted ? today : null,
+      committed_date: isCommitted ? defaultDate : null,
       time_type: parsed.timeType ?? 'B',
       bounding_type: 'action',
       emotional_weight: 'normal',
@@ -167,51 +169,68 @@ export async function POST(req: NextRequest) {
 
   } else if (parsed.outcome === 'scheduled_soft' || parsed.outcome === 'scheduled_hard') {
     const isHard = parsed.outcome === 'scheduled_hard'
-    const blockDate = parsed.date ?? today
+    const blockDate = parsed.date ?? defaultDate
     const startTime = parsed.time ?? null
     const endTime = parsed.endTime ?? null
 
-    // Create a time_block so the item is draggable/movable on /organize
-    let timeBlockId: string | null = null
-    if (startTime) {
-      const { data: block } = await supabase.from('time_blocks').insert({
+    if (deferScheduling) {
+      // Create as candidate — user will confirm scheduling via the UI
+      const { data } = await supabase.from('action_items').insert({
         user_id: user.id,
-        block_date: blockDate,
-        label: parsed.cleanedName,
-        start_time: startTime,
-        end_time: endTime,
-        source: 'manual',
+        name: parsed.cleanedName,
+        raw_input: rawInput.trim(),
+        source: 'quick_capture',
+        status: 'candidate',
         time_type: parsed.timeType ?? 'B',
-      }).select('id').single()
-      timeBlockId = block?.id ?? null
-    }
+        bounding_type: 'action',
+        emotional_weight: 'normal',
+        enrichment_status: 'none',
+        activity_id: parsed.activityMatch?.id ?? null,
+      }).select('*, item_notes(*)').single()
+      actionItem = data
+    } else {
+      // Create a time_block so the item is draggable/movable on /organize
+      let timeBlockId: string | null = null
+      if (startTime) {
+        const { data: block } = await supabase.from('time_blocks').insert({
+          user_id: user.id,
+          block_date: blockDate,
+          label: parsed.cleanedName,
+          start_time: startTime,
+          end_time: endTime,
+          source: 'manual',
+          time_type: parsed.timeType ?? 'B',
+        }).select('id').single()
+        timeBlockId = block?.id ?? null
+      }
 
-    const { data } = await supabase.from('action_items').insert({
-      user_id: user.id,
-      name: parsed.cleanedName,
-      raw_input: rawInput.trim(),
-      source: 'quick_capture',
-      status: 'committed',
-      committed_date: blockDate,
-      scheduled_time: startTime,
-      scheduled_end_time: endTime,
-      time_block_id: timeBlockId,
-      flexibility: isHard ? 'hard_scheduled' : 'soft_scheduled',
-      item_type: isHard ? 'appointment' : 'task',
-      time_type: parsed.timeType ?? 'B',
-      bounding_type: 'action',
-      emotional_weight: 'normal',
-      sort_order: 0,
-      enrichment_status: 'none',
-      activity_id: parsed.activityMatch?.id ?? null,
-      task_suggestion_id: null,
-    }).select('*, item_notes(*)').single()
-    actionItem = data
+      const { data } = await supabase.from('action_items').insert({
+        user_id: user.id,
+        name: parsed.cleanedName,
+        raw_input: rawInput.trim(),
+        source: 'quick_capture',
+        status: 'committed',
+        committed_date: blockDate,
+        scheduled_time: startTime,
+        scheduled_end_time: endTime,
+        time_block_id: timeBlockId,
+        flexibility: isHard ? 'hard_scheduled' : 'soft_scheduled',
+        item_type: isHard ? 'appointment' : 'task',
+        time_type: parsed.timeType ?? 'B',
+        bounding_type: 'action',
+        emotional_weight: 'normal',
+        sort_order: 0,
+        enrichment_status: 'none',
+        activity_id: parsed.activityMatch?.id ?? null,
+        task_suggestion_id: null,
+      }).select('*, item_notes(*)').single()
+      actionItem = data
+    }
 
     await supabase.from('action_log').insert({
       user_id: user.id,
-      event_type: 'scheduled',
-      action_item_id: data?.id ?? null,
+      event_type: deferScheduling ? 'captured' : 'scheduled',
+      action_item_id: actionItem?.id ?? null,
       event_date: today,
       note: rawInput.trim(),
       value_ids: valueIds,
@@ -242,7 +261,7 @@ export async function POST(req: NextRequest) {
       source: 'outside_request',
       status: isCommitted ? 'committed' : 'candidate',
       item_type: 'outside_request',
-      committed_date: isCommitted ? today : null,
+      committed_date: isCommitted ? defaultDate : null,
       proposed_date: isCommitted ? null : (parsed.date ?? null),
       person_id: parsed.person?.id ?? null,
       time_type: parsed.timeType ?? 'B',
@@ -261,7 +280,7 @@ export async function POST(req: NextRequest) {
       source: 'quick_capture',
       status: 'committed',
       item_type: 'commitment',
-      committed_date: today,
+      committed_date: defaultDate,
       committed_to_person_id: parsed.person?.id ?? null,
       time_type: parsed.timeType ?? 'B',
       bounding_type: 'action',

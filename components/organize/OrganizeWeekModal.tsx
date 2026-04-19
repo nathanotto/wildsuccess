@@ -284,6 +284,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
 
   // Capture
   const [captureInput, setCaptureInput] = useState('')
+  const [scheduleConfirm, setScheduleConfirm] = useState<{
+    itemId: string; name: string; date: string; time: string; endTime?: string | null
+  } | null>(null)
 
   // Activity editor (double-click on hopper item, or "Make Activity" on capture)
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null) // UUID or 'new'
@@ -1563,22 +1566,34 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     if (!text) return
     setCaptureInput('')
     try {
+      const isScheduled = /\b\d{1,2}(:\d{2})?\s*(am|pm|a|p)\b/i.test(text) || /\bat\s+\d{1,2}/i.test(text)
       const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawInput: text, source: 'organize' }),
+        body: JSON.stringify({ rawInput: text, source: 'organize', deferScheduling: isScheduled }),
       })
       if (!res.ok) return
       const data = await res.json()
       const parsed = data.parsed
 
       if (parsed?.outcome === 'logged') {
-        // Show toast, do NOT add to hopper
         showLogToast(`Logged: ${parsed.cleanedName}`)
         return
       }
 
-      // For all other outcomes, add to hopper as before
+      // For scheduled items, show confirmation instead of auto-scheduling
+      if (isScheduled && (parsed?.outcome === 'scheduled_soft' || parsed?.outcome === 'scheduled_hard') && parsed?.time && data.actionItem) {
+        setScheduleConfirm({
+          itemId: data.actionItem.id,
+          name: parsed.cleanedName,
+          date: parsed.date ?? dateStr(new Date()),
+          time: parsed.time,
+          endTime: parsed.endTime,
+        })
+        return
+      }
+
+      // For all other outcomes, add to hopper
       const hi = data.actionItem
       if (hi) {
         const hopperItem: CandidateItemLocal = {
@@ -1604,6 +1619,49 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     } catch (err) {
       console.error('Quick capture error:', err)
     }
+  }
+
+  async function confirmScheduleCapture() {
+    if (!scheduleConfirm) return
+    const { itemId, date, time, endTime, name } = scheduleConfirm
+    const blockRes = await fetch('/api/time-blocks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ block_date: date, label: name, start_time: time, end_time: endTime, source: 'manual' }),
+    })
+    const block = blockRes.ok ? await blockRes.json() : null
+    await fetch(`/api/action-items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'committed', committed_date: date, scheduled_time: time, scheduled_end_time: endTime, time_block_id: block?.id ?? null }),
+    })
+    setScheduleConfirm(null)
+    loadData()
+  }
+
+  function dismissScheduleCapture() {
+    if (!scheduleConfirm) return
+    // Item exists as candidate — add to hopper
+    const hopperItem: CandidateItemLocal = {
+      id: scheduleConfirm.itemId,
+      name: scheduleConfirm.name,
+      source: 'quick_capture',
+      time_type: 'B',
+      emotional_weight: 'normal',
+      priority_tier: 'normal',
+      priority_score: 50,
+      block_type_hint: null,
+      duration_min: 20,
+      duration_max: 60,
+      values: [],
+      activity_id: null,
+      preferred_time: null,
+      frequency: null,
+    }
+    if (hopperFilter !== 'all') setHopperFilter('all')
+    if (hopperShrunk) setHopperShrunk(false)
+    setHopper(prev => [...prev, hopperItem])
+    setScheduleConfirm(null)
   }
 
   // ── Log a hopper item ────────────────────────────────────────────────────────
@@ -2653,6 +2711,64 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                   </div>
                 )}
 
+                {/* Quick capture — above hopper items for easy access */}
+                <div style={{ marginBottom: 8 }}>
+                  {logToast && (
+                    <div style={{
+                      marginBottom: 6,
+                      background: logToast.type === 'error' ? '#FDF5F4' : '#F4FDF7',
+                      border: `1px solid ${logToast.type === 'error' ? '#C4504A40' : '#5A9E6F40'}`,
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: logToast.type === 'error' ? '#C4504A' : '#4A8B5E',
+                    }}>
+                      {logToast.message}
+                    </div>
+                  )}
+                  <form onSubmit={handleQuickCapture} style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      value={captureInput}
+                      onChange={e => setCaptureInput(e.target.value)}
+                      placeholder="Quick capture…"
+                      style={{
+                        flex: 1, fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 8,
+                        padding: '6px 10px', background: '#FFF', color: '#2D2A26',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={!captureInput.trim()}
+                      style={{
+                        padding: '6px 10px', borderRadius: 8, border: 'none',
+                        background: captureInput.trim() ? '#2D2A26' : '#E8E4DC',
+                        color: captureInput.trim() ? '#FFF' : '#B5B0A8',
+                        cursor: captureInput.trim() ? 'pointer' : 'default',
+                        fontSize: 13, fontWeight: 600,
+                      }}
+                    >+</button>
+                  </form>
+                  {scheduleConfirm && (
+                    <div style={{
+                      marginTop: 6, background: '#FFF', border: '1px solid #E8E4DC',
+                      borderRadius: 6, padding: '8px 10px',
+                    }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#2D2A26', marginBottom: 3 }}>
+                        {scheduleConfirm.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 6 }}>
+                        Schedule at {(() => { const [h, m] = scheduleConfirm.time.split(':').map(Number); const ampm = h >= 12 ? 'pm' : 'am'; const hr = h === 0 ? 12 : h > 12 ? h - 12 : h; return m === 0 ? `${hr}${ampm}` : `${hr}:${String(m).padStart(2, '0')}${ampm}` })()}?
+                      </div>
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <span onClick={confirmScheduleCapture} style={{ fontSize: 11, color: '#5A9E6F', cursor: 'pointer', fontWeight: 600 }}>Schedule</span>
+                        <span onClick={dismissScheduleCapture} style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }}>Just capture</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Carried Over — committed items from past weeks */}
                 {carriedOverItems.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
@@ -2788,46 +2904,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                 )}
               </div>
 
-              {/* Quick capture */}
-              <div style={{ padding: '8px 10px', borderTop: '1px solid #E8E4DC', flexShrink: 0 }}>
-                {logToast && (
-                  <div style={{
-                    marginBottom: 6,
-                    background: logToast.type === 'error' ? '#FDF5F4' : '#F4FDF7',
-                    border: `1px solid ${logToast.type === 'error' ? '#C4504A40' : '#5A9E6F40'}`,
-                    borderRadius: 8,
-                    padding: '8px 12px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: logToast.type === 'error' ? '#C4504A' : '#4A8B5E',
-                  }}>
-                    {logToast.message}
-                  </div>
-                )}
-                <form onSubmit={handleQuickCapture} style={{ display: 'flex', gap: 6 }}>
-                  <input
-                    value={captureInput}
-                    onChange={e => setCaptureInput(e.target.value)}
-                    placeholder="Quick capture…"
-                    style={{
-                      flex: 1, fontSize: 12, border: '1px solid #E0DDD6', borderRadius: 8,
-                      padding: '6px 10px', background: '#FFF', color: '#2D2A26',
-                      outline: 'none',
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={!captureInput.trim()}
-                    style={{
-                      padding: '6px 10px', borderRadius: 8, border: 'none',
-                      background: captureInput.trim() ? '#2D2A26' : '#E8E4DC',
-                      color: captureInput.trim() ? '#FFF' : '#B5B0A8',
-                      cursor: captureInput.trim() ? 'pointer' : 'default',
-                      fontSize: 13, fontWeight: 600,
-                    }}
-                  >+</button>
-                </form>
-              </div>
+              {/* Quick capture moved into scrollable area above CARRIED OVER */}
             </div>
           )}
 

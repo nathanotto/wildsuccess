@@ -22,6 +22,25 @@ function formatTime(hhmm: string): string {
   return `${hour}:${String(m).padStart(2, '0')}${ampm}`
 }
 
+function fmtTimeShort(t: string): string {
+  const [hStr, mStr] = t.split(':')
+  const h = parseInt(hStr)
+  const m = mStr ?? '00'
+  const ampm = h >= 12 ? 'pm' : 'am'
+  const hour = h === 0 ? 12 : h > 12 ? h - 12 : h
+  return m === '00' ? `${hour}${ampm}` : `${hour}:${m}${ampm}`
+}
+
+function fmtDateShort(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const target = new Date(d); target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
+  if (diff === 0) return 'today'
+  if (diff === 1) return 'tomorrow'
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
 function toastMessage(parsed: ParsedCapture): string {
   const { outcome, cleanedName, date, time, person } = parsed
   const dateLabel = date ? formatDateLabel(date) : null
@@ -68,6 +87,7 @@ function outcomeLabel(parsed: ParsedCapture): string {
 interface Props {
   source: 'today' | 'organize' | 'map'
   placeholder?: string
+  selectedDate?: string // The date context (e.g. tomorrow on /today tomorrow view)
   onItemCreated?: (item: ActionItemWithNotes) => void
   onLogEntry?: () => void
   inputStyle?: React.CSSProperties
@@ -75,7 +95,7 @@ interface Props {
 }
 
 export default function CaptureInput({
-  source, placeholder = 'capture...', onItemCreated, onLogEntry, inputStyle, wrapperStyle,
+  source, placeholder = 'capture...', selectedDate, onItemCreated, onLogEntry, inputStyle, wrapperStyle,
 }: Props) {
   const [input, setInput] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -91,6 +111,11 @@ export default function CaptureInput({
   const [addingPerson, setAddingPerson] = useState(false)
   const [personAdded, setPersonAdded] = useState(false)
   const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Schedule confirmation state
+  const [scheduleConfirm, setScheduleConfirm] = useState<{
+    itemId: string; name: string; date: string; time: string; endTime?: string | null
+  } | null>(null)
 
   const submittingRef = useRef(false)
 
@@ -136,14 +161,28 @@ export default function CaptureInput({
     const text = input.trim()
     setInput('')
     try {
+      const isScheduled = /\b\d{1,2}(:\d{2})?\s*(am|pm|a|p)\b/i.test(text) || /\bat\s+\d{1,2}/i.test(text)
       const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawInput: text, source }),
+        body: JSON.stringify({ rawInput: text, source, selectedDate, deferScheduling: isScheduled }),
       })
       if (!res.ok) return
       const data = await res.json()
       const parsed: ParsedCapture = data.parsed
+
+      // For scheduled items: show confirmation instead of auto-scheduling
+      if (isScheduled && (parsed.outcome === 'scheduled_soft' || parsed.outcome === 'scheduled_hard') && parsed.time && data.actionItem) {
+        setScheduleConfirm({
+          itemId: data.actionItem.id,
+          name: parsed.cleanedName,
+          date: parsed.date ?? selectedDate ?? new Date().toISOString().split('T')[0],
+          time: parsed.time,
+          endTime: parsed.endTime,
+        })
+        // Don't add to parent yet — user hasn't confirmed
+        return
+      }
 
       // Add item to parent state
       if (data.actionItem && onItemCreated) onItemCreated(data.actionItem)
@@ -160,6 +199,54 @@ export default function CaptureInput({
       submittingRef.current = false
       setSubmitting(false)
     }
+  }
+
+  async function handleConfirmSchedule() {
+    if (!scheduleConfirm) return
+    const { itemId, date, time, endTime } = scheduleConfirm
+
+    // Create time_block
+    const blockRes = await fetch('/api/time-blocks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        block_date: date,
+        label: scheduleConfirm.name,
+        start_time: time,
+        end_time: endTime,
+        source: 'manual',
+      }),
+    })
+    const block = blockRes.ok ? await blockRes.json() : null
+
+    // Commit the action item with schedule
+    const patchRes = await fetch(`/api/action-items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'committed',
+        committed_date: date,
+        scheduled_time: time,
+        scheduled_end_time: endTime,
+        time_block_id: block?.id ?? null,
+      }),
+    })
+    if (patchRes.ok) {
+      const item = await patchRes.json()
+      if (onItemCreated) onItemCreated(item)
+    }
+    setScheduleConfirm(null)
+  }
+
+  function handleDismissSchedule() {
+    if (!scheduleConfirm) return
+    // Item already exists as candidate — just notify parent and dismiss
+    // Fetch the item to pass to onItemCreated
+    fetch(`/api/action-items/${scheduleConfirm.itemId}`).then(r => r.json()).then(items => {
+      const item = Array.isArray(items) ? items[0] : items
+      if (item && onItemCreated) onItemCreated(item)
+    })
+    setScheduleConfirm(null)
   }
 
   async function handleAddPerson() {
@@ -256,6 +343,39 @@ export default function CaptureInput({
               style={{ fontSize: 12, color: '#8A8578', cursor: 'pointer' }}
             >
               Got it
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule confirmation card */}
+      {scheduleConfirm && (
+        <div style={{
+          background: '#FFF',
+          border: '1px solid #E8E4DC',
+          borderRadius: 4,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          padding: '10px 12px',
+          marginBottom: 4,
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#2D2A26', marginBottom: 4 }}>
+            {scheduleConfirm.name}
+          </div>
+          <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 8 }}>
+            Schedule at {fmtTimeShort(scheduleConfirm.time)} on {fmtDateShort(scheduleConfirm.date)}?
+          </div>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <span
+              onClick={handleConfirmSchedule}
+              style={{ fontSize: 12, color: '#5A9E6F', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Schedule
+            </span>
+            <span
+              onClick={handleDismissSchedule}
+              style={{ fontSize: 12, color: '#8A8578', cursor: 'pointer' }}
+            >
+              Just capture
             </span>
           </div>
         </div>

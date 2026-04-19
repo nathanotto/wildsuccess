@@ -116,6 +116,15 @@ function stripText(text: string, phrase: string): string {
 
 export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new Date()): ParsedCapture {
   let working = rawInput.trim()
+
+  // Preserve double-quoted strings as literal text (not parsed for dates/times)
+  // e.g. Remind me tomorrow to book a hotel for "May 1-3" → "May 1-3" stays in the name
+  const quotedFragments: string[] = []
+  working = working.replace(/"([^"]+)"/g, (_, content) => {
+    quotedFragments.push(content)
+    return `__QUOTED_${quotedFragments.length - 1}__`
+  })
+
   const explicitLog = working.toLowerCase().startsWith('log this')
   // Strip "log this" prefix
   if (explicitLog) {
@@ -343,6 +352,10 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
 
   // ─── Cleaned name ────────────────────────────────────────────────────────────
   let cleanedName = working.replace(/\s+/g, ' ').replace(/^[,\-–\s]+|[,\-–\s]+$/g, '').trim()
+  // Restore quoted fragments back into the cleaned name
+  for (let i = 0; i < quotedFragments.length; i++) {
+    cleanedName = cleanedName.replace(`__QUOTED_${i}__`, quotedFragments[i])
+  }
   if (cleanedName.length > 0) cleanedName = cleanedName[0].toUpperCase() + cleanedName.slice(1)
   if (!cleanedName) cleanedName = rawInput.trim()
 
