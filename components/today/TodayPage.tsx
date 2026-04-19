@@ -103,7 +103,22 @@ function fmtNoteTime(isoStr: string) {
 
 function currentTimeStr() {
   const now = new Date()
-  return now.toTimeString().slice(0, 5) // HH:MM
+  return now.toTimeString().slice(0, 5) // HH:MM — device time fallback
+}
+
+function timeStrInTz(tz: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false,
+  }).formatToParts(new Date())
+  const h = parts.find(p => p.type === 'hour')?.value ?? '00'
+  const m = parts.find(p => p.type === 'minute')?.value ?? '00'
+  return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
+}
+
+function todayInTz(tz: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
 }
 
 const STATUS_ORDER: Record<string, number> = {
@@ -841,8 +856,10 @@ interface DayCompletion {
 
 export default function TodayPage({ displayName }: Props) {
   const router = useRouter()
-  const todayStr = toDateStr(new Date())
-  const [selectedDate, setSelectedDate] = useState(todayStr)
+  const [userTz, setUserTz] = useState<string | null>(null)
+  const deviceTodayStr = toDateStr(new Date())
+  const todayStr = userTz ? todayInTz(userTz) : deviceTodayStr
+  const [selectedDate, setSelectedDate] = useState(deviceTodayStr)
   const [items, setItems] = useState<ActionItemWithNotes[]>([])
   const [loggedItems, setLoggedItems] = useState<{ id: string; note: string; metadata: any; created_at: string }[]>([])
   const [nextUp, setNextUp] = useState<ActionItemWithNotes | null>(null)
@@ -850,7 +867,7 @@ export default function TodayPage({ displayName }: Props) {
   const [reopened, setReopened] = useState(false)
   const [focusItemId, setFocusItemId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [nowTime, setNowTime] = useState(currentTimeStr())
+  const [nowTime, setNowTime] = useState<string>(currentTimeStr())
   const [hopperItems, setHopperItems] = useState<HopperItem[]>([])
   const [suggestedData, setSuggestedData] = useState<SuggestedData | null>(null)
   const [dismissedVirtualIds, setDismissedVirtualIds] = useState<Set<string>>(new Set())
@@ -861,11 +878,27 @@ export default function TodayPage({ displayName }: Props) {
   const isYesterday = selectedDate === addDays(todayStr, -1)
   const isTomorrow = selectedDate === addDays(todayStr, 1)
 
-  // Update "now" time every minute
+  // Fetch WS timezone and update clock + today to use it
   useEffect(() => {
-    const interval = setInterval(() => setNowTime(currentTimeStr()), 60000)
+    fetch('/api/profile').then(r => r.json()).then(data => {
+      const tz = data?.timezone ?? 'America/Denver'
+      setUserTz(tz)
+      setNowTime(timeStrInTz(tz))
+      const tzToday = todayInTz(tz)
+      // If WS timezone "today" differs from device "today", correct selectedDate
+      if (tzToday !== deviceTodayStr) {
+        setSelectedDate(tzToday)
+      }
+    })
+  }, [deviceTodayStr])
+
+  // Update "now" time every minute using WS timezone
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowTime(userTz ? timeStrInTz(userTz) : currentTimeStr())
+    }, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [userTz])
 
   const loadData = useCallback(async (date: string) => {
     setLoading(true)
