@@ -207,6 +207,20 @@ const SOURCE_ICONS: Record<string, string> = {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
+/** Get current hours:minutes in a specific IANA timezone */
+function nowInTz(tz: string): { hours: number; minutes: number; dateStr: string } {
+  const now = new Date()
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false,
+  }).formatToParts(now)
+  const hours = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0')
+  const minutes = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0')
+  const dateStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now)
+  return { hours, minutes, dateStr }
+}
+
 export default function OrganizeWeekModal({ onClose, values, domains, mode = 'page' }: Props) {
   const isPage = mode === 'page'
   // Core state
@@ -226,6 +240,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   const [editingSpan, setEditingSpan] = useState<DaySpanLocal | 'new' | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [userTz, setUserTz] = useState<string | null>(null)
+  const [nowMinutes, setNowMinutes] = useState<number | null>(null) // minutes since midnight in WS timezone
+  const [tzTodayStr, setTzTodayStr] = useState<string | null>(null) // today in WS timezone
 
   // Inline block label edit
   const [editingBlockLabel, setEditingBlockLabel] = useState<{ blockId: string; date: string; label: string } | null>(null)
@@ -311,6 +328,27 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
   const gridRectRef = useRef<DOMRect | null>(null)   // cached bounding rect during drag
   const dayBlocksRef = useRef(dayBlocks)             // stable ref for resize effect
   dayBlocksRef.current = dayBlocks                   // keep in sync without triggering effects
+
+  // ── Timezone-aware clock ─────────────────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/profile').then(r => r.json()).then(data => {
+      const tz = data?.timezone ?? 'America/Denver'
+      setUserTz(tz)
+      const n = nowInTz(tz)
+      setNowMinutes(n.hours * 60 + n.minutes)
+      setTzTodayStr(n.dateStr)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!userTz) return
+    const interval = setInterval(() => {
+      const n = nowInTz(userTz)
+      setNowMinutes(n.hours * 60 + n.minutes)
+      setTzTodayStr(n.dateStr)
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [userTz])
 
   // ── Data loading ────────────────────────────────────────────────────────────
   const lastProposedWeekRef = useRef<string | null>(null)
@@ -1974,7 +2012,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
     [weekStart]
   )
-  const today = todayStr()
+  const today = tzTodayStr ?? todayStr()
 
   const weekLabel = useMemo(() => {
     const start = weekStart
@@ -3084,27 +3122,21 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                         />
                       ))}
 
-                      {/* Current time indicator */}
-                      {isToday && (() => {
-                        const now = new Date()
-                        const nowMin = now.getHours() * 60 + now.getMinutes()
-                        if (nowMin < GRID_START * 60 || nowMin > GRID_END * 60) return null
-                        const top = (nowMin - GRID_START * 60) * (HOUR_HEIGHT / 60)
-                        return (
-                          <div style={{
-                            position: 'absolute',
-                            top,
-                            left: 0,
-                            right: 0,
-                            height: 2,
-                            background: '#C4725A',
-                            zIndex: 5,
-                            pointerEvents: 'none',
-                          }}>
-                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#C4725A', position: 'absolute', left: -3, top: -2 }} />
-                          </div>
-                        )
-                      })()}
+                      {/* Current time indicator — uses WS timezone, renders client-only */}
+                      {isToday && nowMinutes !== null && nowMinutes >= GRID_START * 60 && nowMinutes <= GRID_END * 60 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: (nowMinutes - GRID_START * 60) * (HOUR_HEIGHT / 60),
+                          left: 0,
+                          right: 0,
+                          height: 2,
+                          background: '#C4725A',
+                          zIndex: 5,
+                          pointerEvents: 'none',
+                        }}>
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#C4725A', position: 'absolute', left: -3, top: -2 }} />
+                        </div>
+                      )}
 
                       {/* Calendar event info bands — subtle, clickable to reclassify */}
                       {dayCalEvents
