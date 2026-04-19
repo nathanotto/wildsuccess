@@ -111,7 +111,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       if (item.status === 'in_progress') tag = 'in_progress'
       else if (item.status === 'skipped') tag = 'skipped'
       else if (item.scheduled_time) tag = 'scheduled'
-      if (item.parent_action_item_id) tag = 'sub_item'
+      // Follow-up items (parent_action_item_id set) are independent tasks, not sub-items.
+      // Only item_notes with note_type='step' are sub-items — handled in the notes section.
     }
     stream.push({
       timestamp: log.created_at,
