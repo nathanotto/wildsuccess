@@ -872,6 +872,7 @@ export default function TodayPage({ displayName }: Props) {
   const [suggestedData, setSuggestedData] = useState<SuggestedData | null>(null)
   const [dismissedVirtualIds, setDismissedVirtualIds] = useState<Set<string>>(new Set())
   const [yesterdayUnfinished, setYesterdayUnfinished] = useState<ActionItemWithNotes[]>([])
+  const [weekIntent, setWeekIntent] = useState<string | null>(null)
 
   const isToday = selectedDate === todayStr
   const isPast = selectedDate < todayStr
@@ -904,12 +905,22 @@ export default function TodayPage({ displayName }: Props) {
     setLoading(true)
     setReopened(false)
     try {
-      const [todayRes, dcRes] = await Promise.all([
+      // Compute Monday of this date's week for intent fetch
+      const d = new Date(date + 'T12:00:00')
+      const day = d.getDay()
+      const mondayOffset = day === 0 ? -6 : 1 - day
+      const monday = new Date(d)
+      monday.setDate(monday.getDate() + mondayOffset)
+      const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
+
+      const [todayRes, dcRes, weekRes] = await Promise.all([
         fetch(`/api/today?date=${date}`),
         fetch(`/api/day-completion?date=${date}`),
+        fetch(`/api/weeks/${mondayStr}`),
       ])
       const data = await todayRes.json()
       const dcData = await dcRes.json()
+      const weekData = await weekRes.json()
       setItems(data.items ?? [])
       setLoggedItems(data.loggedItems ?? [])
       setNextUp(data.nextUp ?? null)
@@ -918,6 +929,7 @@ export default function TodayPage({ displayName }: Props) {
       setSuggestedData(data.suggestedData ?? null)
       setDismissedVirtualIds(new Set())
       setYesterdayUnfinished(data.yesterdayUnfinished ?? [])
+      setWeekIntent(weekData?.create_statement ?? null)
     } finally {
       setLoading(false)
     }
@@ -1500,6 +1512,17 @@ export default function TodayPage({ displayName }: Props) {
                 </div>
               )
             })()}
+
+            {/* Week intent — ambient reminder */}
+            {weekIntent && (
+              <div
+                style={{ fontSize: 12, color: '#8A857D', fontStyle: 'italic', marginBottom: 8, lineHeight: 1.5, cursor: 'pointer' }}
+                title={weekIntent}
+                onClick={() => router.push('/week')}
+              >
+                {weekIntent.length > 120 ? weekIntent.slice(0, 117) + '...' : weekIntent}
+              </div>
+            )}
 
             {/* Capture — active on today and future, grayed out on past */}
             {isPast ? (
