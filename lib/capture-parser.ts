@@ -179,7 +179,13 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
       date = `${s.get('year')}-${pad2(s.get('month')!)}-${pad2(s.get('day')!)}`
     }
     if (s.isCertain('hour')) {
-      time = `${pad2(s.get('hour')!)}:${pad2(s.get('minute') ?? 0)}`
+      let hour = s.get('hour')!
+      // Assume PM for ambiguous hours 1-6 when no AM/PM was specified
+      // "3:15" → 15:15 (not 3:15 AM); "8:00" stays 8:00 AM; "7:30" stays 7:30 AM
+      if (!s.isCertain('meridiem') && hour >= 1 && hour <= 6) {
+        hour += 12
+      }
+      time = `${pad2(hour)}:${pad2(s.get('minute') ?? 0)}`
     }
     working = (working.slice(0, result.index) + ' ' + working.slice(result.index + result.text.length))
       .replace(/\s+/g, ' ').trim()
