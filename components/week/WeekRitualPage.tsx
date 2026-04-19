@@ -29,9 +29,12 @@ interface CaptureEntry {
 interface LandscapeItem {
   id: string
   name: string
-  committed_date: string
-  scheduled_time: string | null
-  status: string
+  category: 'committed' | 'returning' | 'carried' | 'routine'
+  date?: string | null
+  time?: string | null
+  status?: string
+  time_type?: string
+  frequency?: string
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,12 +115,11 @@ export default function WeekRitualPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     const NC = { cache: 'no-store' } as const
-    const nextWeekEnd = addDaysStr(nextWeekStart, 6)
     const [weekRes, capsRes, nextWeekRes, landscapeRes] = await Promise.all([
       fetch(`/api/weeks/${weekStart}`, NC),
       fetch(`/api/weeks/${weekStart}/captures`, NC),
       fetch(`/api/weeks/${nextWeekStart}`, NC),
-      fetch(`/api/action-items?range_start=${nextWeekStart}&range_end=${nextWeekEnd}`, NC),
+      fetch(`/api/weeks/${nextWeekStart}/landscape`, NC),
     ])
     const weekData = await weekRes.json()
     const capsData = await capsRes.json()
@@ -127,7 +129,14 @@ export default function WeekRitualPage() {
     setWeekRecord(weekData?.id ? weekData : null)
     setCaptures(Array.isArray(capsData) ? capsData : [])
     setNextWeekRecord(nextWeekData?.id ? nextWeekData : null)
-    setLandscape(Array.isArray(landscapeData) ? landscapeData : [])
+    // Merge all landscape categories into one list
+    const all: LandscapeItem[] = [
+      ...(landscapeData.committed ?? []),
+      ...(landscapeData.parked ?? []),
+      ...(landscapeData.carried ?? []),
+      ...(landscapeData.routines ?? []),
+    ]
+    setLandscape(all)
     setCompleteText(weekData?.complete_statement ?? '')
     setCreateText(nextWeekData?.create_statement ?? '')
     setLoading(false)
@@ -226,11 +235,58 @@ export default function WeekRitualPage() {
     fontFamily: FONT,
   })
 
-  const sortedLandscape = [...landscape].sort((a, b) => {
-    const aKey = `${a.committed_date}${a.scheduled_time ?? '99:99'}`
-    const bKey = `${b.committed_date}${b.scheduled_time ?? '99:99'}`
-    return aKey.localeCompare(bKey)
-  })
+  function renderLandscapeSection(items: LandscapeItem[], label: string, labelColor: string) {
+    if (items.length === 0) return null
+    return (
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: labelColor, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+          {label}
+        </div>
+        {items.map(item => {
+          const isCompleted = item.status === 'completed'
+          const isInProgress = item.status === 'in_progress'
+          return (
+            <div key={item.id} style={{ display: 'flex', gap: 10, marginBottom: 6, alignItems: 'flex-start' }}>
+              <span style={{ fontSize: 10, color: '#C4BFB4', width: 56, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
+                {item.date ? fmtDayTime(item.date, item.time ?? null) : ''}
+              </span>
+              <span style={{ width: 18, flexShrink: 0 }} />
+              <span style={{
+                fontSize: 14,
+                color: isCompleted ? '#5A9E6F' : isInProgress ? '#C4725A' : '#2D2A26',
+              }}>
+                {isCompleted && '✓ '}{item.name}
+                {item.time && <span style={{ marginLeft: 5, fontSize: 10, color: '#4B82AF' }} title="scheduled">&#128339;</span>}
+                {isInProgress && <span style={{ fontSize: 9, color: '#C4725A', marginLeft: 6 }}>in progress</span>}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  function renderRoutineSection(items: LandscapeItem[]) {
+    if (items.length === 0) return null
+    return (
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: '#4B82AF', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+          Routines due
+        </div>
+        {items.map(item => (
+          <div key={item.id} style={{ display: 'flex', gap: 10, marginBottom: 6, alignItems: 'flex-start' }}>
+            <span style={{ fontSize: 10, color: '#C4BFB4', width: 56, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
+              {item.frequency ?? ''}
+            </span>
+            <span style={{ width: 18, flexShrink: 0 }} />
+            <span style={{ fontSize: 14, color: '#4B82AF' }}>
+              {item.name}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div style={{ fontFamily: FONT, background: '#FAFAF7', minHeight: '100vh', color: '#2D2A26' }}>
@@ -296,37 +352,18 @@ export default function WeekRitualPage() {
 
           {tab === 'create' && (
             <>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
-                What&apos;s on the books
-              </div>
-              {sortedLandscape.length === 0 ? (
-                <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>Nothing scheduled yet.</div>
+              {landscape.length === 0 ? (
+                <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>Nothing on the horizon yet.</div>
               ) : (
                 <div>
-                  {sortedLandscape.map((item, i) => {
-                    const prevDate = i > 0 ? sortedLandscape[i - 1].committed_date : null
-                    const showDivider = i > 0 && item.committed_date !== prevDate
-                    const isCompleted = item.status === 'completed'
-                    const isSkipped = item.status === 'skipped'
-                    return (
-                      <div key={item.id}>
-                        {showDivider && <div style={{ borderTop: '1px solid #E8E4DC', margin: '12px 0 10px' }} />}
-                        <div style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
-                          <span style={{ fontSize: 10, color: '#C4BFB4', width: 56, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
-                            {fmtDayTime(item.committed_date, item.scheduled_time)}
-                          </span>
-                          <span style={{ width: 18, flexShrink: 0 }} />
-                          <span style={{
-                            fontSize: 14, color: isCompleted ? '#5A9E6F' : isSkipped ? '#B5B0A8' : '#2D2A26',
-                            textDecoration: isSkipped ? 'line-through' : 'none',
-                          }}>
-                            {isCompleted && '✓ '}{item.name}
-                            {item.scheduled_time && <span style={{ marginLeft: 5, fontSize: 10, color: '#4B82AF' }} title="scheduled">&#128339;</span>}
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })}
+                  {/* Committed — what's already scheduled */}
+                  {renderLandscapeSection(landscape.filter(i => i.category === 'committed'), 'Scheduled', '#2D2A26')}
+                  {/* Returning — parked items coming due */}
+                  {renderLandscapeSection(landscape.filter(i => i.category === 'returning'), 'Returning', '#C4725A')}
+                  {/* Carried forward — still open from previous weeks */}
+                  {renderLandscapeSection(landscape.filter(i => i.category === 'carried'), 'Still open', '#8A857D')}
+                  {/* Routines — recurring activities due */}
+                  {renderRoutineSection(landscape.filter(i => i.category === 'routine'))}
                 </div>
               )}
             </>
