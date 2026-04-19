@@ -279,7 +279,7 @@ export default function WeekRitualPage() {
           <div style={{ marginBottom: 16 }}>
             <CaptureInput
               source={tab === 'complete' ? 'today' : 'organize'}
-              placeholder={tab === 'complete' ? "Add to this week's record..." : 'Add something to this week...'}
+              placeholder="Capture something..."
               onItemCreated={() => loadData()}
               onLogEntry={() => loadData()}
             />
