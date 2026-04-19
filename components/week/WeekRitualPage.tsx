@@ -49,11 +49,6 @@ function fmtCapTimestamp(ts: string): string {
   return `${day} ${hr}:${String(m).padStart(2, '0')}${ampm}`
 }
 
-function todayStr(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function WeekRitualPage() {
@@ -62,13 +57,7 @@ export default function WeekRitualPage() {
   const weekStart = params.week_start as string
   const nextWeekStart = addWeeks(weekStart, 1)
 
-  // Determine default tab: past weeks → Complete, current/future → Create
-  const today = todayStr()
-  const weekEnd = addWeeks(weekStart, 1)
-  const isPast = today >= weekEnd // week has ended
-  const defaultTab = isPast ? 'complete' : 'create'
-
-  const [tab, setTab] = useState<'complete' | 'create'>(defaultTab)
+  const [tab, setTab] = useState<'complete' | 'create'>('complete')
   const [weekRecord, setWeekRecord] = useState<WeekRecord | null>(null)
   const [captures, setCaptures] = useState<CaptureEntry[]>([])
   const [landscape, setLandscape] = useState<CaptureEntry[]>([])
@@ -84,19 +73,16 @@ export default function WeekRitualPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     const NC = { cache: 'no-store' } as const
-    const [weekRes, capsRes, landscapeRes] = await Promise.all([
+    const [weekRes, capsRes] = await Promise.all([
       fetch(`/api/weeks/${weekStart}`, NC),
-      fetch(`/api/weeks/${weekStart}/captures`, NC),
-      // For Create tab: show what's on the books for this week (same captures endpoint)
       fetch(`/api/weeks/${weekStart}/captures`, NC),
     ])
     const weekData = await weekRes.json()
     const capsData = await capsRes.json()
-    const landscapeData = await landscapeRes.json()
 
     setWeekRecord(weekData?.id ? weekData : null)
     setCaptures(Array.isArray(capsData) ? capsData : [])
-    setLandscape(Array.isArray(landscapeData) ? landscapeData : [])
+    setLandscape(Array.isArray(capsData) ? capsData : [])
     setCompleteText(weekData?.complete_statement ?? '')
     setCreateText(weekData?.create_statement ?? '')
     setLoading(false)
@@ -104,11 +90,8 @@ export default function WeekRitualPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Reset tab when navigating to a different week
-  useEffect(() => {
-    const end = addWeeks(weekStart, 1)
-    setTab(today >= end ? 'complete' : 'create')
-  }, [weekStart, today])
+  // Reset tab to Complete when navigating weeks
+  useEffect(() => { setTab('complete') }, [weekStart])
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
 
@@ -136,8 +119,7 @@ export default function WeekRitualPage() {
       body: JSON.stringify({ [field]: newValue }),
     })
     const res = await fetch(`/api/weeks/${weekStart}`, { cache: 'no-store' })
-    const data = await res.json()
-    setWeekRecord(data)
+    setWeekRecord(await res.json())
   }
 
   const isChecked = (field: string) => !!(weekRecord as unknown as Record<string, unknown> | null)?.[field]
@@ -159,142 +141,99 @@ export default function WeekRitualPage() {
     fontSize: 15, fontWeight: active ? 700 : 400,
     color: active ? '#2D2A26' : '#B5B0A8',
     cursor: 'pointer', padding: '4px 0',
-    borderBottom: active ? '2px solid #2D2A26' : '2px solid transparent',
-    background: 'none', border: 'none', borderBottomWidth: 2,
-    borderBottomStyle: 'solid',
-    borderBottomColor: active ? '#2D2A26' : 'transparent',
+    background: 'none', border: 'none',
+    borderBottom: `2px solid ${active ? '#2D2A26' : 'transparent'}`,
     fontFamily: FONT,
   })
 
+  // Data for the left panel depends on tab
+  const leftEntries = tab === 'complete' ? captures : landscape
+
   return (
     <div style={{ fontFamily: FONT, background: '#FAFAF7', minHeight: '100vh', color: '#2D2A26' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '40px 24px 80px' }}>
+      {/* Header — full width */}
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 24px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <button onClick={() => router.push(`/week/${addWeeks(weekStart, -1)}`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#8A8578', fontFamily: FONT }}>←</button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, color: '#8A8578' }}>{friendlyRange(weekStart)}</div>
+          </div>
+          <button onClick={() => router.push(`/week/${addWeeks(weekStart, 1)}`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#8A8578', fontFamily: FONT }}>→</button>
+        </div>
+        <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
+          <button onClick={() => setTab('complete')} style={tabStyle(tab === 'complete')}>Complete</button>
+          <button onClick={() => setTab('create')} style={tabStyle(tab === 'create')}>Create</button>
+        </div>
+      </div>
 
-        {/* Header */}
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-            <button onClick={() => router.push(`/week/${addWeeks(weekStart, -1)}`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#8A8578', fontFamily: FONT }}>←</button>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, color: '#8A8578' }}>{friendlyRange(weekStart)}</div>
+      {/* Two-panel layout */}
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 80px', display: 'flex', gap: 40 }}>
+
+        {/* ── Left Panel: Context (scrollable) ──────────────────────────── */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+            {tab === 'complete' ? 'This week, in your words' : "What's on the books"}
+          </div>
+
+          {leftEntries.length === 0 ? (
+            <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>
+              {tab === 'complete' ? 'No captures this week.' : 'Nothing scheduled yet.'}
             </div>
-            <button onClick={() => router.push(`/week/${addWeeks(weekStart, 1)}`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#8A8578', fontFamily: FONT }}>→</button>
-          </div>
-
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: 24, marginBottom: 16 }}>
-            <button onClick={() => setTab('complete')} style={tabStyle(tab === 'complete')}>Complete</button>
-            <button onClick={() => setTab('create')} style={tabStyle(tab === 'create')}>Create</button>
-          </div>
-
-          {/* Checkboxes */}
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {([
-              { field: 'completed_at_ritual' as const, label: 'Completed' },
-              { field: 'created_at_ritual' as const, label: 'Created' },
-              { field: 'organized_at' as const, label: 'Organized' },
-              { field: 'deconflicted_at' as const, label: 'De-conflicted' },
-            ]).map(({ field, label }) => (
-              <span key={field} onClick={() => toggleCheckbox(field)} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 13, color: isChecked(field) ? '#2D2A26' : '#B5B0A8' }}>
-                <span style={checkboxStyle(isChecked(field))}>{isChecked(field) ? '✓' : ''}</span>
-                {label}
-              </span>
-            ))}
-          </div>
+          ) : (
+            <div>
+              {leftEntries.map((c, i) => (
+                <CaptureEntryRow key={c.source_id + i} timestamp={c.timestamp} text={c.text} />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* ── Complete Tab ──────────────────────────────────────────────────── */}
-        {tab === 'complete' && (
-          <>
-            {/* This week's intent (what you wrote when creating) */}
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>My intent for this week</div>
-              <div style={{ fontSize: 15, lineHeight: 1.7, color: weekRecord?.create_statement ? '#2D2A26' : '#B5B0A8', fontStyle: weekRecord?.create_statement ? 'normal' : 'italic' }}>
-                {weekRecord?.create_statement ?? 'No intent was set for this week.'}
-              </div>
-            </div>
+        {/* ── Right Panel: Ritual (sticky) ─────────────────────────────── */}
+        <div style={{ width: 360, flexShrink: 0, position: 'sticky', top: 24, alignSelf: 'flex-start' }}>
 
-            {/* Captures stream — the week in your own words */}
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>This week, in your words</div>
-              {captures.length === 0 ? (
-                <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>No captures this week.</div>
-              ) : (
-                <div>
-                  {captures.map((c, i) => (
-                    <CaptureEntryRow key={c.source_id + i} timestamp={c.timestamp} text={c.text} />
-                  ))}
+          {/* Complete tab: intent + reflection */}
+          {tab === 'complete' && (
+            <>
+              {/* This week's intent */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>My intent for this week</div>
+                <div style={{ fontSize: 14, lineHeight: 1.6, color: weekRecord?.create_statement ? '#2D2A26' : '#B5B0A8', fontStyle: weekRecord?.create_statement ? 'normal' : 'italic' }}>
+                  {weekRecord?.create_statement ?? 'No intent was set.'}
                 </div>
-              )}
-            </div>
-
-            {/* Capture — late additions */}
-            <div style={{ marginBottom: 32 }}>
-              <CaptureInput source="today" placeholder="Add something to this week's record..." onLogEntry={() => loadData()} />
-            </div>
-
-            {/* Reflection */}
-            <div style={{ marginBottom: 32, position: 'relative' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>Reflect on this week</div>
-                <span
-                  onClick={() => setShowHelp(showHelp === 'complete' ? null : 'complete')}
-                  style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}
-                >?</span>
-                {saved === 'complete_statement' && <span style={{ fontSize: 10, color: '#5A9E6F' }}>saved</span>}
               </div>
-              {showHelp === 'complete' && (
-                <div style={{ fontSize: 12, color: '#8A857D', background: '#F5F3EF', borderRadius: 6, padding: '8px 12px', marginBottom: 8, lineHeight: 1.5 }}>
-                  Looking back at the week through your own words helps you notice patterns, surprises, and the gap between intent and reality.
+
+              {/* Reflection */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>Reflect on this week</div>
+                  <span
+                    onClick={() => setShowHelp(showHelp === 'complete' ? null : 'complete')}
+                    style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}
+                  >?</span>
+                  {saved === 'complete_statement' && <span style={{ fontSize: 10, color: '#5A9E6F' }}>saved</span>}
                 </div>
-              )}
-              <div style={{ fontSize: 13, color: '#B5B0A8', marginBottom: 8, lineHeight: 1.5 }}>
-                Was that what you expected? What did you feel and notice? What surprised you?
+                {showHelp === 'complete' && (
+                  <div style={{ fontSize: 12, color: '#8A857D', background: '#F5F3EF', borderRadius: 6, padding: '8px 12px', marginBottom: 8, lineHeight: 1.5 }}>
+                    Looking back at the week through your own words helps you notice patterns, surprises, and the gap between intent and reality.
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: '#B5B0A8', marginBottom: 6, lineHeight: 1.5 }}>
+                  Was that what you expected? What did you feel and notice? What surprised you?
+                </div>
+                <textarea
+                  value={completeText}
+                  onChange={e => { setCompleteText(e.target.value); autoSave('complete_statement', e.target.value) }}
+                  onBlur={() => autoSave('complete_statement', completeText)}
+                  rows={5}
+                  style={{ width: '100%', fontSize: 14, lineHeight: 1.6, border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 12px', background: '#FFF', color: '#2D2A26', outline: 'none', resize: 'vertical', fontFamily: FONT, boxSizing: 'border-box' }}
+                />
               </div>
-              <textarea
-                value={completeText}
-                onChange={e => { setCompleteText(e.target.value); autoSave('complete_statement', e.target.value) }}
-                onBlur={() => autoSave('complete_statement', completeText)}
-                rows={4}
-                style={{ width: '100%', fontSize: 15, lineHeight: 1.6, border: '1px solid #E8E4DC', borderRadius: 8, padding: '12px 14px', background: '#FFFFFF', color: '#2D2A26', outline: 'none', resize: 'vertical', fontFamily: FONT, boxSizing: 'border-box' }}
-              />
-            </div>
+            </>
+          )}
 
-            {/* Flow link */}
-            <div style={{ paddingTop: 8 }}>
-              <span
-                onClick={() => { router.push(`/week/${nextWeekStart}`); }}
-                style={{ fontSize: 13, color: '#C4725A', cursor: 'pointer' }}
-              >
-                Create next week →
-              </span>
-            </div>
-          </>
-        )}
-
-        {/* ── Create Tab ───────────────────────────────────────────────────── */}
-        {tab === 'create' && (
-          <>
-            {/* Landscape — what's on the books */}
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>What&apos;s on the books</div>
-              {landscape.length === 0 ? (
-                <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>Nothing scheduled yet.</div>
-              ) : (
-                <div>
-                  {landscape.map((c, i) => (
-                    <CaptureEntryRow key={c.source_id + i} timestamp={c.timestamp} text={c.text} />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Capture — add things to the week */}
-            <div style={{ marginBottom: 32 }}>
-              <CaptureInput source="organize" placeholder="Add something to this week..." onItemCreated={() => loadData()} onLogEntry={() => loadData()} />
-            </div>
-
-            {/* Intent */}
-            <div style={{ marginBottom: 32, position: 'relative' }}>
+          {/* Create tab: intent */}
+          {tab === 'create' && (
+            <div style={{ marginBottom: 24 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>Set your intent</div>
                 <span
@@ -308,30 +247,62 @@ export default function WeekRitualPage() {
                   Setting intent for the week — not as a plan, but as a statement of expectation — gives next week&apos;s reflection something to compare against.
                 </div>
               )}
-              <div style={{ fontSize: 13, color: '#B5B0A8', marginBottom: 8, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 12, color: '#B5B0A8', marginBottom: 6, lineHeight: 1.5 }}>
                 What do you expect and intend for this coming week? What might be hard? What might be wonderful?
               </div>
               <textarea
                 value={createText}
                 onChange={e => { setCreateText(e.target.value); autoSave('create_statement', e.target.value) }}
                 onBlur={() => autoSave('create_statement', createText)}
-                rows={4}
-                style={{ width: '100%', fontSize: 15, lineHeight: 1.6, border: '1px solid #E8E4DC', borderRadius: 8, padding: '12px 14px', background: '#FFFFFF', color: '#2D2A26', outline: 'none', resize: 'vertical', fontFamily: FONT, boxSizing: 'border-box' }}
+                rows={5}
+                style={{ width: '100%', fontSize: 14, lineHeight: 1.6, border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 12px', background: '#FFF', color: '#2D2A26', outline: 'none', resize: 'vertical', fontFamily: FONT, boxSizing: 'border-box' }}
               />
             </div>
+          )}
 
-            {/* Flow links */}
-            <div style={{ display: 'flex', gap: 16, paddingTop: 8 }}>
-              <a href="/organize" style={{ fontSize: 13, color: '#8A8578', textDecoration: 'none' }}>Organize this week →</a>
-            </div>
-          </>
-        )}
+          {/* Checkboxes */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+            {([
+              { field: 'completed_at_ritual' as const, label: 'Completed' },
+              { field: 'created_at_ritual' as const, label: 'Created' },
+              { field: 'organized_at' as const, label: 'Organized' },
+              { field: 'deconflicted_at' as const, label: 'De-conflicted' },
+            ]).map(({ field, label }) => (
+              <span key={field} onClick={() => toggleCheckbox(field)} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 12, color: isChecked(field) ? '#2D2A26' : '#B5B0A8' }}>
+                <span style={checkboxStyle(isChecked(field))}>{isChecked(field) ? '✓' : ''}</span>
+                {label}
+              </span>
+            ))}
+          </div>
+
+          {/* Capture */}
+          <div style={{ marginBottom: 16 }}>
+            <CaptureInput
+              source={tab === 'complete' ? 'today' : 'organize'}
+              placeholder={tab === 'complete' ? "Add to this week's record..." : 'Add something to this week...'}
+              onItemCreated={() => loadData()}
+              onLogEntry={() => loadData()}
+            />
+          </div>
+
+          {/* Flow links */}
+          <div style={{ display: 'flex', gap: 16 }}>
+            {tab === 'complete' && (
+              <span onClick={() => { router.push(`/week/${nextWeekStart}`) }} style={{ fontSize: 12, color: '#C4725A', cursor: 'pointer' }}>
+                Create next week →
+              </span>
+            )}
+            {tab === 'create' && (
+              <a href="/organize" style={{ fontSize: 12, color: '#8A8578', textDecoration: 'none' }}>Organize this week →</a>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-// ─── CaptureEntryRow — truncatable capture entry ─────────────────────────────
+// ─── CaptureEntryRow ─────────────────────────────────────────────────────────
 
 const LINE_HEIGHT = 1.6
 const MAX_LINES = 5
@@ -349,22 +320,22 @@ function CaptureEntryRow({ timestamp, text }: { timestamp: string; text: string 
   }, [text])
 
   return (
-    <div style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-start' }}>
-      <span style={{ fontSize: 11, color: '#C4BFB4', width: 60, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
+    <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'flex-start' }}>
+      <span style={{ fontSize: 10, color: '#C4BFB4', width: 56, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
         {fmtCapTimestamp(timestamp)}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <span
           ref={textRef}
           style={{
-            fontSize: 15, lineHeight: LINE_HEIGHT, color: '#2D2A26', display: 'block',
+            fontSize: 14, lineHeight: LINE_HEIGHT, color: '#2D2A26', display: 'block',
             maxHeight: expanded ? 'none' : MAX_HEIGHT, overflow: 'hidden',
           }}
         >{text}</span>
         {(needsTruncation || expanded) && (
           <button
             onClick={() => setExpanded(e => !e)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#8A857D', padding: '2px 0', fontFamily: FONT }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#8A857D', padding: '2px 0', fontFamily: FONT }}
           >{expanded ? '▲ less' : '▼ more'}</button>
         )}
       </div>
