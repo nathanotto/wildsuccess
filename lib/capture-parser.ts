@@ -117,10 +117,11 @@ function stripText(text: string, phrase: string): string {
 export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new Date()): ParsedCapture {
   let working = rawInput.trim()
 
-  // Preserve double-quoted strings as literal text (not parsed for dates/times)
-  // e.g. Remind me tomorrow to book a hotel for "May 1-3" → "May 1-3" stays in the name
+  // Preserve quoted strings as literal text (not parsed for dates/times)
+  // Supports both double and single quotes:
+  // "May 1-3" or 'May 1-3' → preserved in the name, not parsed by chrono
   const quotedFragments: string[] = []
-  working = working.replace(/"([^"]+)"/g, (_, content) => {
+  working = working.replace(/["']([^"']+)["']/g, (_, content) => {
     quotedFragments.push(content)
     return `__QUOTED_${quotedFragments.length - 1}__`
   })

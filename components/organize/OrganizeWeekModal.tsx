@@ -1534,7 +1534,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     if (!text) return
     setCaptureInput('')
     try {
-      const isScheduled = /\b\d{1,2}(:\d{2})?\s*(am|pm|a|p)\b/i.test(text) || /\bat\s+\d{1,2}/i.test(text)
+      const textNoQuotes = text.replace(/["'][^"']*["']/g, '')
+      const isScheduled = /\b\d{1,2}(:\d{2})?\s*(am|pm)\b/i.test(textNoQuotes) || /\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/i.test(textNoQuotes)
       const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
