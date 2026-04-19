@@ -173,7 +173,9 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
   if (chronoResults.length > 0) {
     const result = chronoResults[0]
     const s = result.start
-    if (s.get('year') && s.get('month') && s.get('day')) {
+    // Only set date if the user explicitly mentioned a date (not just a time)
+    // chrono always fills year/month/day with defaults — isCertain checks user intent
+    if (s.isCertain('day') || s.isCertain('month') || s.isCertain('weekday')) {
       date = `${s.get('year')}-${pad2(s.get('month')!)}-${pad2(s.get('day')!)}`
     }
     if (s.isCertain('hour')) {
