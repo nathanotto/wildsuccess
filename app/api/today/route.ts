@@ -36,8 +36,8 @@ export async function GET(req: NextRequest) {
   // - Pinned: exact date match (for day completion — shows only that day's items)
   // - Today: rolling active items (committed_date <= today) + completed today
   // - Past: historical snapshot (committed on/before that day, not yet resolved by that day)
-  // - Future: only explicitly planned items
-  const itemsQuery = isPinned || isFuture
+  // - Future: planned items + rolling unscheduled + returning parked
+  const itemsQuery = isPinned
     ? supabase
         .from('action_items')
         .select('*, item_notes(*)')
@@ -45,6 +45,16 @@ export async function GET(req: NextRequest) {
         .eq('committed_date', date)
         .not('status', 'in', '("rescheduled","dismissed","archived")')
         .order('sort_order', { ascending: true })
+    : isFuture
+      ? supabase
+          .from('action_items')
+          .select('*, item_notes(*)')
+          .eq('user_id', user.id)
+          .lte('committed_date', date)
+          .not('status', 'in', '("completed","skipped","rescheduled","dismissed","archived")')
+          .or(`committed_date.eq.${date},scheduled_time.is.null`)
+          .or(`status.neq.parked,parked_until.lte.${date}`)
+          .order('sort_order', { ascending: true })
     : isPast
       ? supabase
           .from('action_items')
