@@ -2325,13 +2325,26 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
               </span>
             )}
           </div>
-          {/* C&C link + create statement */}
+          {/* Week link + create statement */}
           {(() => {
-            const today = new Date()
-            const dow = today.getDay() // 0=Sun
-            const showCCLink = dow === 0 || dow === 1 || dow === 5 || dow === 6 // Fri/Sat/Sun/Mon
             const weekMonday = dateStr(weekStart)
-            const ccComplete = thisWeekRecord?.completed_at_ritual && thisWeekRecord?.created_at_ritual && thisWeekRecord?.organized_at && thisWeekRecord?.deconflicted_at
+            const todayD = new Date()
+            const todayMonday = (() => { const d = new Date(todayD); const day = d.getDay(); d.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); return dateStr(d) })()
+            const isFutureWeek = weekMonday > todayMonday
+            const isPastWeek = weekMonday < todayMonday
+            const isCompleted = !!thisWeekRecord?.completed_at_ritual
+            const isCreated = !!thisWeekRecord?.created_at_ritual
+
+            let linkText: string | null = null
+            if (isFutureWeek) {
+              linkText = isCreated ? '· View week creation' : '· Create this week →'
+            } else if (isPastWeek) {
+              linkText = isCompleted ? '· View completed week' : '· Complete this week →'
+            } else {
+              // Current week
+              linkText = isCompleted ? '· View completed week' : '· Complete this week →'
+            }
+
             return (
               <>
                 {thisWeekRecord?.create_statement && (
@@ -2339,11 +2352,10 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                     {thisWeekRecord.create_statement.length > 70 ? thisWeekRecord.create_statement.slice(0, 67) + '…' : thisWeekRecord.create_statement}
                   </span>
                 )}
-                {showCCLink && !ccComplete && (
-                  <a href={`/week/${weekMonday}`} style={{ fontSize: 12, color: '#8A857D', textDecoration: 'none', marginLeft: 8, whiteSpace: 'nowrap' }}>· Complete this week →</a>
-                )}
-                {ccComplete && (
-                  <span style={{ fontSize: 12, color: '#B5B0A8', marginLeft: 8, whiteSpace: 'nowrap' }}>✓ Week created</span>
+                {linkText && (
+                  <a href={`/week/${weekMonday}`} style={{ fontSize: 12, color: isCompleted || isCreated ? '#B5B0A8' : '#8A857D', textDecoration: 'none', marginLeft: 8, whiteSpace: 'nowrap' }}>
+                    {linkText}
+                  </a>
                 )}
               </>
             )
