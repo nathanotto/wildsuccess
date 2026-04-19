@@ -37,7 +37,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     // Notes added during the week
     supabase
       .from('item_notes')
-      .select('id, content, created_at, action_item_id')
+      .select('id, content, created_at, action_item_id, note_type')
       .gte('created_at', startISO)
       .lt('created_at', endISO)
       .order('created_at', { ascending: true }),
@@ -123,13 +123,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     })
   }
 
-  // Notes
+  // Notes — steps are tagged as sub-items for indentation
   for (const note of notesRes.data ?? []) {
     stream.push({
       timestamp: note.created_at,
       type: 'note',
       text: note.content,
       source_id: note.id,
+      tag: note.note_type === 'step' ? 'sub_item' : null,
     })
   }
 
