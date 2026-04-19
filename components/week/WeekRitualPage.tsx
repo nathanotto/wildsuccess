@@ -26,11 +26,25 @@ interface CaptureEntry {
   parent_name?: string | null
 }
 
+interface LandscapeItem {
+  id: string
+  name: string
+  committed_date: string
+  scheduled_time: string | null
+  status: string
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function addWeeks(dateStr: string, n: number): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + n * 7)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function addDaysStr(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + n)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
@@ -52,6 +66,18 @@ function fmtCapTimestamp(ts: string): string {
   return `${day} ${hr}:${String(m).padStart(2, '0')}${ampm}`
 }
 
+function fmtDayTime(date: string, time: string | null): string {
+  const d = new Date(date + 'T12:00:00')
+  const day = d.toLocaleDateString('en-US', { weekday: 'short' })
+  if (!time) return day
+  const [hStr, mStr] = time.split(':')
+  const h = parseInt(hStr)
+  const m = mStr ?? '00'
+  const ampm = h >= 12 ? 'p' : 'a'
+  const hr = h === 0 ? 12 : h > 12 ? h - 12 : h
+  return `${day} ${hr}:${m}${ampm}`
+}
+
 function getDayKey(ts: string): string {
   const d = new Date(ts)
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
@@ -66,11 +92,16 @@ export default function WeekRitualPage() {
   const nextWeekStart = addWeeks(weekStart, 1)
 
   const [tab, setTab] = useState<'complete' | 'create'>('complete')
+
+  // This week's data (for Complete tab)
   const [weekRecord, setWeekRecord] = useState<WeekRecord | null>(null)
   const [captures, setCaptures] = useState<CaptureEntry[]>([])
-  const [landscape, setLandscape] = useState<CaptureEntry[]>([])
-  const [loading, setLoading] = useState(true)
 
+  // Next week's data (for Create tab)
+  const [nextWeekRecord, setNextWeekRecord] = useState<WeekRecord | null>(null)
+  const [landscape, setLandscape] = useState<LandscapeItem[]>([])
+
+  const [loading, setLoading] = useState(true)
   const [completeText, setCompleteText] = useState('')
   const [createText, setCreateText] = useState('')
   const [saved, setSaved] = useState<string | null>(null)
@@ -81,32 +112,39 @@ export default function WeekRitualPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     const NC = { cache: 'no-store' } as const
-    const [weekRes, capsRes] = await Promise.all([
+    const nextWeekEnd = addDaysStr(nextWeekStart, 6)
+    const [weekRes, capsRes, nextWeekRes, landscapeRes] = await Promise.all([
       fetch(`/api/weeks/${weekStart}`, NC),
       fetch(`/api/weeks/${weekStart}/captures`, NC),
+      fetch(`/api/weeks/${nextWeekStart}`, NC),
+      // Landscape: committed action_items for next week
+      fetch(`/api/action-items?range_start=${nextWeekStart}&range_end=${nextWeekEnd}`, NC),
     ])
     const weekData = await weekRes.json()
     const capsData = await capsRes.json()
+    const nextWeekData = await nextWeekRes.json()
+    const landscapeData = await landscapeRes.json()
 
     setWeekRecord(weekData?.id ? weekData : null)
     setCaptures(Array.isArray(capsData) ? capsData : [])
-    setLandscape(Array.isArray(capsData) ? capsData : [])
+    setNextWeekRecord(nextWeekData?.id ? nextWeekData : null)
+    setLandscape(Array.isArray(landscapeData) ? landscapeData : [])
     setCompleteText(weekData?.complete_statement ?? '')
-    setCreateText(weekData?.create_statement ?? '')
+    setCreateText(nextWeekData?.create_statement ?? '')
     setLoading(false)
-  }, [weekStart])
+  }, [weekStart, nextWeekStart])
 
   useEffect(() => { loadData() }, [loadData])
-
-  // Reset tab to Complete when navigating weeks
   useEffect(() => { setTab('complete') }, [weekStart])
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
 
   function autoSave(field: 'complete_statement' | 'create_statement', value: string) {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    // complete_statement saves to this week; create_statement saves to next week
+    const targetWeek = field === 'complete_statement' ? weekStart : nextWeekStart
     saveTimerRef.current = setTimeout(async () => {
-      await fetch(`/api/weeks/${weekStart}`, {
+      await fetch(`/api/weeks/${targetWeek}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value || null }),
@@ -119,19 +157,14 @@ export default function WeekRitualPage() {
   // ── Delete capture entry ─────────────────────────────────────────────────────
 
   async function handleDeleteEntry(entry: CaptureEntry) {
-    // Optimistic removal
     setCaptures(prev => prev.filter(c => c.source_id !== entry.source_id))
-    setLandscape(prev => prev.filter(c => c.source_id !== entry.source_id))
 
     if (entry.type === 'note') {
-      // Notes are item_notes — delete via the item-notes endpoint
       await fetch(`/api/item-notes/${entry.source_id}`, { method: 'DELETE' })
     } else {
-      // Delete the action_item if present
       if (entry.action_item_id) {
         await fetch(`/api/action-items/${entry.action_item_id}`, { method: 'DELETE' })
       }
-      // Delete the action_log entry
       await fetch(`/api/action-log/${entry.source_id}`, { method: 'DELETE' })
     }
   }
@@ -139,18 +172,25 @@ export default function WeekRitualPage() {
   // ── Checkbox toggle ─────────────────────────────────────────────────────────
 
   async function toggleCheckbox(field: 'completed_at_ritual' | 'created_at_ritual' | 'organized_at' | 'deconflicted_at') {
-    const currentValue = weekRecord ? (weekRecord as unknown as Record<string, unknown>)[field] : null
+    // Completed checkbox → this week's record; everything else → next week's record
+    const isThisWeek = field === 'completed_at_ritual'
+    const targetWeek = isThisWeek ? weekStart : nextWeekStart
+    const record = isThisWeek ? weekRecord : nextWeekRecord
+    const currentValue = record ? (record as unknown as Record<string, unknown>)[field] : null
     const newValue = currentValue ? null : new Date().toISOString()
-    await fetch(`/api/weeks/${weekStart}`, {
+    await fetch(`/api/weeks/${targetWeek}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [field]: newValue }),
     })
-    const res = await fetch(`/api/weeks/${weekStart}`, { cache: 'no-store' })
-    setWeekRecord(await res.json())
+    const res = await fetch(`/api/weeks/${targetWeek}`, { cache: 'no-store' })
+    const data = await res.json()
+    if (isThisWeek) setWeekRecord(data)
+    else setNextWeekRecord(data)
   }
 
-  const isChecked = (field: string) => !!(weekRecord as unknown as Record<string, unknown> | null)?.[field]
+  const isChecked = (field: string, record: WeekRecord | null) =>
+    !!(record as unknown as Record<string, unknown> | null)?.[field]
 
   const checkboxStyle = (checked: boolean): React.CSSProperties => ({
     width: 14, height: 14, border: `1.5px solid ${checked ? '#5A9E6F' : '#C4BFB4'}`,
@@ -174,17 +214,23 @@ export default function WeekRitualPage() {
     fontFamily: FONT,
   })
 
-  // Data for the left panel depends on tab
-  const leftEntries = tab === 'complete' ? captures : landscape
+  // Sort landscape by committed_date + scheduled_time
+  const sortedLandscape = [...landscape].sort((a, b) => {
+    const aKey = `${a.committed_date}${a.scheduled_time ?? '99:99'}`
+    const bKey = `${b.committed_date}${b.scheduled_time ?? '99:99'}`
+    return aKey.localeCompare(bKey)
+  })
 
   return (
     <div style={{ fontFamily: FONT, background: '#FAFAF7', minHeight: '100vh', color: '#2D2A26' }}>
-      {/* Header — full width */}
+      {/* Header */}
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 24px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
           <button onClick={() => router.push(`/week/${addWeeks(weekStart, -1)}`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#8A8578', fontFamily: FONT }}>←</button>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, color: '#8A8578' }}>{friendlyRange(weekStart)}</div>
+            <div style={{ fontSize: 14, color: '#8A8578' }}>
+              {tab === 'complete' ? friendlyRange(weekStart) : friendlyRange(nextWeekStart)}
+            </div>
           </div>
           <button onClick={() => router.push(`/week/${addWeeks(weekStart, 1)}`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#8A8578', fontFamily: FONT }}>→</button>
         </div>
@@ -197,67 +243,99 @@ export default function WeekRitualPage() {
       {/* Two-panel layout */}
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 80px', display: 'flex', gap: 40 }}>
 
-        {/* ── Left Panel: Context (scrollable) ──────────────────────────── */}
+        {/* ── Left Panel ──────────────────────────────────────────────────── */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
-            {tab === 'complete' ? 'This week, in your words' : "What's on the books"}
-          </div>
 
-          {leftEntries.length === 0 ? (
-            <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>
-              {tab === 'complete' ? 'No captures this week.' : 'Nothing scheduled yet.'}
-            </div>
-          ) : (
-            <div>
-              {leftEntries.map((c, i) => {
-                // Day divider: insert when the day changes
-                const dayKey = getDayKey(c.timestamp)
-                const prevDayKey = i > 0 ? getDayKey(leftEntries[i - 1].timestamp) : null
-                const showDivider = i > 0 && dayKey !== prevDayKey
-                // Parent label: show before the first sub-item of a group
-                const isSubItem = c.tag === 'sub_item'
-                const prevIsSubItemOfSameParent = i > 0 && leftEntries[i - 1].tag === 'sub_item' && leftEntries[i - 1].parent_name === c.parent_name
-                const showParentLabel = isSubItem && c.parent_name && !prevIsSubItemOfSameParent
-                return (
-                  <div key={c.source_id + i}>
-                    {showDivider && (
-                      <div style={{ borderTop: '1px solid #E8E4DC', margin: '12px 0 10px' }} />
-                    )}
-                    {showParentLabel && (
-                      <div style={{ fontSize: 11, color: '#8A857D', paddingLeft: 24, marginBottom: 2, marginTop: 4, fontStyle: 'italic' }}>
-                        {c.parent_name}
+          {/* Complete tab: captures stream */}
+          {tab === 'complete' && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+                This week, in your words
+              </div>
+              {captures.length === 0 ? (
+                <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>No captures this week.</div>
+              ) : (
+                <div>
+                  {captures.map((c, i) => {
+                    const dayKey = getDayKey(c.timestamp)
+                    const prevDayKey = i > 0 ? getDayKey(captures[i - 1].timestamp) : null
+                    const showDivider = i > 0 && dayKey !== prevDayKey
+                    const isSubItem = c.tag === 'sub_item'
+                    const prevIsSubItemOfSameParent = i > 0 && captures[i - 1].tag === 'sub_item' && captures[i - 1].parent_name === c.parent_name
+                    const showParentLabel = isSubItem && c.parent_name && !prevIsSubItemOfSameParent
+                    return (
+                      <div key={c.source_id + i}>
+                        {showDivider && <div style={{ borderTop: '1px solid #E8E4DC', margin: '12px 0 10px' }} />}
+                        {showParentLabel && (
+                          <div style={{ fontSize: 11, color: '#8A857D', paddingLeft: 24, marginBottom: 2, marginTop: 4, fontStyle: 'italic' }}>
+                            {c.parent_name}
+                          </div>
+                        )}
+                        <CaptureEntryRow entry={c} onDelete={() => handleDeleteEntry(c)} />
                       </div>
-                    )}
-                    <CaptureEntryRow entry={c} onDelete={() => handleDeleteEntry(c)} />
-                  </div>
-                )
-              })}
-            </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Create tab: landscape — what's on the books for next week */}
+          {tab === 'create' && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
+                What&apos;s on the books
+              </div>
+              {sortedLandscape.length === 0 ? (
+                <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>Nothing scheduled yet.</div>
+              ) : (
+                <div>
+                  {sortedLandscape.map((item, i) => {
+                    const prevDate = i > 0 ? sortedLandscape[i - 1].committed_date : null
+                    const showDivider = i > 0 && item.committed_date !== prevDate
+                    const isCompleted = item.status === 'completed'
+                    const isSkipped = item.status === 'skipped'
+                    return (
+                      <div key={item.id}>
+                        {showDivider && <div style={{ borderTop: '1px solid #E8E4DC', margin: '12px 0 10px' }} />}
+                        <div style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'flex-start' }}>
+                          <span style={{ fontSize: 10, color: '#C4BFB4', width: 56, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
+                            {fmtDayTime(item.committed_date, item.scheduled_time)}
+                          </span>
+                          <span style={{ width: 18, flexShrink: 0 }} />
+                          <span style={{
+                            fontSize: 14, color: isCompleted ? '#5A9E6F' : isSkipped ? '#B5B0A8' : '#2D2A26',
+                            textDecoration: isSkipped ? 'line-through' : 'none',
+                          }}>
+                            {isCompleted && '✓ '}{item.name}
+                            {item.scheduled_time && <span style={{ marginLeft: 5, fontSize: 10, color: '#4B82AF' }} title="scheduled">&#128339;</span>}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
 
         {/* ── Right Panel: Ritual (sticky) ─────────────────────────────── */}
         <div style={{ width: 360, flexShrink: 0, position: 'sticky', top: 24, alignSelf: 'flex-start' }}>
 
-          {/* Complete tab: intent + reflection */}
+          {/* Complete tab */}
           {tab === 'complete' && (
             <>
-              {/* This week's intent */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>My intent for this week</div>
                 <div style={{ fontSize: 14, lineHeight: 1.6, color: weekRecord?.create_statement ? '#2D2A26' : '#B5B0A8', fontStyle: weekRecord?.create_statement ? 'normal' : 'italic' }}>
                   {weekRecord?.create_statement ?? 'No intent was set.'}
                 </div>
               </div>
-
-              {/* Reflection */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>Reflect on this week</div>
-                  <span
-                    onClick={() => setShowHelp(showHelp === 'complete' ? null : 'complete')}
-                    style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}
-                  >?</span>
+                  <span onClick={() => setShowHelp(showHelp === 'complete' ? null : 'complete')} style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}>?</span>
                   {saved === 'complete_statement' && <span style={{ fontSize: 10, color: '#5A9E6F' }}>saved</span>}
                 </div>
                 {showHelp === 'complete' && (
@@ -279,15 +357,12 @@ export default function WeekRitualPage() {
             </>
           )}
 
-          {/* Create tab: intent */}
+          {/* Create tab */}
           {tab === 'create' && (
             <div style={{ marginBottom: 24 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>Set your intent</div>
-                <span
-                  onClick={() => setShowHelp(showHelp === 'create' ? null : 'create')}
-                  style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}
-                >?</span>
+                <span onClick={() => setShowHelp(showHelp === 'create' ? null : 'create')} style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}>?</span>
                 {saved === 'create_statement' && <span style={{ fontSize: 10, color: '#5A9E6F' }}>saved</span>}
               </div>
               {showHelp === 'create' && (
@@ -308,19 +383,21 @@ export default function WeekRitualPage() {
             </div>
           )}
 
-          {/* Checkboxes */}
+          {/* Checkboxes — Completed is this week, rest are next week */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-            {([
-              { field: 'completed_at_ritual' as const, label: 'Completed' },
-              { field: 'created_at_ritual' as const, label: 'Created' },
-              { field: 'organized_at' as const, label: 'Organized' },
-              { field: 'deconflicted_at' as const, label: 'De-conflicted' },
-            ]).map(({ field, label }) => (
-              <span key={field} onClick={() => toggleCheckbox(field)} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 12, color: isChecked(field) ? '#2D2A26' : '#B5B0A8' }}>
-                <span style={checkboxStyle(isChecked(field))}>{isChecked(field) ? '✓' : ''}</span>
-                {label}
-              </span>
-            ))}
+            <span onClick={() => toggleCheckbox('completed_at_ritual')} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 12, color: isChecked('completed_at_ritual', weekRecord) ? '#2D2A26' : '#B5B0A8' }}>
+              <span style={checkboxStyle(isChecked('completed_at_ritual', weekRecord))}>{isChecked('completed_at_ritual', weekRecord) ? '✓' : ''}</span>
+              Completed
+            </span>
+            {(['created_at_ritual', 'organized_at', 'deconflicted_at'] as const).map(field => {
+              const label = field === 'created_at_ritual' ? 'Created' : field === 'organized_at' ? 'Organized' : 'De-conflicted'
+              return (
+                <span key={field} onClick={() => toggleCheckbox(field)} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 12, color: isChecked(field, nextWeekRecord) ? '#2D2A26' : '#B5B0A8' }}>
+                  <span style={checkboxStyle(isChecked(field, nextWeekRecord))}>{isChecked(field, nextWeekRecord) ? '✓' : ''}</span>
+                  {label}
+                </span>
+              )
+            })}
           </div>
 
           {/* Capture */}
@@ -336,7 +413,7 @@ export default function WeekRitualPage() {
           {/* Flow links */}
           <div style={{ display: 'flex', gap: 16 }}>
             {tab === 'complete' && (
-              <span onClick={() => { router.push(`/week/${nextWeekStart}`) }} style={{ fontSize: 12, color: '#C4725A', cursor: 'pointer' }}>
+              <span onClick={() => setTab('create')} style={{ fontSize: 12, color: '#C4725A', cursor: 'pointer' }}>
                 Create next week →
               </span>
             )}
@@ -382,23 +459,14 @@ function CaptureEntryRow({ entry, onDelete }: { entry: CaptureEntry; onDelete: (
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Timestamp */}
       <span style={{ fontSize: 10, color: '#C4BFB4', width: 56, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
         {fmtCapTimestamp(timestamp)}
       </span>
-
-      {/* Delete x — between timestamp and text */}
       <span style={{ width: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: 2 }}>
         {isDeletable && hovered ? (
-          <button
-            onClick={onDelete}
-            title="Delete"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#C4504A', padding: 0, lineHeight: 1 }}
-          >✕</button>
+          <button onClick={onDelete} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#C4504A', padding: 0, lineHeight: 1 }}>✕</button>
         ) : null}
       </span>
-
-      {/* Text + tags */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <span
           ref={textRef}
