@@ -2922,27 +2922,24 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
 
               if (visibleSpans.length === 0 && !editingSpan) {
                 return (
-                  <div style={{ display: 'flex', alignItems: 'center', padding: '2px 16px 2px 48px', background: '#FAFAF7', borderBottom: '1px solid #F0EDE8' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', padding: '1px 16px 1px 48px', background: '#FAFAF7', borderBottom: '1px solid #F0EDE8' }}>
                     <button
                       onClick={() => setEditingSpan('new')}
-                      style={{ fontSize: 11, color: '#8A857D', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
+                      style={{ fontSize: 9, color: '#B5B0A8', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }}
                     >+ Add span</button>
                   </div>
                 )
               }
 
               return (
-                <div style={{ background: '#FAFAF7', borderBottom: '1px solid #F0EDE8', padding: '4px 0', position: 'relative' }}>
+                <div style={{ background: '#FAFAF7', borderBottom: '1px solid #F0EDE8', padding: '2px 0', position: 'relative' }}>
                   {displaySpans.map(span => {
                     const spanColor = span.color || DEFAULT_SPAN_COLOR
-                    // Compute which columns this span covers
                     const clampedStart = span.start_date < rangeStart ? rangeStart : span.start_date
                     const clampedEnd = span.end_date > rangeEnd ? rangeEnd : span.end_date
-                    // Map dates to column indices (0=Mon ... 6=Sun)
                     const startCol = Math.max(0, Math.floor((new Date(clampedStart).getTime() - new Date(rangeStart).getTime()) / 86400000))
                     const endCol = Math.min(6, Math.floor((new Date(clampedEnd).getTime() - new Date(rangeStart).getTime()) / 86400000))
                     const colSpan = endCol - startCol + 1
-                    // Position as percentage of the 7-column area (offset by 48px hour label)
                     const leftPct = (startCol / 7) * 100
                     const widthPct = (colSpan / 7) * 100
 
@@ -2951,10 +2948,10 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                         key={span.id}
                         onClick={() => setEditingSpan(span)}
                         style={{
-                          height: 24,
+                          height: 16,
                           marginLeft: 48,
                           position: 'relative',
-                          marginBottom: 2,
+                          marginBottom: 1,
                           cursor: 'pointer',
                         }}
                       >
@@ -2962,20 +2959,20 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                           position: 'absolute',
                           left: `${leftPct}%`,
                           width: `${widthPct}%`,
-                          height: 24,
+                          height: 16,
                           background: `${spanColor}33`,
                           borderLeft: `3px solid ${spanColor}`,
                           borderRadius: 2,
                           display: 'flex',
                           alignItems: 'center',
-                          padding: '0 8px',
+                          padding: '0 6px',
                           overflow: 'hidden',
                           transition: 'background 0.15s',
                         }}
                         onMouseEnter={e => (e.currentTarget.style.background = `${spanColor}4D`)}
                         onMouseLeave={e => (e.currentTarget.style.background = `${spanColor}33`)}
                         >
-                          <span style={{ fontSize: 12, color: '#2D2A26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span style={{ fontSize: 10, color: '#2D2A26', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {span.name}
                             {span.person?.name && <span style={{ color: '#8A857D', marginLeft: 4 }}>· {span.person.name}</span>}
                           </span>
@@ -2983,13 +2980,13 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                       </div>
                     )
                   })}
-                  {extraCount > 0 && (
-                    <div style={{ marginLeft: 48, fontSize: 11, color: '#8A857D', padding: '0 8px 2px' }}>+{extraCount} more</div>
-                  )}
-                  <div style={{ marginLeft: 48, padding: '0 8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginLeft: 48, padding: '0 6px', gap: 8 }}>
+                    {extraCount > 0 && (
+                      <span style={{ fontSize: 9, color: '#8A857D' }}>+{extraCount} more</span>
+                    )}
                     <button
                       onClick={() => setEditingSpan('new')}
-                      style={{ fontSize: 11, color: '#8A857D', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
+                      style={{ fontSize: 9, color: '#B5B0A8', background: 'none', border: 'none', cursor: 'pointer', padding: '0' }}
                     >+ Add span</button>
                   </div>
                 </div>
