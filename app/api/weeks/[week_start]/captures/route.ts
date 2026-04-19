@@ -48,8 +48,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       .gte('created_at', startISO)
       .lt('created_at', endISO)
       .order('created_at', { ascending: true }),
-    // Completion events during the week — includes recurring activities
-    // Join to action_items to get name, scheduled_time, committed_date
+    // Completion events during the week
     supabase
       .from('action_log')
       .select('id, action_item_id, note, metadata, event_date, created_at')
@@ -71,16 +70,19 @@ export async function GET(req: NextRequest, { params }: Params) {
   // For completion events, fetch the linked action_items to get scheduled_time and committed_date
   const completedLogs = completedRes.data ?? []
   const completedItemIds = [...new Set(completedLogs.map(l => l.action_item_id).filter(Boolean))]
-  let completedItemsMap: Record<string, { name: string; scheduled_time: string | null; committed_date: string | null }> = {}
+  let completedItemsMap: Record<string, { name: string; scheduled_time: string | null; committed_date: string | null; source: string | null }> = {}
   if (completedItemIds.length > 0) {
     const { data: items } = await supabase
       .from('action_items')
-      .select('id, name, scheduled_time, committed_date')
+      .select('id, name, scheduled_time, committed_date, source')
       .in('id', completedItemIds)
     for (const item of items ?? []) {
-      completedItemsMap[item.id] = { name: item.name, scheduled_time: item.scheduled_time, committed_date: item.committed_date }
+      completedItemsMap[item.id] = { name: item.name, scheduled_time: item.scheduled_time, committed_date: item.committed_date, source: item.source }
     }
   }
+
+  // Build a set of action_item IDs that have completion events — used to deduplicate
+  const completedActionItemIds = new Set(completedItemIds)
 
   const stream: Array<{
     timestamp: string
@@ -89,8 +91,10 @@ export async function GET(req: NextRequest, { params }: Params) {
     source_id: string
   }> = []
 
-  // Action items (user-created only — template_proposal and calendar_import excluded by query)
+  // Action items (user-created only)
+  // Skip items that also have a completion event — those will show as ✓ completions instead
   for (const item of actionItemsRes.data ?? []) {
+    if (completedActionItemIds.has(item.id)) continue
     stream.push({
       timestamp: item.created_at,
       type: 'action_item',
@@ -127,26 +131,20 @@ export async function GET(req: NextRequest, { params }: Params) {
   for (const log of completedLogs) {
     const itemId = log.action_item_id
     if (!itemId) continue
-    // Deduplicate: one completion entry per action_item (in case of duplicate logs)
+    // Deduplicate: one completion entry per action_item
     if (seenCompletedItems.has(itemId)) continue
     seenCompletedItems.add(itemId)
 
     const item = completedItemsMap[itemId]
     if (!item) continue
 
-    // Don't duplicate items already shown as user-created action_items
-    // (those show as 'action_item' type from the creation query)
-
     // Compute the "real" timestamp: when the activity actually happened
     let realTimestamp: string
     if (item.scheduled_time && item.committed_date) {
       // Scheduled item: use committed_date + scheduled_time as the real moment
       realTimestamp = `${item.committed_date}T${item.scheduled_time}`
-    } else if (item.committed_date) {
-      // Unscheduled but committed: use committed_date at noon as approximation
-      realTimestamp = `${item.committed_date}T12:00:00`
     } else {
-      // Fallback: when the user clicked done
+      // Unscheduled item: use when the user clicked done — that's the best signal
       realTimestamp = log.created_at
     }
 
