@@ -22,13 +22,15 @@ export async function GET(req: NextRequest, { params }: Params) {
   const endISO = localMidnightToUTC(weekEndStr, tz)
 
   // Fetch all capture-like content in parallel
-  const [actionItemsRes, notesRes, loggedRes, completedRes, completionsRes] = await Promise.all([
-    // Action items created during the week — EXCLUDE system scaffolding
+  const [capturedRes, notesRes, loggedRes, completedRes, completionsRes] = await Promise.all([
+    // User-initiated captures — action_log 'captured' and 'scheduled' events
+    // This is the user's voice: things they typed into the capture field.
+    // Batch-created items (auto-propose) have no action_log entries, so they're excluded naturally.
     supabase
-      .from('action_items')
-      .select('id, name, source, created_at')
+      .from('action_log')
+      .select('id, action_item_id, note, metadata, created_at')
       .eq('user_id', user.id)
-      .not('source', 'in', '("template_proposal","calendar_import")')
+      .in('event_type', ['captured', 'scheduled'])
       .gte('created_at', startISO)
       .lt('created_at', endISO)
       .order('created_at', { ascending: true }),
@@ -67,22 +69,26 @@ export async function GET(req: NextRequest, { params }: Params) {
       .order('completion_date', { ascending: true }),
   ])
 
-  // For completion events, fetch the linked action_items to get scheduled_time and committed_date
+  // For captured and completed events, fetch linked action_items for display names and times
+  const capturedLogs = capturedRes.data ?? []
   const completedLogs = completedRes.data ?? []
-  const completedItemIds = [...new Set(completedLogs.map(l => l.action_item_id).filter(Boolean))]
-  let completedItemsMap: Record<string, { name: string; scheduled_time: string | null; committed_date: string | null; source: string | null }> = {}
-  if (completedItemIds.length > 0) {
+  const allItemIds = [...new Set([
+    ...capturedLogs.map(l => l.action_item_id).filter(Boolean),
+    ...completedLogs.map(l => l.action_item_id).filter(Boolean),
+  ])]
+  const itemsMap: Record<string, { name: string; scheduled_time: string | null; committed_date: string | null }> = {}
+  if (allItemIds.length > 0) {
     const { data: items } = await supabase
       .from('action_items')
-      .select('id, name, scheduled_time, committed_date, source')
-      .in('id', completedItemIds)
+      .select('id, name, scheduled_time, committed_date')
+      .in('id', allItemIds as string[])
     for (const item of items ?? []) {
-      completedItemsMap[item.id] = { name: item.name, scheduled_time: item.scheduled_time, committed_date: item.committed_date, source: item.source }
+      itemsMap[item.id] = { name: item.name, scheduled_time: item.scheduled_time, committed_date: item.committed_date }
     }
   }
 
   // Build a set of action_item IDs that have completion events — used to deduplicate
-  const completedActionItemIds = new Set(completedItemIds)
+  const completedActionItemIds = new Set(completedLogs.map(l => l.action_item_id).filter(Boolean))
 
   const stream: Array<{
     timestamp: string
@@ -91,15 +97,18 @@ export async function GET(req: NextRequest, { params }: Params) {
     source_id: string
   }> = []
 
-  // Action items (user-created only)
-  // Skip items that also have a completion event — those will show as ✓ completions instead
-  for (const item of actionItemsRes.data ?? []) {
-    if (completedActionItemIds.has(item.id)) continue
+  // User-initiated captures (things the user typed)
+  // Skip items that also have a completion event — those show as ✓ completions instead
+  for (const log of capturedLogs) {
+    if (log.action_item_id && completedActionItemIds.has(log.action_item_id)) continue
+    const item = log.action_item_id ? itemsMap[log.action_item_id] : null
+    const text = item?.name ?? (log.metadata as Record<string, unknown> | null)?.cleanedName as string ?? log.note ?? ''
+    if (!text) continue
     stream.push({
-      timestamp: item.created_at,
+      timestamp: log.created_at,
       type: 'action_item',
-      text: item.name,
-      source_id: item.id,
+      text,
+      source_id: log.id,
     })
   }
 
@@ -135,7 +144,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (seenCompletedItems.has(itemId)) continue
     seenCompletedItems.add(itemId)
 
-    const item = completedItemsMap[itemId]
+    const item = itemsMap[itemId]
     if (!item) continue
 
     // Compute the "real" timestamp: when the activity actually happened
