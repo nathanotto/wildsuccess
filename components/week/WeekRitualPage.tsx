@@ -21,6 +21,8 @@ interface CaptureEntry {
   type: 'action_item' | 'note' | 'day_log' | 'reflection' | 'capture' | 'completed'
   text: string
   source_id: string
+  action_item_id?: string | null
+  tag?: 'scheduled' | 'in_progress' | 'skipped' | 'sub_item' | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -108,6 +110,23 @@ export default function WeekRitualPage() {
     }, 1000)
   }
 
+  // ── Delete capture entry ─────────────────────────────────────────────────────
+
+  async function handleDeleteEntry(entry: CaptureEntry) {
+    // Optimistic removal
+    setCaptures(prev => prev.filter(c => c.source_id !== entry.source_id))
+    setLandscape(prev => prev.filter(c => c.source_id !== entry.source_id))
+
+    // Delete the action_item if present
+    if (entry.action_item_id) {
+      await fetch(`/api/action-items/${entry.action_item_id}`, { method: 'DELETE' })
+    }
+    // Delete the action_log entry
+    if (entry.type === 'day_log' || entry.type === 'action_item' || entry.type === 'completed') {
+      await fetch(`/api/action-log/${entry.source_id}`, { method: 'DELETE' })
+    }
+  }
+
   // ── Checkbox toggle ─────────────────────────────────────────────────────────
 
   async function toggleCheckbox(field: 'completed_at_ritual' | 'created_at_ritual' | 'organized_at' | 'deconflicted_at') {
@@ -182,7 +201,7 @@ export default function WeekRitualPage() {
           ) : (
             <div>
               {leftEntries.map((c, i) => (
-                <CaptureEntryRow key={c.source_id + i} timestamp={c.timestamp} text={c.text} type={c.type} />
+                <CaptureEntryRow key={c.source_id + i} entry={c} onDelete={() => handleDeleteEntry(c)} />
               ))}
             </div>
           )}
@@ -308,11 +327,22 @@ const LINE_HEIGHT = 1.6
 const MAX_LINES = 5
 const MAX_HEIGHT = `calc(${MAX_LINES} * ${LINE_HEIGHT}em)`
 
-function CaptureEntryRow({ timestamp, text, type }: { timestamp: string; text: string; type?: string }) {
+const TAG_STYLES: Record<string, { label: string; color: string }> = {
+  scheduled: { label: 'scheduled', color: '#4B82AF' },
+  in_progress: { label: 'in progress', color: '#C4725A' },
+  skipped: { label: 'skipped', color: '#B5B0A8' },
+  sub_item: { label: 'sub-item', color: '#8A8578' },
+}
+
+function CaptureEntryRow({ entry, onDelete }: { entry: CaptureEntry; onDelete: () => void }) {
+  const { timestamp, text, type, tag } = entry
   const isCompleted = type === 'completed'
   const isReflection = type === 'reflection'
+  const isSkipped = tag === 'skipped'
+  const isDeletable = type === 'action_item' || type === 'day_log' || type === 'completed'
   const [expanded, setExpanded] = useState(false)
   const [needsTruncation, setNeedsTruncation] = useState(false)
+  const [hovered, setHovered] = useState(false)
   const textRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
@@ -322,7 +352,11 @@ function CaptureEntryRow({ timestamp, text, type }: { timestamp: string; text: s
   }, [text])
 
   return (
-    <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'flex-start' }}>
+    <div
+      style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'flex-start' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <span style={{ fontSize: 10, color: '#C4BFB4', width: 56, flexShrink: 0, paddingTop: 3, textAlign: 'right' }}>
         {fmtCapTimestamp(timestamp)}
       </span>
@@ -331,11 +365,19 @@ function CaptureEntryRow({ timestamp, text, type }: { timestamp: string; text: s
           ref={textRef}
           style={{
             fontSize: 14, lineHeight: LINE_HEIGHT,
-            color: isCompleted ? '#5A9E6F' : isReflection ? '#8A8578' : '#2D2A26',
+            color: isCompleted ? '#5A9E6F' : isSkipped ? '#B5B0A8' : isReflection ? '#8A8578' : '#2D2A26',
+            textDecoration: isSkipped ? 'line-through' : 'none',
             display: 'block',
             maxHeight: expanded ? 'none' : MAX_HEIGHT, overflow: 'hidden',
           }}
-        >{isCompleted ? '✓ ' : ''}{text}</span>
+        >
+          {isCompleted ? '✓ ' : ''}{text}
+          {tag && TAG_STYLES[tag] && (
+            <span style={{ fontSize: 9, color: TAG_STYLES[tag].color, marginLeft: 6, fontWeight: 500 }}>
+              {TAG_STYLES[tag].label}
+            </span>
+          )}
+        </span>
         {(needsTruncation || expanded) && (
           <button
             onClick={() => setExpanded(e => !e)}
@@ -343,6 +385,17 @@ function CaptureEntryRow({ timestamp, text, type }: { timestamp: string; text: s
           >{expanded ? '▲ less' : '▼ more'}</button>
         )}
       </div>
+      {isDeletable && hovered && (
+        <button
+          onClick={onDelete}
+          title="Delete"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: 11, color: '#C4BFB4', padding: '2px 4px', flexShrink: 0,
+            lineHeight: 1,
+          }}
+        >✕</button>
+      )}
     </div>
   )
 }
