@@ -18,7 +18,7 @@ interface WeekRecord {
 
 interface CaptureEntry {
   timestamp: string
-  type: 'action_item' | 'note' | 'day_log' | 'reflection' | 'capture'
+  type: 'action_item' | 'note' | 'day_log' | 'reflection' | 'capture' | 'completed'
   text: string
   source_id: string
 }
@@ -182,7 +182,7 @@ export default function WeekRitualPage() {
           ) : (
             <div>
               {leftEntries.map((c, i) => (
-                <CaptureEntryRow key={c.source_id + i} timestamp={c.timestamp} text={c.text} />
+                <CaptureEntryRow key={c.source_id + i} timestamp={c.timestamp} text={c.text} type={c.type} />
               ))}
             </div>
           )}
@@ -308,7 +308,9 @@ const LINE_HEIGHT = 1.6
 const MAX_LINES = 5
 const MAX_HEIGHT = `calc(${MAX_LINES} * ${LINE_HEIGHT}em)`
 
-function CaptureEntryRow({ timestamp, text }: { timestamp: string; text: string }) {
+function CaptureEntryRow({ timestamp, text, type }: { timestamp: string; text: string; type?: string }) {
+  const isCompleted = type === 'completed'
+  const isReflection = type === 'reflection'
   const [expanded, setExpanded] = useState(false)
   const [needsTruncation, setNeedsTruncation] = useState(false)
   const textRef = useRef<HTMLSpanElement>(null)
@@ -328,10 +330,12 @@ function CaptureEntryRow({ timestamp, text }: { timestamp: string; text: string 
         <span
           ref={textRef}
           style={{
-            fontSize: 14, lineHeight: LINE_HEIGHT, color: '#2D2A26', display: 'block',
+            fontSize: 14, lineHeight: LINE_HEIGHT,
+            color: isCompleted ? '#5A9E6F' : isReflection ? '#8A8578' : '#2D2A26',
+            display: 'block',
             maxHeight: expanded ? 'none' : MAX_HEIGHT, overflow: 'hidden',
           }}
-        >{text}</span>
+        >{isCompleted ? '✓ ' : ''}{text}</span>
         {(needsTruncation || expanded) && (
           <button
             onClick={() => setExpanded(e => !e)}
