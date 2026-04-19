@@ -370,7 +370,8 @@ export function parseCapture(rawInput: string, ctx: UserContext, now: Date = new
     outcome = 'outside_request'
   } else if (isCommitment) {
     outcome = 'commitment'
-  } else if (date && time) {
+  } else if (time) {
+    // Time with or without explicit date — both are scheduled
     outcome = HARD_KEYWORDS.some(k => rawLower.includes(k)) ? 'scheduled_hard' : 'scheduled_soft'
   } else if (date) {
     const parsedDate = new Date(date + 'T12:00:00')
