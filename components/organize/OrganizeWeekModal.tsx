@@ -1351,43 +1351,11 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         setExitingBlockIds(prev => { const s = new Set(prev); s.delete(blockId); return s })
       }, 260)
 
-      // Restore any committed items back to candidate status
+      // Delete any action items linked to this block
       if (block && block.items.length > 0) {
         await Promise.all(block.items.map(i =>
-          fetch(`/api/action-items/${i.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'candidate', committed_date: null, scheduled_time: null, time_block_id: null }),
-          })
+          fetch(`/api/action-items/${i.id}`, { method: 'DELETE' })
         ))
-        setHopper(prev => {
-          const existingIds = new Set(prev.map(h => h.id))
-          const toAdd: CandidateItemLocal[] = block.items
-            .filter(i => !existingIds.has(i.id))
-            .map(i => ({
-              id: i.id,
-              name: i.name,
-              source: (block.source === 'auto_place' ? 'template_proposal' : 'quick_capture') as CandidateItemLocal['source'],
-              time_type: i.time_type,
-              emotional_weight: i.emotional_weight,
-              priority_tier: (block.source === 'auto_place' ? 'suggested' : 'normal') as 'suggested' | 'normal',
-              priority_score: 50,
-              block_type_hint: null,
-              duration_min: 20,
-              duration_max: 60,
-              values: [],
-              activity_id: null,
-              preferred_time: null,
-              frequency: null,
-            }))
-          if (toAdd.length > 0) {
-            toAdd.forEach(r => {
-              setReturningHopperIds(p => new Set([...p, r.id]))
-              setTimeout(() => setReturningHopperIds(p => { const s = new Set(p); s.delete(r.id); return s }), 2000)
-            })
-          }
-          return toAdd.length > 0 ? [...toAdd, ...prev] : prev
-        })
       }
     } catch (err) {
       console.error('Delete block error:', err)
