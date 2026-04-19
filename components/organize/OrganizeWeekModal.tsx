@@ -2646,26 +2646,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                     style={{ padding: '2px 6px', borderRadius: 5, border: '1px solid #E0DDD6', background: 'transparent', cursor: 'pointer', fontSize: 11, color: '#8A857D' }}
                   >◀</button>
                 </div>
-                {/* Filter chips */}
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {['all', 'A', 'B', 'C', 'D', '0'].map(f => (
-                    <button
-                      key={f}
-                      onClick={() => setHopperFilter(f)}
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: 12,
-                        border: `1px solid ${hopperFilter === f ? EC[f] ?? '#2D2A26' : '#E0DDD6'}`,
-                        background: hopperFilter === f ? (EC[f] ? EC[f] + '15' : '#2D2A2615') : 'transparent',
-                        cursor: 'pointer',
-                        fontSize: 10,
-                        fontWeight: 500,
-                        color: hopperFilter === f ? (EC[f] ?? '#2D2A26') : '#8A857D',
-                      }}
-                    >
-                      {f === 'all' ? 'All' : EL[f]}
-                    </button>
-                  ))}
+                <div style={{ display: 'none' }}>
                 </div>
               </div>
 
