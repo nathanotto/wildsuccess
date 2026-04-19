@@ -1443,7 +1443,7 @@ export default function TodayPage({ displayName }: Props) {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const pageStyle: React.CSSProperties = {
-    maxWidth: 860, padding: '0 20px', marginLeft: 40,
+    maxWidth: 860, padding: '0 20px',
     fontFamily: '"Source Sans 3", "Source Sans Pro", sans-serif',
     fontSize: 14, color: '#2D2A26', background: '#FAFAF7', minHeight: '100vh',
   }
@@ -1532,6 +1532,13 @@ export default function TodayPage({ displayName }: Props) {
               />
             ) : (
               <>
+                {/* Close this day link — for past days without day completion */}
+                {isPast && !dayCompletion && (
+                  <a href={`/today/complete?date=${selectedDate}`} style={{ fontSize: 13, color: '#C4725A', textDecoration: 'none', display: 'block', marginBottom: 8 }}>
+                    Close this day →
+                  </a>
+                )}
+
                 {/* Next up */}
                 {listNextUp && (
                   <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 4 }}>

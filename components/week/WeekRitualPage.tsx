@@ -320,6 +320,15 @@ export default function WeekRitualPage() {
 
   return (
     <div style={{ fontFamily: FONT, background: '#FAFAF7', minHeight: '100vh', color: '#2D2A26' }}>
+      <style>{`
+        .week-panels { display: flex; gap: 40px; }
+        .week-panel-left { flex: 1; min-width: 0; }
+        .week-panel-right { width: 360px; flex-shrink: 0; position: sticky; top: 24px; align-self: flex-start; }
+        @media (max-width: 768px) {
+          .week-panels { flex-direction: column; gap: 24px; }
+          .week-panel-right { width: 100%; position: static; }
+        }
+      `}</style>
       {/* Header */}
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 24px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
@@ -342,10 +351,10 @@ export default function WeekRitualPage() {
       </div>
 
       {/* Two-panel layout */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 80px', display: 'flex', gap: 40 }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px 80px' }} className="week-panels">
 
         {/* ── Left Panel ──────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="week-panel-left">
 
           {tab === 'complete' && (
             <>
@@ -403,7 +412,7 @@ export default function WeekRitualPage() {
         </div>
 
         {/* ── Right Panel ─────────────────────────────────────────────────── */}
-        <div style={{ width: 360, flexShrink: 0, position: 'sticky', top: 24, alignSelf: 'flex-start' }}>
+        <div className="week-panel-right">
 
           {/* ── Complete tab ────────────────────────────────────────────────── */}
           {tab === 'complete' && (
