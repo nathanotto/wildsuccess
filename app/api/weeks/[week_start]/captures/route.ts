@@ -97,6 +97,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     source_id: string
     action_item_id?: string | null
     tag?: 'scheduled' | 'in_progress' | 'skipped' | 'sub_item' | null
+    parent_name?: string | null
   }> = []
 
   // User-initiated captures (things the user typed)
@@ -130,6 +131,17 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   // Notes — steps are tagged as sub-items for indentation
+  // Fetch parent item names for steps so we can label orphaned step groups
+  const noteParentIds = [...new Set((notesRes.data ?? []).filter(n => n.action_item_id).map(n => n.action_item_id))]
+  const noteParentNames: Record<string, string> = {}
+  if (noteParentIds.length > 0) {
+    const { data: parents } = await supabase
+      .from('action_items')
+      .select('id, name')
+      .in('id', noteParentIds as string[])
+    for (const p of parents ?? []) noteParentNames[p.id] = p.name
+  }
+
   for (const note of notesRes.data ?? []) {
     stream.push({
       timestamp: note.created_at,
@@ -137,6 +149,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       text: note.content,
       source_id: note.id,
       tag: note.note_type === 'step' ? 'sub_item' : null,
+      parent_name: note.note_type === 'step' && note.action_item_id ? noteParentNames[note.action_item_id] ?? null : null,
     })
   }
 

@@ -23,6 +23,7 @@ interface CaptureEntry {
   source_id: string
   action_item_id?: string | null
   tag?: 'scheduled' | 'in_progress' | 'skipped' | 'sub_item' | null
+  parent_name?: string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -213,10 +214,19 @@ export default function WeekRitualPage() {
                 const dayKey = getDayKey(c.timestamp)
                 const prevDayKey = i > 0 ? getDayKey(leftEntries[i - 1].timestamp) : null
                 const showDivider = i > 0 && dayKey !== prevDayKey
+                // Parent label: show before the first sub-item of a group
+                const isSubItem = c.tag === 'sub_item'
+                const prevIsSubItemOfSameParent = i > 0 && leftEntries[i - 1].tag === 'sub_item' && leftEntries[i - 1].parent_name === c.parent_name
+                const showParentLabel = isSubItem && c.parent_name && !prevIsSubItemOfSameParent
                 return (
                   <div key={c.source_id + i}>
                     {showDivider && (
                       <div style={{ borderTop: '1px solid #E8E4DC', margin: '12px 0 10px' }} />
+                    )}
+                    {showParentLabel && (
+                      <div style={{ fontSize: 11, color: '#8A857D', paddingLeft: 24, marginBottom: 2, marginTop: 4, fontStyle: 'italic' }}>
+                        {c.parent_name}
+                      </div>
                     )}
                     <CaptureEntryRow entry={c} onDelete={() => handleDeleteEntry(c)} />
                   </div>
