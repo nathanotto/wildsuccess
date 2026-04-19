@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { week_start } = await params
   const weekEnd = addDays(week_start, 6)
 
-  const [committedRes, parkedRes, carriedRes, activitiesRes, coverageRes] = await Promise.all([
+  const [committedRes, parkedRes, carriedRes, activitiesRes, coverageRes, spansRes] = await Promise.all([
     // 1. Committed items for this week
     supabase
       .from('action_items')
@@ -63,6 +63,15 @@ export async function GET(req: NextRequest, { params }: Params) {
       .in('status', ['committed', 'in_progress', 'completed'])
       .not('activity_id', 'is', null)
       .not('committed_date', 'is', null),
+
+    // 5. Day spans overlapping this week
+    supabase
+      .from('day_spans')
+      .select('id, name, start_date, end_date, color, person_id')
+      .eq('user_id', user.id)
+      .lte('start_date', weekEnd)
+      .gte('end_date', week_start)
+      .order('start_date', { ascending: true }),
   ])
 
   // Build committed items
@@ -126,7 +135,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     }
   }
 
-  return NextResponse.json({ committed, parked, carried, routines })
+  // Build spans
+  const spans = (spansRes.data ?? []).map(s => ({
+    id: s.id, name: s.name, category: 'span' as const,
+    start_date: s.start_date, end_date: s.end_date,
+    color: s.color,
+  }))
+
+  return NextResponse.json({ committed, parked, carried, routines, spans })
 }
 
 function addDays(dateStr: string, n: number): string {

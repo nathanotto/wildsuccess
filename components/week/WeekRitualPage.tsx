@@ -29,12 +29,15 @@ interface CaptureEntry {
 interface LandscapeItem {
   id: string
   name: string
-  category: 'committed' | 'returning' | 'carried' | 'routine'
+  category: 'committed' | 'returning' | 'carried' | 'routine' | 'span'
   date?: string | null
   time?: string | null
   status?: string
   time_type?: string
   frequency?: string
+  start_date?: string
+  end_date?: string
+  color?: string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -135,6 +138,7 @@ export default function WeekRitualPage() {
       ...(landscapeData.parked ?? []),
       ...(landscapeData.carried ?? []),
       ...(landscapeData.routines ?? []),
+      ...(landscapeData.spans ?? []),
     ]
     setLandscape(all)
     setCompleteText(weekData?.complete_statement ?? '')
@@ -266,6 +270,31 @@ export default function WeekRitualPage() {
     )
   }
 
+  function renderSpanSection(items: LandscapeItem[]) {
+    if (items.length === 0) return null
+    return (
+      <div style={{ marginBottom: 20 }}>
+        {items.map(item => {
+          const startD = new Date(item.start_date + 'T12:00:00')
+          const endD = new Date(item.end_date + 'T12:00:00')
+          const fmtD = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+          const sameDay = item.start_date === item.end_date
+          const dateRange = sameDay ? fmtD(startD) : `${fmtD(startD)} – ${fmtD(endD)}`
+          return (
+            <div key={item.id} style={{
+              padding: '8px 12px', marginBottom: 6, borderRadius: 6,
+              background: '#FFF', border: '1px solid #E8E4DC',
+              borderLeft: `3px solid ${item.color ?? '#8A857D'}`,
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#2D2A26' }}>{item.name}</div>
+              <div style={{ fontSize: 11, color: '#8A8578', marginTop: 2 }}>{dateRange}</div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   function renderRoutineSection(items: LandscapeItem[]) {
     if (items.length === 0) return null
     return (
@@ -356,6 +385,8 @@ export default function WeekRitualPage() {
                 <div style={{ fontSize: 14, color: '#B5B0A8', fontStyle: 'italic' }}>Nothing on the horizon yet.</div>
               ) : (
                 <div>
+                  {/* Spans — context for the week (travel, visitors, events) */}
+                  {renderSpanSection(landscape.filter(i => i.category === 'span'))}
                   {/* Committed — what's already scheduled */}
                   {renderLandscapeSection(landscape.filter(i => i.category === 'committed'), 'Scheduled', '#2D2A26')}
                   {/* Returning — parked items coming due */}
