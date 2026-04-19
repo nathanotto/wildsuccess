@@ -93,11 +93,8 @@ export default function WeekRitualPage() {
 
   const [tab, setTab] = useState<'complete' | 'create'>('complete')
 
-  // This week's data (for Complete tab)
   const [weekRecord, setWeekRecord] = useState<WeekRecord | null>(null)
   const [captures, setCaptures] = useState<CaptureEntry[]>([])
-
-  // Next week's data (for Create tab)
   const [nextWeekRecord, setNextWeekRecord] = useState<WeekRecord | null>(null)
   const [landscape, setLandscape] = useState<LandscapeItem[]>([])
 
@@ -109,6 +106,9 @@ export default function WeekRitualPage() {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const isWeekCompleted = !!weekRecord?.completed_at_ritual
+  const isWeekCreated = !!nextWeekRecord?.created_at_ritual
+
   const loadData = useCallback(async () => {
     setLoading(true)
     const NC = { cache: 'no-store' } as const
@@ -117,7 +117,6 @@ export default function WeekRitualPage() {
       fetch(`/api/weeks/${weekStart}`, NC),
       fetch(`/api/weeks/${weekStart}/captures`, NC),
       fetch(`/api/weeks/${nextWeekStart}`, NC),
-      // Landscape: committed action_items for next week
       fetch(`/api/action-items?range_start=${nextWeekStart}&range_end=${nextWeekEnd}`, NC),
     ])
     const weekData = await weekRes.json()
@@ -141,7 +140,6 @@ export default function WeekRitualPage() {
 
   function autoSave(field: 'complete_statement' | 'create_statement', value: string) {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    // complete_statement saves to this week; create_statement saves to next week
     const targetWeek = field === 'complete_statement' ? weekStart : nextWeekStart
     saveTimerRef.current = setTimeout(async () => {
       await fetch(`/api/weeks/${targetWeek}`, {
@@ -154,11 +152,55 @@ export default function WeekRitualPage() {
     }, 1000)
   }
 
+  // ── Complete / Create week actions ──────────────────────────────────────────
+
+  async function handleCompleteWeek() {
+    // Save reflection immediately
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    await fetch(`/api/weeks/${weekStart}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ complete_statement: completeText || null, completed_at_ritual: new Date().toISOString() }),
+    })
+    const res = await fetch(`/api/weeks/${weekStart}`, { cache: 'no-store' })
+    setWeekRecord(await res.json())
+  }
+
+  async function handleReopenWeek() {
+    await fetch(`/api/weeks/${weekStart}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ completed_at_ritual: null }),
+    })
+    const res = await fetch(`/api/weeks/${weekStart}`, { cache: 'no-store' })
+    setWeekRecord(await res.json())
+  }
+
+  async function handleCreateWeek() {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    await fetch(`/api/weeks/${nextWeekStart}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ create_statement: createText || null, created_at_ritual: new Date().toISOString() }),
+    })
+    const res = await fetch(`/api/weeks/${nextWeekStart}`, { cache: 'no-store' })
+    setNextWeekRecord(await res.json())
+  }
+
+  async function handleReopenCreate() {
+    await fetch(`/api/weeks/${nextWeekStart}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ created_at_ritual: null }),
+    })
+    const res = await fetch(`/api/weeks/${nextWeekStart}`, { cache: 'no-store' })
+    setNextWeekRecord(await res.json())
+  }
+
   // ── Delete capture entry ─────────────────────────────────────────────────────
 
   async function handleDeleteEntry(entry: CaptureEntry) {
     setCaptures(prev => prev.filter(c => c.source_id !== entry.source_id))
-
     if (entry.type === 'note') {
       await fetch(`/api/item-notes/${entry.source_id}`, { method: 'DELETE' })
     } else {
@@ -168,36 +210,6 @@ export default function WeekRitualPage() {
       await fetch(`/api/action-log/${entry.source_id}`, { method: 'DELETE' })
     }
   }
-
-  // ── Checkbox toggle ─────────────────────────────────────────────────────────
-
-  async function toggleCheckbox(field: 'completed_at_ritual' | 'created_at_ritual' | 'organized_at' | 'deconflicted_at') {
-    // Completed checkbox → this week's record; everything else → next week's record
-    const isThisWeek = field === 'completed_at_ritual'
-    const targetWeek = isThisWeek ? weekStart : nextWeekStart
-    const record = isThisWeek ? weekRecord : nextWeekRecord
-    const currentValue = record ? (record as unknown as Record<string, unknown>)[field] : null
-    const newValue = currentValue ? null : new Date().toISOString()
-    await fetch(`/api/weeks/${targetWeek}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: newValue }),
-    })
-    const res = await fetch(`/api/weeks/${targetWeek}`, { cache: 'no-store' })
-    const data = await res.json()
-    if (isThisWeek) setWeekRecord(data)
-    else setNextWeekRecord(data)
-  }
-
-  const isChecked = (field: string, record: WeekRecord | null) =>
-    !!(record as unknown as Record<string, unknown> | null)?.[field]
-
-  const checkboxStyle = (checked: boolean): React.CSSProperties => ({
-    width: 14, height: 14, border: `1.5px solid ${checked ? '#5A9E6F' : '#C4BFB4'}`,
-    borderRadius: 2, background: checked ? '#5A9E6F' : 'transparent',
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', flexShrink: 0, fontSize: 9, color: '#FFF', marginRight: 4,
-  })
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -214,7 +226,6 @@ export default function WeekRitualPage() {
     fontFamily: FONT,
   })
 
-  // Sort landscape by committed_date + scheduled_time
   const sortedLandscape = [...landscape].sort((a, b) => {
     const aKey = `${a.committed_date}${a.scheduled_time ?? '99:99'}`
     const bKey = `${b.committed_date}${b.scheduled_time ?? '99:99'}`
@@ -234,9 +245,13 @@ export default function WeekRitualPage() {
           </div>
           <button onClick={() => router.push(`/week/${addWeeks(weekStart, 1)}`)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#8A8578', fontFamily: FONT }}>→</button>
         </div>
-        <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
-          <button onClick={() => setTab('complete')} style={tabStyle(tab === 'complete')}>Complete</button>
-          <button onClick={() => setTab('create')} style={tabStyle(tab === 'create')}>Create</button>
+        <div style={{ display: 'flex', gap: 24, alignItems: 'center', marginBottom: 12 }}>
+          <button onClick={() => setTab('complete')} style={tabStyle(tab === 'complete')}>
+            Complete {isWeekCompleted && <span style={{ color: '#5A9E6F', marginLeft: 4 }}>✓</span>}
+          </button>
+          <button onClick={() => setTab('create')} style={tabStyle(tab === 'create')}>
+            Create {isWeekCreated && <span style={{ color: '#5A9E6F', marginLeft: 4 }}>✓</span>}
+          </button>
         </div>
       </div>
 
@@ -246,7 +261,6 @@ export default function WeekRitualPage() {
         {/* ── Left Panel ──────────────────────────────────────────────────── */}
         <div style={{ flex: 1, minWidth: 0 }}>
 
-          {/* Complete tab: captures stream */}
           {tab === 'complete' && (
             <>
               <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
@@ -271,7 +285,7 @@ export default function WeekRitualPage() {
                             {c.parent_name}
                           </div>
                         )}
-                        <CaptureEntryRow entry={c} onDelete={() => handleDeleteEntry(c)} />
+                        <CaptureEntryRow entry={c} onDelete={() => handleDeleteEntry(c)} editable={!isWeekCompleted} />
                       </div>
                     )
                   })}
@@ -280,7 +294,6 @@ export default function WeekRitualPage() {
             </>
           )}
 
-          {/* Create tab: landscape — what's on the books for next week */}
           {tab === 'create' && (
             <>
               <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 }}>
@@ -320,18 +333,30 @@ export default function WeekRitualPage() {
           )}
         </div>
 
-        {/* ── Right Panel: Ritual (sticky) ─────────────────────────────── */}
+        {/* ── Right Panel ─────────────────────────────────────────────────── */}
         <div style={{ width: 360, flexShrink: 0, position: 'sticky', top: 24, alignSelf: 'flex-start' }}>
 
-          {/* Complete tab */}
+          {/* ── Complete tab ────────────────────────────────────────────────── */}
           {tab === 'complete' && (
             <>
+              {/* Completed state banner */}
+              {isWeekCompleted && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                  <span style={{ fontSize: 14, color: '#5A9E6F', fontWeight: 600 }}>Week completed</span>
+                  <span style={{ flex: 1 }} />
+                  <button onClick={handleReopenWeek} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#B5B0A8' }}>Reopen</button>
+                </div>
+              )}
+
+              {/* Intent */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>My intent for this week</div>
                 <div style={{ fontSize: 14, lineHeight: 1.6, color: weekRecord?.create_statement ? '#2D2A26' : '#B5B0A8', fontStyle: weekRecord?.create_statement ? 'normal' : 'italic' }}>
                   {weekRecord?.create_statement ?? 'No intent was set.'}
                 </div>
               </div>
+
+              {/* Reflection */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>Reflect on this week</div>
@@ -343,84 +368,122 @@ export default function WeekRitualPage() {
                     Looking back at the week through your own words helps you notice patterns, surprises, and the gap between intent and reality.
                   </div>
                 )}
-                <div style={{ fontSize: 12, color: '#B5B0A8', marginBottom: 6, lineHeight: 1.5 }}>
-                  Was that what you expected? What did you feel and notice? What surprised you?
-                </div>
-                <textarea
-                  value={completeText}
-                  onChange={e => { setCompleteText(e.target.value); autoSave('complete_statement', e.target.value) }}
-                  onBlur={() => autoSave('complete_statement', completeText)}
-                  rows={5}
-                  style={{ width: '100%', fontSize: 14, lineHeight: 1.6, border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 12px', background: '#FFF', color: '#2D2A26', outline: 'none', resize: 'vertical', fontFamily: FONT, boxSizing: 'border-box' }}
-                />
+                {!isWeekCompleted && (
+                  <div style={{ fontSize: 12, color: '#B5B0A8', marginBottom: 6, lineHeight: 1.5 }}>
+                    Was that what you expected? What did you feel and notice? What surprised you?
+                  </div>
+                )}
+                {isWeekCompleted ? (
+                  <div style={{ fontSize: 14, lineHeight: 1.6, color: completeText ? '#2D2A26' : '#B5B0A8', fontStyle: completeText ? 'normal' : 'italic' }}>
+                    {completeText || 'No reflection written.'}
+                  </div>
+                ) : (
+                  <textarea
+                    value={completeText}
+                    onChange={e => { setCompleteText(e.target.value); autoSave('complete_statement', e.target.value) }}
+                    onBlur={() => autoSave('complete_statement', completeText)}
+                    rows={5}
+                    style={{ width: '100%', fontSize: 14, lineHeight: 1.6, border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 12px', background: '#FFF', color: '#2D2A26', outline: 'none', resize: 'vertical', fontFamily: FONT, boxSizing: 'border-box' }}
+                  />
+                )}
               </div>
+
+              {/* Capture — only when not completed */}
+              {!isWeekCompleted && (
+                <div style={{ marginBottom: 16 }}>
+                  <CaptureInput source="today" placeholder="Capture something..." onItemCreated={() => loadData()} onLogEntry={() => loadData()} />
+                </div>
+              )}
+
+              {/* Complete button or flow link */}
+              {!isWeekCompleted ? (
+                <button
+                  onClick={handleCompleteWeek}
+                  style={{
+                    width: '100%', padding: '10px 0', borderRadius: 8, border: 'none',
+                    background: '#5A9E6F', color: '#FFF', fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: FONT, marginBottom: 12,
+                  }}
+                >
+                  Complete this week
+                </button>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  <span onClick={() => setTab('create')} style={{ fontSize: 13, color: '#C4725A', cursor: 'pointer' }}>
+                    Create next week →
+                  </span>
+                </div>
+              )}
             </>
           )}
 
-          {/* Create tab */}
+          {/* ── Create tab ─────────────────────────────────────────────────── */}
           {tab === 'create' && (
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>Set your intent</div>
-                <span onClick={() => setShowHelp(showHelp === 'create' ? null : 'create')} style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}>?</span>
-                {saved === 'create_statement' && <span style={{ fontSize: 10, color: '#5A9E6F' }}>saved</span>}
-              </div>
-              {showHelp === 'create' && (
-                <div style={{ fontSize: 12, color: '#8A857D', background: '#F5F3EF', borderRadius: 6, padding: '8px 12px', marginBottom: 8, lineHeight: 1.5 }}>
-                  Setting intent for the week — not as a plan, but as a statement of expectation — gives next week&apos;s reflection something to compare against.
+            <>
+              {isWeekCreated && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                  <span style={{ fontSize: 14, color: '#5A9E6F', fontWeight: 600 }}>Week created</span>
+                  <span style={{ flex: 1 }} />
+                  <button onClick={handleReopenCreate} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#B5B0A8' }}>Reopen</button>
                 </div>
               )}
-              <div style={{ fontSize: 12, color: '#B5B0A8', marginBottom: 6, lineHeight: 1.5 }}>
-                What do you expect and intend for this coming week? What might be hard? What might be wonderful?
+
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>Set your intent</div>
+                  <span onClick={() => setShowHelp(showHelp === 'create' ? null : 'create')} style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}>?</span>
+                  {saved === 'create_statement' && <span style={{ fontSize: 10, color: '#5A9E6F' }}>saved</span>}
+                </div>
+                {showHelp === 'create' && (
+                  <div style={{ fontSize: 12, color: '#8A857D', background: '#F5F3EF', borderRadius: 6, padding: '8px 12px', marginBottom: 8, lineHeight: 1.5 }}>
+                    Setting intent for the week — not as a plan, but as a statement of expectation — gives next week&apos;s reflection something to compare against.
+                  </div>
+                )}
+                {!isWeekCreated && (
+                  <div style={{ fontSize: 12, color: '#B5B0A8', marginBottom: 6, lineHeight: 1.5 }}>
+                    What do you expect and intend for this coming week? What might be hard? What might be wonderful?
+                  </div>
+                )}
+                {isWeekCreated ? (
+                  <div style={{ fontSize: 14, lineHeight: 1.6, color: createText ? '#2D2A26' : '#B5B0A8', fontStyle: createText ? 'normal' : 'italic' }}>
+                    {createText || 'No intent written.'}
+                  </div>
+                ) : (
+                  <textarea
+                    value={createText}
+                    onChange={e => { setCreateText(e.target.value); autoSave('create_statement', e.target.value) }}
+                    onBlur={() => autoSave('create_statement', createText)}
+                    rows={5}
+                    style={{ width: '100%', fontSize: 14, lineHeight: 1.6, border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 12px', background: '#FFF', color: '#2D2A26', outline: 'none', resize: 'vertical', fontFamily: FONT, boxSizing: 'border-box' }}
+                  />
+                )}
               </div>
-              <textarea
-                value={createText}
-                onChange={e => { setCreateText(e.target.value); autoSave('create_statement', e.target.value) }}
-                onBlur={() => autoSave('create_statement', createText)}
-                rows={5}
-                style={{ width: '100%', fontSize: 14, lineHeight: 1.6, border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 12px', background: '#FFF', color: '#2D2A26', outline: 'none', resize: 'vertical', fontFamily: FONT, boxSizing: 'border-box' }}
-              />
-            </div>
+
+              {/* Capture — only when not created */}
+              {!isWeekCreated && (
+                <div style={{ marginBottom: 16 }}>
+                  <CaptureInput source="organize" placeholder="Capture something..." onItemCreated={() => loadData()} onLogEntry={() => loadData()} />
+                </div>
+              )}
+
+              {!isWeekCreated ? (
+                <button
+                  onClick={handleCreateWeek}
+                  style={{
+                    width: '100%', padding: '10px 0', borderRadius: 8, border: 'none',
+                    background: '#4B82AF', color: '#FFF', fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: FONT, marginBottom: 12,
+                  }}
+                >
+                  Create this week
+                </button>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  <a href="/organize" style={{ fontSize: 13, color: '#8A8578', textDecoration: 'none' }}>Organize this week →</a>
+                </div>
+              )}
+            </>
           )}
-
-          {/* Checkboxes — Completed is this week, rest are next week */}
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-            <span onClick={() => toggleCheckbox('completed_at_ritual')} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 12, color: isChecked('completed_at_ritual', weekRecord) ? '#2D2A26' : '#B5B0A8' }}>
-              <span style={checkboxStyle(isChecked('completed_at_ritual', weekRecord))}>{isChecked('completed_at_ritual', weekRecord) ? '✓' : ''}</span>
-              Completed
-            </span>
-            {(['created_at_ritual', 'organized_at', 'deconflicted_at'] as const).map(field => {
-              const label = field === 'created_at_ritual' ? 'Created' : field === 'organized_at' ? 'Organized' : 'De-conflicted'
-              return (
-                <span key={field} onClick={() => toggleCheckbox(field)} style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', fontSize: 12, color: isChecked(field, nextWeekRecord) ? '#2D2A26' : '#B5B0A8' }}>
-                  <span style={checkboxStyle(isChecked(field, nextWeekRecord))}>{isChecked(field, nextWeekRecord) ? '✓' : ''}</span>
-                  {label}
-                </span>
-              )
-            })}
-          </div>
-
-          {/* Capture */}
-          <div style={{ marginBottom: 16 }}>
-            <CaptureInput
-              source={tab === 'complete' ? 'today' : 'organize'}
-              placeholder="Capture something..."
-              onItemCreated={() => loadData()}
-              onLogEntry={() => loadData()}
-            />
-          </div>
-
-          {/* Flow links */}
-          <div style={{ display: 'flex', gap: 16 }}>
-            {tab === 'complete' && (
-              <span onClick={() => setTab('create')} style={{ fontSize: 12, color: '#C4725A', cursor: 'pointer' }}>
-                Create next week →
-              </span>
-            )}
-            {tab === 'create' && (
-              <a href="/organize" style={{ fontSize: 12, color: '#8A8578', textDecoration: 'none' }}>Organize this week →</a>
-            )}
-          </div>
         </div>
       </div>
     </div>
@@ -433,7 +496,7 @@ const LINE_HEIGHT = 1.6
 const MAX_LINES = 5
 const MAX_HEIGHT = `calc(${MAX_LINES} * ${LINE_HEIGHT}em)`
 
-function CaptureEntryRow({ entry, onDelete }: { entry: CaptureEntry; onDelete: () => void }) {
+function CaptureEntryRow({ entry, onDelete, editable = true }: { entry: CaptureEntry; onDelete: () => void; editable?: boolean }) {
   const { timestamp, text, type, tag } = entry
   const isCompleted = type === 'completed'
   const isReflection = type === 'reflection'
@@ -441,7 +504,7 @@ function CaptureEntryRow({ entry, onDelete }: { entry: CaptureEntry; onDelete: (
   const isSubItem = tag === 'sub_item'
   const isScheduled = tag === 'scheduled'
   const isInProgress = tag === 'in_progress'
-  const isDeletable = type === 'action_item' || type === 'day_log' || type === 'completed' || type === 'note'
+  const isDeletable = editable && (type === 'action_item' || type === 'day_log' || type === 'completed' || type === 'note')
   const [expanded, setExpanded] = useState(false)
   const [needsTruncation, setNeedsTruncation] = useState(false)
   const [hovered, setHovered] = useState(false)
