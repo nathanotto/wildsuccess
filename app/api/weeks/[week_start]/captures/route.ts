@@ -76,14 +76,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     ...capturedLogs.map(l => l.action_item_id).filter(Boolean),
     ...completedLogs.map(l => l.action_item_id).filter(Boolean),
   ])]
-  const itemsMap: Record<string, { name: string; scheduled_time: string | null; committed_date: string | null; status: string; parent_action_item_id: string | null }> = {}
+  const itemsMap: Record<string, { name: string; scheduled_time: string | null; committed_date: string | null; status: string; parent_action_item_id: string | null; parked_until: string | null }> = {}
   if (allItemIds.length > 0) {
     const { data: items } = await supabase
       .from('action_items')
-      .select('id, name, scheduled_time, committed_date, status, parent_action_item_id')
+      .select('id, name, scheduled_time, committed_date, status, parent_action_item_id, parked_until')
       .in('id', allItemIds as string[])
     for (const item of items ?? []) {
-      itemsMap[item.id] = { name: item.name, scheduled_time: item.scheduled_time, committed_date: item.committed_date, status: item.status, parent_action_item_id: item.parent_action_item_id }
+      itemsMap[item.id] = { name: item.name, scheduled_time: item.scheduled_time, committed_date: item.committed_date, status: item.status, parent_action_item_id: item.parent_action_item_id, parked_until: item.parked_until }
     }
   }
 
@@ -100,9 +100,14 @@ export async function GET(req: NextRequest, { params }: Params) {
   }> = []
 
   // User-initiated captures (things the user typed)
-  // Skip items that also have a completion event — those show as ✓ completions instead
+  // Skip items that have a completion event (those show as ✓ completions instead)
+  // Skip items parked beyond this week (user deferred them — they belong to a future week)
   for (const log of capturedLogs) {
     if (log.action_item_id && completedActionItemIds.has(log.action_item_id)) continue
+    if (log.action_item_id) {
+      const item = itemsMap[log.action_item_id]
+      if (item?.status === 'parked' && item.parked_until && item.parked_until >= weekEndStr) continue
+    }
     const item = log.action_item_id ? itemsMap[log.action_item_id] : null
     const text = item?.name ?? (log.metadata as Record<string, unknown> | null)?.cleanedName as string ?? log.note ?? ''
     if (!text) continue
