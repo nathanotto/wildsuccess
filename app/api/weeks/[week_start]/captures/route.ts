@@ -24,17 +24,16 @@ export async function GET(req: NextRequest, { params }: Params) {
   // Fetch all capture-like content in parallel
   const [capturedRes, notesRes, loggedRes, completedRes, completionsRes] = await Promise.all([
     // User-initiated captures — action_log 'captured' and 'scheduled' events
-    // This is the user's voice: things they typed into the capture field.
-    // Batch-created items (auto-propose) have no action_log entries, so they're excluded naturally.
+    // Uses event_date (local date) for reliable week boundaries
     supabase
       .from('action_log')
-      .select('id, action_item_id, note, metadata, created_at')
+      .select('id, action_item_id, note, metadata, event_date, created_at')
       .eq('user_id', user.id)
       .in('event_type', ['captured', 'scheduled'])
-      .gte('created_at', startISO)
-      .lt('created_at', endISO)
+      .gte('event_date', week_start)
+      .lt('event_date', weekEndStr)
       .order('created_at', { ascending: true }),
-    // Notes added during the week
+    // Notes added during the week (uses created_at — no event_date on item_notes)
     supabase
       .from('item_notes')
       .select('id, content, created_at, action_item_id, note_type')
@@ -44,11 +43,11 @@ export async function GET(req: NextRequest, { params }: Params) {
     // Day log entries (user narrations) during the week
     supabase
       .from('action_log')
-      .select('id, note, metadata, created_at')
+      .select('id, note, metadata, event_date, created_at')
       .eq('user_id', user.id)
       .eq('event_type', 'logged')
-      .gte('created_at', startISO)
-      .lt('created_at', endISO)
+      .gte('event_date', week_start)
+      .lt('event_date', weekEndStr)
       .order('created_at', { ascending: true }),
     // Completion events during the week
     supabase
