@@ -98,7 +98,14 @@ function fmtNoteTime(isoStr: string) {
   const m = d.getMinutes()
   const ampm = h < 12 ? 'a' : 'p'
   const hour = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return `${hour}:${String(m).padStart(2, '0')}${ampm}`
+  const time = `${hour}:${String(m).padStart(2, '0')}${ampm}`
+  // Include date if not today
+  const today = new Date()
+  if (d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate()) {
+    return time
+  }
+  const mon = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return `${mon} ${time}`
 }
 
 function currentTimeStr() {
