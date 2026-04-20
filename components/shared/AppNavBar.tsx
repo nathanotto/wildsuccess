@@ -79,7 +79,7 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
   const MOBILE_QUICK_TABS = [
     { name: 'Today', path: '/today' },
     { name: 'Week', path: '/week' },
-    { name: 'Review', path: '/review' },
+    { name: 'Search', path: '/search' },
   ]
 
   return (
@@ -175,8 +175,12 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
 
         <div style={{ flex: 1 }} />
 
-        {/* Desktop: settings, logout, user menu */}
+        {/* Desktop: search, settings, logout, user menu */}
         <div className="nav-desktop-right">
+          <button onClick={() => router.push('/search')}
+            style={{ fontSize: 10, color: '#8A8578', cursor: 'pointer', marginRight: 6, background: 'none', border: 'none' }}>
+            Search
+          </button>
           <button onClick={() => router.push('/settings')}
             style={{ fontSize: 10, color: '#8A8578', cursor: 'pointer', marginRight: 6, background: 'none', border: 'none' }}>
             Settings

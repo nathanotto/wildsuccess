@@ -578,6 +578,7 @@ function CaptureEntryRow({ entry, onDelete, editable = true }: { entry: CaptureE
   const { timestamp, text, type, tag } = entry
   const isCompleted = type === 'completed'
   const isReflection = type === 'reflection'
+  const isLog = type === 'day_log'
   const isSkipped = tag === 'skipped'
   const isSubItem = tag === 'sub_item'
   const isScheduled = tag === 'scheduled'
@@ -596,7 +597,12 @@ function CaptureEntryRow({ entry, onDelete, editable = true }: { entry: CaptureE
 
   return (
     <div
-      style={{ display: 'flex', gap: 0, marginBottom: 8, alignItems: 'flex-start', paddingLeft: isSubItem ? 24 : 0 }}
+      style={{
+        display: 'flex', gap: 0, marginBottom: 8, alignItems: 'flex-start',
+        paddingLeft: isSubItem ? 24 : 0,
+        ...(isLog ? { borderLeft: '3px solid #C4725A40', paddingLeft: 8, marginLeft: isSubItem ? 24 : 0, background: '#FDF9F7', borderRadius: 2, padding: '4px 0 4px 8px' } : {}),
+        ...(isReflection ? { borderLeft: '3px solid #8A857D40', paddingLeft: 8, background: '#F8F7F4', borderRadius: 2, padding: '4px 0 4px 8px' } : {}),
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
