@@ -1454,10 +1454,12 @@ export default function TodayPage({ displayName }: Props) {
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
+  const pageBg = isYesterday ? '#FAF8F5' : isTomorrow ? '#F7F9FA' : '#FAFAF7'
   const pageStyle: React.CSSProperties = {
     maxWidth: 860, padding: '0 20px',
     fontFamily: '"Source Sans 3", "Source Sans Pro", sans-serif',
-    fontSize: 14, color: '#2D2A26', background: '#FAFAF7', minHeight: '100vh',
+    fontSize: 14, color: '#2D2A26', background: pageBg, minHeight: '100vh',
+    transition: 'background 0.3s ease',
   }
 
   return (
@@ -1509,6 +1511,11 @@ export default function TodayPage({ displayName }: Props) {
                     <div style={{ fontSize: 14, color: isTomorrow ? '#4B6A82' : '#8A8578', fontWeight: isTomorrow ? 700 : 400 }}>Tomorrow</div>
                     <div style={{ fontSize: 11, color: '#B5B0A8' }}>{fmtDate(addDays(todayStr, 1))}</div>
                   </span>
+                  <div style={{
+                    height: 2, marginTop: 6,
+                    background: isYesterday ? '#B8443E40' : isTomorrow ? '#4B6A8240' : '#2D2A2620',
+                    borderRadius: 1, transition: 'background 0.3s ease',
+                  }} />
                 </div>
               )
             })()}
