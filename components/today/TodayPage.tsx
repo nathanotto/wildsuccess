@@ -682,7 +682,7 @@ function FocusView({
         <button
           onClick={() => onStatusChange(item.id, 'skipped').then(onBack)}
           style={actionBtnStyle}>
-          ✕ Drop it
+          ✕ Something changed
         </button>
         <button
           onClick={() => { if (window.confirm('Delete this item permanently?')) onDelete(item.id).then(onBack) }}
@@ -946,13 +946,13 @@ export default function TodayPage({ displayName }: Props) {
     loadData(selectedDate)
   }, [selectedDate, loadData])
 
-  // Derived — skipped scheduled items float up to the todo section
+  // Derived — skipped scheduled items stay in the schedule (something changed, but it was planned)
   const todoItems = items
-    .filter(i => !i.scheduled_time || i.status === 'skipped')
+    .filter(i => !i.scheduled_time)
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   const scheduleItems = items
-    .filter(i => !!i.scheduled_time && i.status !== 'skipped')
+    .filter(i => !!i.scheduled_time)
     .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
 
   const stats = {
