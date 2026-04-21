@@ -552,6 +552,23 @@ export default function ArrangePage({ missionId }: Props) {
           <div style={{ padding: '6px 10px', borderBottom: '1px solid #E8E4DC', fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Thread
           </div>
+          {active && (
+            <div style={{ padding: '6px 10px', borderBottom: '1px solid #F0EDE8' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input
+                  value={threadInput}
+                  onChange={e => setThreadInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postThreadMessage() } }}
+                  placeholder="Message…"
+                  style={{ flex: 1, padding: '4px 6px', borderRadius: 4, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
+                />
+                <button onClick={postThreadMessage} disabled={!threadInput.trim()}
+                  style={{ ...smallBtn, fontSize: 9, background: threadInput.trim() ? '#2D2A26' : 'transparent', color: threadInput.trim() ? '#FFF' : '#B5B0A8', border: threadInput.trim() ? 'none' : '1px solid #E8E4DC' }}>
+                  Send
+                </button>
+              </div>
+            </div>
+          )}
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
             {!active ? (
               <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 8 }}>Select a COA</div>
@@ -578,23 +595,6 @@ export default function ArrangePage({ missionId }: Props) {
             )}
             <div ref={threadEndRef} />
           </div>
-          {active && (
-            <div style={{ padding: '6px 10px', borderTop: '1px solid #E8E4DC' }}>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <input
-                  value={threadInput}
-                  onChange={e => setThreadInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postThreadMessage() } }}
-                  placeholder="Message…"
-                  style={{ flex: 1, padding: '4px 6px', borderRadius: 4, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
-                />
-                <button onClick={postThreadMessage} disabled={!threadInput.trim()}
-                  style={{ ...smallBtn, fontSize: 9, background: threadInput.trim() ? '#2D2A26' : 'transparent', color: threadInput.trim() ? '#FFF' : '#B5B0A8', border: threadInput.trim() ? 'none' : '1px solid #E8E4DC' }}>
-                  Send
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
