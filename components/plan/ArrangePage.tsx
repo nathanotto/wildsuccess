@@ -278,9 +278,7 @@ export default function ArrangePage({ missionId }: Props) {
         .arrange-panels { display: flex; height: calc(100vh - 60px); }
         .arrange-kanban { width: 200px; flex-shrink: 0; border-right: 1px solid #E8E4DC; overflow-y: auto; background: #F7F5F0; }
         .arrange-workspace { flex: 1; overflow-y: auto; min-width: 0; }
-        .arrange-context { width: 240px; flex-shrink: 0; border-left: 1px solid #E8E4DC; overflow-y: auto; background: #F7F5F0; }
         @media (max-width: 900px) {
-          .arrange-context { display: none; }
         }
         @media (max-width: 600px) {
           .arrange-kanban { width: 160px; }
@@ -374,11 +372,13 @@ export default function ArrangePage({ missionId }: Props) {
         </div>
 
         {/* ── Center: Active COA Workspace ────────────────────────────────── */}
-        <div className="arrange-workspace" style={{ padding: '20px 28px' }}>
+        <div className="arrange-workspace" style={{ padding: '20px 28px', display: 'flex', gap: 24 }}>
           {!active ? (
-            <div style={{ color: '#B5B0A8', fontSize: 13, paddingTop: 40, textAlign: 'center' }}>Select a COA from the left panel</div>
+            <div style={{ color: '#B5B0A8', fontSize: 13, paddingTop: 40, textAlign: 'center', flex: 1 }}>Select a COA from the left panel</div>
           ) : (
             <>
+              {/* COA Details (left side of workspace) */}
+              <div style={{ flex: 1, minWidth: 0 }}>
               {/* Header */}
               <div style={{ marginBottom: 20 }}>
                 {editingOutcome ? (
@@ -519,68 +519,54 @@ export default function ArrangePage({ missionId }: Props) {
                 )}
                 <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={smallBtn}>View summary</button>
               </div>
-            </>
-          )}
-        </div>
+              </div>{/* end COA details */}
 
-        {/* ── Right: COA Thread ─────────────────────────────────────────── */}
-        <div className="arrange-context" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-          {/* Thread header */}
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid #E8E4DC', fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Thread{active ? ` · ${active.action.slice(0, 30)}${active.action.length > 30 ? '…' : ''}` : ''}
-          </div>
-
-          {/* Messages */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
-            {!active ? (
-              <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 12 }}>Select a COA</div>
-            ) : threadMessages.length === 0 ? (
-              <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 12 }}>No messages yet</div>
-            ) : (
-              threadMessages.map(msg => {
-                const isOwn = msg.user_id === currentUserId
-                const authorName = userNames[msg.user_id] ?? 'Unknown'
-                const color = getAuthorColor(msg.user_id, isOwn)
-                const time = new Date(msg.created_at)
-                const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-                  time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
-                return (
-                  <div key={msg.id} style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 9, color: '#B5B0A8', marginBottom: 1 }}>{timeStr}</div>
-                    <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-                      <span style={{ fontWeight: 600, color }}>{isOwn ? 'You' : authorName}:</span>{' '}
-                      <span style={{ color: '#2D2A26' }}>{msg.description}</span>
-                    </div>
+              {/* COA Thread (right side of workspace) */}
+              <div style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', border: '1px solid #E8E4DC', borderRadius: 8, background: '#FAFAF7', maxHeight: 'calc(100vh - 120px)' }}>
+                <div style={{ padding: '6px 10px', borderBottom: '1px solid #E8E4DC', fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Thread
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+                  {threadMessages.length === 0 ? (
+                    <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 8 }}>No messages yet</div>
+                  ) : (
+                    threadMessages.map(msg => {
+                      const isOwn = msg.user_id === currentUserId
+                      const authorName = userNames[msg.user_id] ?? 'Unknown'
+                      const color = getAuthorColor(msg.user_id, isOwn)
+                      const time = new Date(msg.created_at)
+                      const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+                        time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
+                      return (
+                        <div key={msg.id} style={{ marginBottom: 8 }}>
+                          <div style={{ fontSize: 8, color: '#C4BFB4', marginBottom: 1 }}>{timeStr}</div>
+                          <div style={{ fontSize: 12, lineHeight: 1.4 }}>
+                            <span style={{ fontWeight: 600, color }}>{isOwn ? 'You' : authorName}:</span>{' '}
+                            {msg.description}
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                  <div ref={threadEndRef} />
+                </div>
+                <div style={{ padding: '6px 8px', borderTop: '1px solid #E8E4DC' }}>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <input
+                      value={threadInput}
+                      onChange={e => setThreadInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postThreadMessage() } }}
+                      placeholder="Message…"
+                      style={{ flex: 1, padding: '4px 6px', borderRadius: 4, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
+                    />
+                    <button onClick={postThreadMessage} disabled={!threadInput.trim()}
+                      style={{ ...smallBtn, fontSize: 9, background: threadInput.trim() ? '#2D2A26' : 'transparent', color: threadInput.trim() ? '#FFF' : '#B5B0A8', border: threadInput.trim() ? 'none' : '1px solid #E8E4DC' }}>
+                      Send
+                    </button>
                   </div>
-                )
-              })
-            )}
-            <div ref={threadEndRef} />
-          </div>
-
-          {/* Input */}
-          {active && (
-            <div style={{ padding: '6px 10px', borderTop: '1px solid #E8E4DC' }}>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <input
-                  value={threadInput}
-                  onChange={e => setThreadInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postThreadMessage() } }}
-                  placeholder="Message…"
-                  style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
-                />
-                <button onClick={postThreadMessage} disabled={!threadInput.trim()}
-                  style={{ ...smallBtn, fontSize: 10, background: threadInput.trim() ? '#2D2A26' : 'transparent', color: threadInput.trim() ? '#FFF' : '#B5B0A8', border: threadInput.trim() ? 'none' : '1px solid #E8E4DC' }}>
-                  Send
-                </button>
+                </div>
               </div>
-              {/* Quick links */}
-              <div style={{ display: 'flex', gap: 8, marginTop: 6, fontSize: 9, color: '#B5B0A8' }}>
-                <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Overview</span>
-                <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>COAs</span>
-                <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/close`)}>Close</span>
-              </div>
-            </div>
+            </>
           )}
         </div>
       </div>
