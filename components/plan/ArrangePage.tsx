@@ -56,6 +56,7 @@ export default function ArrangePage({ missionId }: Props) {
   const [editingOutcome, setEditingOutcome] = useState(false)
   const [outcomeText, setOutcomeText] = useState('')
   const [noteInput, setNoteInput] = useState('')
+  const [showLogPopover, setShowLogPopover] = useState(false)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [toastVisible, setToastVisible] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -275,26 +276,51 @@ export default function ArrangePage({ missionId }: Props) {
   return (
     <div style={{ fontFamily: FONT, background: '#FAFAF7', minHeight: '100vh', color: '#2D2A26' }}>
       <style>{`
-        .arrange-panels { display: flex; height: calc(100vh - 60px); }
-        .arrange-kanban { width: 200px; flex-shrink: 0; border-right: 1px solid #E8E4DC; overflow-y: auto; background: #F7F5F0; }
-        .arrange-workspace { flex: 1; overflow-y: auto; min-width: 0; }
-        @media (max-width: 900px) {
-        }
-        @media (max-width: 600px) {
-          .arrange-kanban { width: 160px; }
+        .arrange-grid { display: grid; grid-template-columns: 20% 52% 28%; height: calc(100vh - 90px); }
+        .arrange-col { overflow-y: auto; }
+        @media (max-width: 800px) {
+          .arrange-grid { grid-template-columns: 160px 1fr; }
+          .arrange-thread { display: none; }
         }
       `}</style>
 
-      {/* Header */}
-      <div style={{ padding: '8px 16px', borderBottom: '1px solid #E8E4DC', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>← Mission</span>
-        <span style={{ fontSize: 14, fontWeight: 700, color: '#C4725A' }}>{mission?.name ?? ''}</span>
-        <span style={{ fontSize: 10, color: '#8A8578' }}>{accountedFactors.size}/{factors.length} factors ({pct}%)</span>
+      {/* Header row 1: mission context */}
+      <div style={{ padding: '6px 16px', borderBottom: '1px solid #F0EDE8', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer', flexShrink: 0 }} onClick={() => router.push(`/plan/${missionId}`)}>← Mission</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: '#C4725A' }}>{mission?.name ?? ''}</span>
+        {mission?.description && (
+          <span style={{ fontSize: 12, color: '#B5B0A8', fontStyle: 'italic', flex: 1, minWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mission.description}</span>
+        )}
+        <span style={{ fontSize: 10, color: '#8A8578', flexShrink: 0 }}>{accountedFactors.size}/{factors.length} factors ({pct}%)</span>
       </div>
 
-      <div className="arrange-panels">
-        {/* ── Left: Kanban ───────────────────────────────────────────────── */}
-        <div className="arrange-kanban">
+      {/* Header row 2: links + mission log button */}
+      <div style={{ padding: '4px 16px 6px', borderBottom: '1px solid #E8E4DC', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Overview</span>
+        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>COA page</span>
+        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/commitments`)}>Commitments</span>
+        <div style={{ flex: 1 }} />
+        <div style={{ position: 'relative' }}>
+          <button onClick={() => setShowLogPopover(!showLogPopover)} style={{ ...smallBtn, fontSize: 10 }}>+ Add to mission log</button>
+          {showLogPopover && (
+            <div style={{ position: 'absolute', right: 0, top: 28, background: '#FFF', border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 12px', width: 280, zIndex: 20, boxShadow: '0 4px 16px #2D2A2610' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input value={noteInput} onChange={e => setNoteInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { addNote(); setShowLogPopover(false) } if (e.key === 'Escape') setShowLogPopover(false) }}
+                  placeholder="Add a note to the mission log…" autoFocus
+                  style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
+                />
+                <button onClick={() => { addNote(); setShowLogPopover(false) }} style={{ ...smallBtn, background: '#2D2A26', color: '#FFF', border: 'none' }}>Add</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Three-column grid */}
+      <div className="arrange-grid">
+        {/* ── Column 1: Kanban ────────────────────────────────────────────── */}
+        <div className="arrange-col" style={{ borderRight: '1px solid #E8E4DC', background: '#F7F5F0' }}>
           {HORIZONS.map(h => {
             const sectionCoas = coas.filter(c => c.time_horizon === h.key).sort((a, b) => a.sort_order - b.sort_order)
             const activeCoas = sectionCoas.filter(c => c.status !== 'completed')
@@ -371,14 +397,12 @@ export default function ArrangePage({ missionId }: Props) {
           })}
         </div>
 
-        {/* ── Center: Active COA Workspace ────────────────────────────────── */}
-        <div className="arrange-workspace" style={{ padding: '20px 28px', display: 'flex', gap: 24 }}>
+        {/* ── Column 2: COA Details ──────────────────────────────────────── */}
+        <div className="arrange-col" style={{ padding: '16px 24px' }}>
           {!active ? (
-            <div style={{ color: '#B5B0A8', fontSize: 13, paddingTop: 40, textAlign: 'center', flex: 1 }}>Select a COA from the left panel</div>
+            <div style={{ color: '#B5B0A8', fontSize: 13, paddingTop: 40, textAlign: 'center' }}>Select a COA from the left</div>
           ) : (
-            <>
-              {/* COA Details (left side of workspace) */}
-              <div style={{ flex: 1, minWidth: 400 }}>
+            <div>
               {/* Header */}
               <div style={{ marginBottom: 20 }}>
                 {editingOutcome ? (
@@ -406,7 +430,7 @@ export default function ArrangePage({ missionId }: Props) {
                 )}
 
                 {/* Status + time horizon */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'nowrap' }}>
                   <span style={{ fontSize: 11, fontWeight: 600, color: active.status === 'completed' ? '#5A9E6F' : active.status === 'committed' ? '#C4725A' : '#8A8578' }}>
                     {active.status}
                   </span>
@@ -519,54 +543,57 @@ export default function ArrangePage({ missionId }: Props) {
                 )}
                 <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={smallBtn}>View summary</button>
               </div>
-              </div>{/* end COA details */}
+            </div>
+          )}
+        </div>
 
-              {/* COA Thread (right side of workspace) */}
-              <div style={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', border: '1px solid #E8E4DC', borderRadius: 8, background: '#FAFAF7', height: 'fit-content', maxHeight: 480 }}>
-                <div style={{ padding: '6px 10px', borderBottom: '1px solid #E8E4DC', fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Thread
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
-                  {threadMessages.length === 0 ? (
-                    <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 8 }}>No messages yet</div>
-                  ) : (
-                    threadMessages.map(msg => {
-                      const isOwn = msg.user_id === currentUserId
-                      const authorName = userNames[msg.user_id] ?? 'Unknown'
-                      const color = getAuthorColor(msg.user_id, isOwn)
-                      const time = new Date(msg.created_at)
-                      const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-                        time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
-                      return (
-                        <div key={msg.id} style={{ marginBottom: 8 }}>
-                          <div style={{ fontSize: 8, color: '#C4BFB4', marginBottom: 1 }}>{timeStr}</div>
-                          <div style={{ fontSize: 12, lineHeight: 1.4 }}>
-                            <span style={{ fontWeight: 600, color }}>{isOwn ? 'You' : authorName}:</span>{' '}
-                            {msg.description}
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                  <div ref={threadEndRef} />
-                </div>
-                <div style={{ padding: '6px 8px', borderTop: '1px solid #E8E4DC' }}>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <input
-                      value={threadInput}
-                      onChange={e => setThreadInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postThreadMessage() } }}
-                      placeholder="Message…"
-                      style={{ flex: 1, padding: '4px 6px', borderRadius: 4, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
-                    />
-                    <button onClick={postThreadMessage} disabled={!threadInput.trim()}
-                      style={{ ...smallBtn, fontSize: 9, background: threadInput.trim() ? '#2D2A26' : 'transparent', color: threadInput.trim() ? '#FFF' : '#B5B0A8', border: threadInput.trim() ? 'none' : '1px solid #E8E4DC' }}>
-                      Send
-                    </button>
+        {/* ── Column 3: Thread ────────────────────────────────────────────── */}
+        <div className="arrange-col arrange-thread" style={{ borderLeft: '1px solid #E8E4DC', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '6px 10px', borderBottom: '1px solid #E8E4DC', fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Thread
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+            {!active ? (
+              <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 8 }}>Select a COA</div>
+            ) : threadMessages.length === 0 ? (
+              <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 8 }}>No messages yet</div>
+            ) : (
+              threadMessages.map(msg => {
+                const isOwn = msg.user_id === currentUserId
+                const authorName = userNames[msg.user_id] ?? 'Unknown'
+                const color = getAuthorColor(msg.user_id, isOwn)
+                const time = new Date(msg.created_at)
+                const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+                  time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
+                return (
+                  <div key={msg.id} style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 8, color: '#C4BFB4', marginBottom: 1 }}>{timeStr}</div>
+                    <div style={{ fontSize: 12, lineHeight: 1.4 }}>
+                      <span style={{ fontWeight: 600, color }}>{isOwn ? 'You' : authorName}:</span>{' '}
+                      {msg.description}
+                    </div>
                   </div>
-                </div>
+                )
+              })
+            )}
+            <div ref={threadEndRef} />
+          </div>
+          {active && (
+            <div style={{ padding: '6px 10px', borderTop: '1px solid #E8E4DC' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input
+                  value={threadInput}
+                  onChange={e => setThreadInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postThreadMessage() } }}
+                  placeholder="Message…"
+                  style={{ flex: 1, padding: '4px 6px', borderRadius: 4, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
+                />
+                <button onClick={postThreadMessage} disabled={!threadInput.trim()}
+                  style={{ ...smallBtn, fontSize: 9, background: threadInput.trim() ? '#2D2A26' : 'transparent', color: threadInput.trim() ? '#FFF' : '#B5B0A8', border: threadInput.trim() ? 'none' : '1px solid #E8E4DC' }}>
+                  Send
+                </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
