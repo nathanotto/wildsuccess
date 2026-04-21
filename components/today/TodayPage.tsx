@@ -502,9 +502,8 @@ function FocusView({
           style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
         >
           <span style={{ fontSize: 8 }}>{showSteps ? '▼' : '▶'}</span>
-          Steps &amp; Notes
-          {!showSteps && steps.length > 0 && <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none' }}>({steps.filter(s => !s.is_completed).length} steps remaining{notesList.length > 0 ? `, ${notesList.length} notes` : ''})</span>}
-          {!showSteps && steps.length === 0 && notesList.length > 0 && <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none' }}>({notesList.length} notes)</span>}
+          Steps
+          {!showSteps && steps.length > 0 && <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none' }}>({steps.filter(s => !s.is_completed).length} remaining)</span>}
         </div>
         {showSteps && steps.map((s) => (
           <div key={s.id} style={{
@@ -542,31 +541,29 @@ function FocusView({
         )}
       </div>
 
-      {/* Notes section — collapsed/expanded with steps */}
-      {showSteps && (
-        <div style={section}>
-          <div style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-            Notes
-          </div>
-          {notesList.map(n => (
-            <div key={n.id} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 11, color: '#B5B0A8', width: 38, flexShrink: 0, paddingTop: 1 }}>
-                {fmtNoteTime(n.created_at)}
-              </span>
-              <span style={{ fontSize: 12, color: '#8A8578' }}>{n.content}</span>
-            </div>
-          ))}
-          {!isPast && (
-            <input
-              value={noteInput}
-              onChange={e => setNoteInput(e.target.value)}
-              onKeyDown={handleAddNote}
-              placeholder="add note..."
-              style={{ ...inputStyle, paddingLeft: 46 }}
-            />
-          )}
+      {/* Notes section */}
+      <div style={section}>
+        <div style={{ fontSize: 11, color: '#8A8578', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+          Notes
         </div>
-      )}
+        {notesList.map(n => (
+          <div key={n.id} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 11, color: '#B5B0A8', width: 38, flexShrink: 0, paddingTop: 1 }}>
+              {fmtNoteTime(n.created_at)}
+            </span>
+            <span style={{ fontSize: 12, color: '#8A8578' }}>{n.content}</span>
+          </div>
+        ))}
+        {!isPast && (
+          <input
+            value={noteInput}
+            onChange={e => setNoteInput(e.target.value)}
+            onKeyDown={handleAddNote}
+            placeholder="add note..."
+            style={{ ...inputStyle, paddingLeft: 46 }}
+          />
+        )}
+      </div>
 
       {/* Follow-ups for time-locked (meeting) items */}
       {!isPast && isTimeLocked && (
