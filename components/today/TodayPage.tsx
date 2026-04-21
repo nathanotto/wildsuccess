@@ -1461,12 +1461,10 @@ export default function TodayPage({ displayName }: Props) {
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
-  const accentColor = isYesterday ? '#B8443E' : isTomorrow ? '#4B6A82' : null
   const pageStyle: React.CSSProperties = {
     maxWidth: 860, padding: '0 20px',
     fontFamily: '"Source Sans 3", "Source Sans Pro", sans-serif',
     fontSize: 14, color: '#2D2A26', background: '#FAFAF7', minHeight: '100vh',
-    borderLeft: accentColor ? `3px solid ${accentColor}` : '3px solid transparent',
   }
 
   return (
@@ -1499,7 +1497,13 @@ export default function TodayPage({ displayName }: Props) {
                 return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
               }
               return (
-                <div style={{ display: 'flex', gap: 20, paddingTop: 16, paddingBottom: 8 }}>
+                <div style={{
+                  display: 'flex', gap: 20, paddingTop: 16, paddingBottom: 8,
+                  margin: '0 -20px', padding: '16px 20px 8px',
+                  background: isYesterday ? '#FAF0EE' : isTomorrow ? '#EEF2FA' : 'transparent',
+                  borderRadius: 4,
+                  transition: 'background 0.2s ease',
+                }}>
                   <span
                     onClick={() => setSelectedDate(addDays(todayStr, -1))}
                     style={{ cursor: 'pointer', textAlign: 'center' }}>
