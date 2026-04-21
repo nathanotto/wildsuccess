@@ -256,58 +256,74 @@ export default function MissionOverviewPage({ missionId }: Props) {
       <div style={{ display: 'flex', gap: 24 }}>
         {/* Sidebar */}
         <div style={{ width: 240, flexShrink: 0 }}>
-          {editingName ? (
+          {/* Closure banner for closed missions */}
+          {CLOSED_STATUSES.includes(mission.status) && (() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const m = mission as any
+            const closureType: string | null = m.closure_type ?? null
+            const closedAt: string | null = m.closed_at ?? null
+            const closureNote: string | null = m.closure_note ?? null
+            return (
+              <div style={{ marginBottom: 16, padding: '10px 12px', background: '#F4FDF7', border: '1px solid #5A9E6F40', borderRadius: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#5A9E6F', marginBottom: 4 }}>Mission closed</div>
+                {closureType && (
+                  <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 2 }}>
+                    {CLOSURE_LABELS[closureType] ?? closureType}
+                  </div>
+                )}
+                {closedAt && (
+                  <div style={{ fontSize: 10, color: '#B5B0A8' }}>
+                    {new Date(closedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </div>
+                )}
+                {closureNote && (
+                  <div style={{ fontSize: 11, color: '#8A8578', marginTop: 6, lineHeight: 1.5, fontStyle: 'italic' }}>
+                    {closureNote}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Name — read-only when closed */}
+          {!CLOSED_STATUSES.includes(mission.status) && editingName ? (
             <textarea
               value={nameDraft}
               onChange={e => setNameDraft(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleRename() } if (e.key === 'Escape') setEditingName(false) }}
               onBlur={() => handleRename()}
-              autoFocus
-              rows={3}
-              style={{
-                fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: '0 0 8px',
-                border: '1px solid #C4725A', borderRadius: 4, padding: '4px 6px',
-                outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box',
-                resize: 'none', lineHeight: 1.3,
-              }}
+              autoFocus rows={3}
+              style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: '0 0 8px', border: '1px solid #C4725A', borderRadius: 4, padding: '4px 6px', outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', resize: 'none', lineHeight: 1.3 }}
             />
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px' }}>
               <h1 style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: 0 }}>{mission.name}</h1>
-              <button
-                onClick={() => { setEditingName(true); setNameDraft(mission.name) }}
-                title="Rename mission"
-                style={{
-                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                  fontSize: 14, color: '#B5B0A8', lineHeight: 1,
-                }}
-              >✎</button>
+              {!CLOSED_STATUSES.includes(mission.status) && (
+                <button onClick={() => { setEditingName(true); setNameDraft(mission.name) }} title="Rename mission"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14, color: '#B5B0A8', lineHeight: 1 }}>✎</button>
+              )}
             </div>
           )}
-          {editingDesc ? (
+
+          {/* Description — read-only when closed */}
+          {!CLOSED_STATUSES.includes(mission.status) && editingDesc ? (
             <textarea
               value={descDraft}
               onChange={e => setDescDraft(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleDescSave() } if (e.key === 'Escape') setEditingDesc(false) }}
               onBlur={() => handleDescSave()}
-              autoFocus
-              rows={3}
-              style={{
-                fontSize: 12, color: '#8A8578', margin: '0 0 12px', lineHeight: 1.5, width: '100%',
-                border: '1px solid #C4725A', borderRadius: 4, padding: '4px 6px',
-                outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box',
-              }}
+              autoFocus rows={3}
+              style={{ fontSize: 12, color: '#8A8578', margin: '0 0 12px', lineHeight: 1.5, width: '100%', border: '1px solid #C4725A', borderRadius: 4, padding: '4px 6px', outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
             />
           ) : (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '0 0 12px' }}>
               <p style={{ fontSize: 12, color: '#8A8578', margin: 0, lineHeight: 1.5, flex: 1 }}>
                 {mission.description || <span style={{ fontStyle: 'italic', color: '#B5B0A8' }}>No description</span>}
               </p>
-              <button
-                onClick={() => { setEditingDesc(true); setDescDraft(mission.description ?? '') }}
-                title="Edit description"
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: '#B5B0A8', lineHeight: 1, flexShrink: 0 }}
-              >✎</button>
+              {!CLOSED_STATUSES.includes(mission.status) && (
+                <button onClick={() => { setEditingDesc(true); setDescDraft(mission.description ?? '') }} title="Edit description"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: '#B5B0A8', lineHeight: 1, flexShrink: 0 }}>✎</button>
+              )}
             </div>
           )}
           <div style={{ fontSize: 11, color: STATUS_COLORS[mission.status], fontWeight: 600, marginBottom: 12 }}>
@@ -344,35 +360,49 @@ export default function MissionOverviewPage({ missionId }: Props) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <button onClick={() => router.push(`/plan/${missionId}/factors?kind=success`)} style={navLinkStyle}>
-              Step by step planning
-            </button>
-            <button onClick={() => router.push(`/plan/${missionId}/coas`)} style={navLinkStyle}>
-              Plan courses of action
-            </button>
-            <button onClick={() => router.push(`/plan/${missionId}/arrange`)} style={navLinkStyle}>
-              Arrange plan
-            </button>
-            <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={navLinkStyle}>
-              See plan summary
-            </button>
-            <button onClick={() => router.push(`/plan/${missionId}/commitments`)} style={navLinkStyle}>
-              Commitments
-            </button>
-            <button onClick={() => router.push(`/plan/${missionId}/invite`)} style={navLinkStyle}>
-              Invite collaborators
-            </button>
-            {mission.status !== 'completed' && mission.status !== 'abandoned' && mission.status !== 'shelved' && mission.status !== 'superseded' && (
-              <button onClick={() => router.push(`/plan/${missionId}/close`)}
-                style={{ ...navLinkStyle, color: '#8A857D', marginTop: 8 }}>
-                Close this mission
-              </button>
-            )}
-            {(mission.status === 'completed' || mission.status === 'abandoned' || mission.status === 'shelved' || mission.status === 'superseded') && (
-              <button onClick={() => router.push(`/plan/${missionId}/close`)}
-                style={{ ...navLinkStyle, color: '#5A9E6F', marginTop: 8 }}>
-                View closure summary
-              </button>
+            {CLOSED_STATUSES.includes(mission.status) ? (
+              <>
+                <button onClick={() => router.push(`/plan/${missionId}/close`)} style={{ ...navLinkStyle, color: '#5A9E6F' }}>
+                  View closure summary
+                </button>
+                <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={navLinkStyle}>
+                  View plan summary
+                </button>
+                <button onClick={async () => {
+                  await fetch(`/api/missions/${missionId}`, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'active', closure_type: null, closure_note: null, closed_at: null, closed_by: null }),
+                  })
+                  window.location.reload()
+                }} style={{ ...navLinkStyle, color: '#B5B0A8', marginTop: 8, fontSize: 10 }}>
+                  Reopen mission
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => router.push(`/plan/${missionId}/factors?kind=success`)} style={navLinkStyle}>
+                  Step by step planning
+                </button>
+                <button onClick={() => router.push(`/plan/${missionId}/coas`)} style={navLinkStyle}>
+                  Plan courses of action
+                </button>
+                <button onClick={() => router.push(`/plan/${missionId}/arrange`)} style={navLinkStyle}>
+                  Arrange plan
+                </button>
+                <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={navLinkStyle}>
+                  See plan summary
+                </button>
+                <button onClick={() => router.push(`/plan/${missionId}/commitments`)} style={navLinkStyle}>
+                  Commitments
+                </button>
+                <button onClick={() => router.push(`/plan/${missionId}/invite`)} style={navLinkStyle}>
+                  Invite collaborators
+                </button>
+                <button onClick={() => router.push(`/plan/${missionId}/close`)}
+                  style={{ ...navLinkStyle, color: '#8A857D', marginTop: 8 }}>
+                  Close this mission
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -472,7 +502,14 @@ export default function MissionOverviewPage({ missionId }: Props) {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  planning: '#4B82AF', active: '#5A9E6F', completed: '#8A8578', abandoned: '#C4504A',
+  planning: '#4B82AF', active: '#5A9E6F', completed: '#8A8578', abandoned: '#C4504A', shelved: '#8A857D', superseded: '#C4725A',
+}
+
+const CLOSED_STATUSES = ['completed', 'abandoned', 'shelved', 'superseded']
+
+const CLOSURE_LABELS: Record<string, string> = {
+  accomplished: 'Accomplished', partially_accomplished: 'Partially accomplished',
+  shelved: 'Shelved', superseded: 'Superseded', abandoned: 'Abandoned',
 }
 
 const navLinkStyle: React.CSSProperties = {
