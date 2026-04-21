@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Mission, Factor, FactorKind } from '@/lib/types'
+import type { Mission, Factor, FactorKind, COA } from '@/lib/types'
 import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
 import { useRealtimeMission } from '@/lib/useRealtimeMission'
 
@@ -33,6 +33,9 @@ export default function MissionOverviewPage({ missionId }: Props) {
   const [loading, setLoading] = useState(true)
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [infoOpen, setInfoOpen] = useState<string | null>(null)
+  const [coas, setCoas] = useState<COA[]>([])
+  const [coaActionInput, setCoaActionInput] = useState('')
+  const [coaOutcomeInput, setCoaOutcomeInput] = useState('')
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [editingDesc, setEditingDesc] = useState(false)
@@ -83,13 +86,14 @@ export default function MissionOverviewPage({ missionId }: Props) {
     Promise.all([
       fetch(`/api/missions`).then(r => r.json()),
       fetch(`/api/missions/${missionId}/factors`).then(r => r.json()),
-      fetch(`/api/missions/${missionId}/commitments`).then(r => r.json()),
-    ]).then(async ([missions, facs]) => {
+      fetch(`/api/missions/${missionId}/coas`).then(r => r.json()),
+    ]).then(async ([missions, facs, coaData]) => {
       const all = Array.isArray(missions) ? missions : []
       setAllMissions(all)
       const m = all.find((ms: Mission) => ms.id === missionId)
       setMission(m ?? null)
       setFactors(Array.isArray(facs) ? facs : [])
+      setCoas(Array.isArray(coaData) ? coaData : [])
 
       // Build collaborators from factor authors + fetch all participants via user search
       const authorMap = new Map<string, string>()
@@ -132,9 +136,18 @@ export default function MissionOverviewPage({ missionId }: Props) {
         const old = payload.old as Record<string, unknown>
         setFactors(prev => prev.filter(f => f.id !== old.id))
       } else {
-        // INSERT or UPDATE — refetch to get proper author names and avoid duplicates
         fetch(`/api/missions/${missionId}/factors`).then(r => r.json()).then(data => {
           if (Array.isArray(data)) setFactors(data)
+        })
+      }
+    },
+    onCoaChange: (eventType, payload) => {
+      if (eventType === 'DELETE') {
+        const old = payload.old as Record<string, unknown>
+        setCoas(prev => prev.filter(c => c.id !== old.id))
+      } else {
+        fetch(`/api/missions/${missionId}/coas`).then(r => r.json()).then(data => {
+          if (Array.isArray(data)) setCoas(data)
         })
       }
     },
@@ -182,6 +195,29 @@ export default function MissionOverviewPage({ missionId }: Props) {
       if (f.id === b.id) return { ...f, sort_order: a.sort_order }
       return f
     }))
+  }
+
+  async function addCoa() {
+    if (!coaActionInput.trim()) return
+    const res = await fetch(`/api/missions/${missionId}/coas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: coaActionInput.trim(), outcome: coaOutcomeInput.trim() || null }),
+    })
+    if (res.ok) {
+      const c = await res.json()
+      setCoas(prev => [...prev, c])
+      setCoaActionInput('')
+      setCoaOutcomeInput('')
+    }
+  }
+
+  async function deleteCoa(id: string) {
+    const res = await fetch(`/api/missions/${missionId}/coas/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setCoas(prev => prev.filter(c => c.id !== id))
+      showToast('COA deleted')
+    }
   }
 
   if (loading) return <div style={{ padding: 40, color: '#8A8578', fontSize: 13 }}>Loading…</div>
@@ -326,6 +362,18 @@ export default function MissionOverviewPage({ missionId }: Props) {
             <button onClick={() => router.push(`/plan/${missionId}/invite`)} style={navLinkStyle}>
               Invite collaborators
             </button>
+            {mission.status !== 'completed' && mission.status !== 'abandoned' && mission.status !== 'shelved' && mission.status !== 'superseded' && (
+              <button onClick={() => router.push(`/plan/${missionId}/close`)}
+                style={{ ...navLinkStyle, color: '#8A857D', marginTop: 8 }}>
+                Close this mission
+              </button>
+            )}
+            {(mission.status === 'completed' || mission.status === 'abandoned' || mission.status === 'shelved' || mission.status === 'superseded') && (
+              <button onClick={() => router.push(`/plan/${missionId}/close`)}
+                style={{ ...navLinkStyle, color: '#5A9E6F', marginTop: 8 }}>
+                View closure summary
+              </button>
+            )}
           </div>
         </div>
 
@@ -359,6 +407,54 @@ export default function MissionOverviewPage({ missionId }: Props) {
                 onToggleInfo={() => setInfoOpen(infoOpen === kind ? null : kind)}
               />
             ))}
+          </div>
+
+          {/* COA box — mirrors the success box at top */}
+          <div style={{ border: '1px solid #E8E4DC', borderRadius: 8, padding: 12, background: '#FFF', marginTop: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#2D2A26', marginBottom: 8 }}>Courses of action</div>
+
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+              <input
+                value={coaActionInput}
+                onChange={e => setCoaActionInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addCoa() }}
+                placeholder="Do what?"
+                style={{ flex: 55, padding: '5px 8px', borderRadius: 4, border: '1px solid #E8E4DC', fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+              />
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#B5B0A8', letterSpacing: 1 }}>IOT</span>
+              <input
+                value={coaOutcomeInput}
+                onChange={e => setCoaOutcomeInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addCoa() }}
+                placeholder="Achieve what?"
+                style={{ flex: 35, padding: '5px 8px', borderRadius: 4, border: '1px solid #E8E4DC', fontSize: 12, outline: 'none', fontFamily: 'inherit' }}
+              />
+              <button onClick={addCoa} style={{
+                padding: '5px 10px', background: '#2D2A2615', border: '1px solid #E8E4DC',
+                borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#2D2A26', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>Add</button>
+            </div>
+
+            {coas.length === 0 ? (
+              <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic' }}>No courses of action yet</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {coas.sort((a, b) => a.sort_order - b.sort_order).map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                    <span style={{ color: getAuthorColor(c.user_id, !!c.is_own), fontWeight: 600, fontSize: 11 }}>
+                      {formatAuthorTag(c.author_name, c.is_own)}
+                    </span>
+                    <span style={{ color: '#2D2A26', flex: 1 }}>
+                      {c.action}{c.outcome ? <span style={{ color: '#B5B0A8', fontSize: 10, fontWeight: 700, letterSpacing: 0.5, margin: '0 4px' }}>IOT</span> : ''}{c.outcome ?? ''}
+                    </span>
+                    <span style={{ color: '#C4504A', fontSize: 10, flexShrink: 0 }}>♥ {c.linked_factor_count ?? 0}</span>
+                    {c.is_own && (
+                      <button onClick={() => deleteCoa(c.id)} style={{ background: 'none', border: 'none', padding: 0, fontSize: 10, color: '#C4504A', cursor: 'pointer' }}>del</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -8,7 +8,11 @@ const STATUS_COLORS: Record<string, string> = {
   active: '#5A9E6F',
   completed: '#8A8578',
   abandoned: '#C4504A',
+  shelved: '#8A857D',
+  superseded: '#C4725A',
 }
+
+const CLOSED_STATUSES = ['completed', 'abandoned', 'shelved', 'superseded']
 
 export default function PlanListPage() {
   const router = useRouter()
@@ -137,10 +141,29 @@ export default function PlanListPage() {
           No missions yet. Create one to start planning.
         </div>
       ) : (
-        <div>
-          {topLevel.map(m => renderMission(m, 0))}
-          {orphans.map(m => renderMission(m, 0))}
-        </div>
+        <>
+          {/* Active missions */}
+          <div>
+            {topLevel.filter(m => !CLOSED_STATUSES.includes(m.status)).map(m => renderMission(m, 0))}
+            {orphans.filter(m => !CLOSED_STATUSES.includes(m.status)).map(m => renderMission(m, 0))}
+          </div>
+
+          {/* Closed missions */}
+          {(() => {
+            const closedTop = topLevel.filter(m => CLOSED_STATUSES.includes(m.status))
+            const closedOrphans = orphans.filter(m => CLOSED_STATUSES.includes(m.status))
+            if (closedTop.length === 0 && closedOrphans.length === 0) return null
+            return (
+              <details style={{ marginTop: 24 }}>
+                <summary style={{ fontSize: 12, color: '#8A857D', cursor: 'pointer', marginBottom: 8, fontWeight: 600 }}>
+                  Closed missions ({closedTop.length + closedOrphans.length})
+                </summary>
+                {closedTop.map(m => renderMission(m, 0))}
+                {closedOrphans.map(m => renderMission(m, 0))}
+              </details>
+            )
+          })()}
+        </>
       )}
 
       {toastMsg && (

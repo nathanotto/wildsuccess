@@ -449,7 +449,7 @@ export interface Mission {
   description: string | null
   parent_coa_id: string | null
   big_outcome_id: string | null
-  status: 'planning' | 'active' | 'completed' | 'abandoned'
+  status: 'planning' | 'active' | 'completed' | 'abandoned' | 'shelved' | 'superseded'
   is_public: boolean
   sort_order: number
   created_at: string
