@@ -378,7 +378,7 @@ export default function ArrangePage({ missionId }: Props) {
           ) : (
             <>
               {/* COA Details (left side of workspace) */}
-              <div style={{ flex: 0, minWidth: 0, maxWidth: 560 }}>
+              <div style={{ flex: 1, minWidth: 400 }}>
               {/* Header */}
               <div style={{ marginBottom: 20 }}>
                 {editingOutcome ? (
