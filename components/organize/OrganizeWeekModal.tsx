@@ -1535,7 +1535,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
     setCaptureInput('')
     try {
       const textNoQuotes = text.replace(/["'][^"']*["']/g, '')
-      const isScheduled = /\b\d{1,2}(:\d{2})?\s*(am|pm)\b/i.test(textNoQuotes) || /\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/i.test(textNoQuotes)
+      const isScheduled = /\b\d{1,2}:\d{2}\s*(am|pm)?\b/i.test(textNoQuotes) || /\b\d{1,2}\s*(am|pm)\b/i.test(textNoQuotes) || /\bat\s+\d{1,2}/i.test(textNoQuotes)
       const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1562,9 +1562,13 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
         return
       }
 
-      // For all other outcomes, add to hopper
+      // For all other outcomes, add to hopper — but not if it was already scheduled
       const hi = data.actionItem
-      if (hi) {
+      if (hi && hi.status === 'committed' && hi.scheduled_time) {
+        // Item was auto-scheduled by the API — show toast, reload calendar, don't add to hopper
+        showLogToast(`Scheduled: ${parsed?.cleanedName ?? hi.name}`)
+        loadData()
+      } else if (hi) {
         const hopperItem: CandidateItemLocal = {
           id: hi.id,
           name: parsed?.cleanedName ?? hi.name ?? text,

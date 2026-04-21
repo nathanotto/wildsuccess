@@ -163,7 +163,7 @@ export default function CaptureInput({
     try {
       // Detect likely scheduled input — strip quoted sections first so literal dates don't trigger
       const textNoQuotes = text.replace(/["'][^"']*["']/g, '')
-      const isScheduled = /\b\d{1,2}(:\d{2})?\s*(am|pm)\b/i.test(textNoQuotes) || /\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/i.test(textNoQuotes)
+      const isScheduled = /\b\d{1,2}:\d{2}\s*(am|pm)?\b/i.test(textNoQuotes) || /\b\d{1,2}\s*(am|pm)\b/i.test(textNoQuotes) || /\bat\s+\d{1,2}/i.test(textNoQuotes)
       const res = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
