@@ -151,10 +151,7 @@ export default function ArrangePage({ missionId }: Props) {
     else setThreadMessages([])
   }, [activeCoa, loadThread])
 
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [threadMessages])
+  // No auto-scroll — input is at the top, new messages appear at the bottom naturally
 
   async function postThreadMessage() {
     if (!threadInput.trim() || !activeCoa) return
@@ -165,6 +162,11 @@ export default function ArrangePage({ missionId }: Props) {
       body: JSON.stringify({ description: text, subject_type: 'coa', subject_id: activeCoa }),
     })
     loadThread(activeCoa)
+  }
+
+  async function deleteThreadMessage(msgId: string) {
+    setThreadMessages(prev => prev.filter(m => m.id !== msgId))
+    await fetch(`/api/missions/${missionId}/log/${msgId}`, { method: 'DELETE' })
   }
 
   // ── Actions ─────────────────────────────────────────────────────────────────
@@ -277,6 +279,7 @@ export default function ArrangePage({ missionId }: Props) {
     <div style={{ fontFamily: FONT, background: '#FAFAF7', minHeight: '100vh', color: '#2D2A26' }}>
       <style>{`
         .arrange-grid { display: grid; grid-template-columns: 20% 52% 28%; height: calc(100vh - 90px); }
+        .thread-msg:hover .thread-msg-del { display: inline !important; }
         .arrange-col { overflow-y: auto; }
         @media (max-width: 800px) {
           .arrange-grid { grid-template-columns: 160px 1fr; }
@@ -583,8 +586,11 @@ export default function ArrangePage({ missionId }: Props) {
                 const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
                   time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
                 return (
-                  <div key={msg.id} style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 8, color: '#C4BFB4', marginBottom: 1 }}>{timeStr}</div>
+                  <div key={msg.id} style={{ marginBottom: 8, position: 'relative' }} className="thread-msg">
+                    <div style={{ fontSize: 8, color: '#C4BFB4', marginBottom: 1 }}>
+                      {timeStr}
+                      {isOwn && <button className="thread-msg-del" onClick={() => deleteThreadMessage(msg.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: '#C4504A', marginLeft: 6, padding: 0, display: 'none' }}>✕</button>}
+                    </div>
                     <div style={{ fontSize: 12, lineHeight: 1.4 }}>
                       <span style={{ fontWeight: 600, color }}>{isOwn ? 'You' : authorName}:</span>{' '}
                       {msg.description}
