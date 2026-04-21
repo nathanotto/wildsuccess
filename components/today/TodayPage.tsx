@@ -456,13 +456,6 @@ function FocusView({
         display: 'block',
       }}>← today</button>
 
-      {/* Confirmation message */}
-      {confirmMsg && (
-        <div style={{ fontSize: 13, color: '#5A9E6F', fontWeight: 600, padding: '8px 0', lineHeight: 1.4 }}>
-          {confirmMsg}
-        </div>
-      )}
-
       {/* Title */}
       <div style={{ position: 'relative' }}>
         {editingTitle ? (
@@ -589,6 +582,11 @@ function FocusView({
             placeholder="+ add follow-up..."
             style={inputStyle}
           />
+          {confirmMsg && (
+            <div style={{ fontSize: 12, color: '#5A9E6F', fontWeight: 600, marginTop: 4 }}>
+              {confirmMsg}
+            </div>
+          )}
         </div>
       )}
 
@@ -657,7 +655,11 @@ function FocusView({
             → Pick up later…
           </button>
         )}
-        {showCaptureFollowUp ? (
+        {confirmMsg ? (
+          <div style={{ fontSize: 13, color: '#5A9E6F', fontWeight: 600, padding: '6px 0' }}>
+            {confirmMsg}
+          </div>
+        ) : showCaptureFollowUp ? (
           <input
             value={captureFollowUp}
             onChange={e => setCaptureFollowUp(e.target.value)}
