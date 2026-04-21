@@ -372,6 +372,7 @@ function FocusView({
   const [followUpInput, setFollowUpInput] = useState('')
   const [captureFollowUp, setCaptureFollowUp] = useState('')
   const [showCaptureFollowUp, setShowCaptureFollowUp] = useState(false)
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null)
   const [showPickUpLater, setShowPickUpLater] = useState(false)
   const [pickUpDate, setPickUpDate] = useState(() => addDays(toDateStr(new Date()), 1))
   const [showScheduler, setShowScheduler] = useState(false)
@@ -437,8 +438,11 @@ function FocusView({
   async function handleAddFollowUp(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter' || !followUpInput.trim()) return
     e.preventDefault()
-    await onAddFollowUp(followUpInput.trim(), item.id)
+    const text = followUpInput.trim()
+    await onAddFollowUp(text, item.id)
     setFollowUpInput('')
+    setConfirmMsg(`Follow-up committed to today: "${text}"`)
+    setTimeout(() => setConfirmMsg(null), 3000)
   }
 
   const section = { marginTop: 20 }
@@ -451,6 +455,13 @@ function FocusView({
         fontSize: 13, color: '#8A8578', padding: '12px 0 8px',
         display: 'block',
       }}>← today</button>
+
+      {/* Confirmation message */}
+      {confirmMsg && (
+        <div style={{ fontSize: 13, color: '#5A9E6F', fontWeight: 600, padding: '8px 0', lineHeight: 1.4 }}>
+          {confirmMsg}
+        </div>
+      )}
 
       {/* Title */}
       <div style={{ position: 'relative' }}>
@@ -653,8 +664,12 @@ function FocusView({
             onKeyDown={async e => {
               if (e.key !== 'Enter' || !captureFollowUp.trim()) return
               e.preventDefault()
-              await onMarkDoneAndCapture(item.id, captureFollowUp.trim())
-              onBack()
+              const text = captureFollowUp.trim()
+              await onMarkDoneAndCapture(item.id, text)
+              setConfirmMsg(`Done. Follow-up committed to today: "${text}"`)
+              setCaptureFollowUp('')
+              setShowCaptureFollowUp(false)
+              setTimeout(onBack, 2000)
             }}
             onBlur={() => { if (!captureFollowUp.trim()) setShowCaptureFollowUp(false) }}
             placeholder="what's the follow-up?"
@@ -1227,11 +1242,17 @@ export default function TodayPage({ displayName }: Props) {
   }
 
   async function handleAddFollowUp(content: string, sourceId: string) {
-    await fetch('/api/today/follow-up', {
+    const res = await fetch('/api/today/follow-up', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: content, parent_action_item_id: sourceId }),
     })
+    if (res.ok) {
+      const data = await res.json()
+      if (data.actionItem) {
+        setItems(prev => [...prev, data.actionItem])
+      }
+    }
   }
 
   async function handleUnschedule(id: string) {
