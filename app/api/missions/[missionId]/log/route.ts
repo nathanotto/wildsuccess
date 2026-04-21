@@ -12,6 +12,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const subjectType = sp.get('subject_type')
   const entryType = sp.get('entry_type')
 
+  const subjectId = sp.get('subject_id')
+
   let query = supabase
     .from('mission_log')
     .select('*')
@@ -19,6 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     .order('created_at', { ascending: false })
 
   if (subjectType) query = query.eq('subject_type', subjectType)
+  if (subjectId) query = query.eq('subject_id', subjectId)
   if (entryType) query = query.eq('entry_type', entryType)
 
   const { data, error } = await query
@@ -33,7 +36,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { missionId } = await params
-  const { description } = await request.json()
+  const { description, subject_type, subject_id } = await request.json()
 
   if (!description?.trim()) return NextResponse.json({ error: 'Description required' }, { status: 400 })
 
@@ -42,6 +45,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
     user_id: user.id,
     entry_type: 'note',
     description: description.trim(),
+    subject_type: subject_type ?? undefined,
+    subject_id: subject_id ?? undefined,
   })
 
   return NextResponse.json({ success: true }, { status: 201 })

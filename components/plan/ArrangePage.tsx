@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { COA, Factor, COADependency, COAResourceNeed, Mission } from '@/lib/types'
+import { getAuthorColor } from '@/lib/author-colors'
 
 const FONT = '"Source Sans 3", "Source Sans Pro", sans-serif'
 
@@ -30,6 +31,13 @@ export default function ArrangePage({ missionId }: Props) {
 
   // Active COA
   const [activeCoa, setActiveCoa] = useState<string | null>(null)
+
+  // Thread state
+  const [threadMessages, setThreadMessages] = useState<Array<{ id: string; user_id: string; description: string; created_at: string }>>([])
+  const [threadInput, setThreadInput] = useState('')
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [userNames, setUserNames] = useState<Record<string, string>>({})
+  const threadEndRef = useRef<HTMLDivElement>(null)
 
   // Kanban collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
@@ -108,6 +116,55 @@ export default function ArrangePage({ missionId }: Props) {
   }, [missionId, activeCoa])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Fetch current user and collaborator names
+  useEffect(() => {
+    fetch('/api/profile').then(r => r.json()).then(data => {
+      if (data?.id) setCurrentUserId(data.id)
+      if (data?.preferred_name || data?.display_name) {
+        setUserNames(prev => ({ ...prev, [data.id]: data.preferred_name || data.display_name }))
+      }
+    })
+    fetch(`/api/missions/${missionId}/commitments`).then(r => r.json()).then(data => {
+      if (Array.isArray(data)) {
+        const names: Record<string, string> = {}
+        data.forEach((c: { user_id: string; user_name?: string }) => {
+          if (c.user_name) names[c.user_id] = c.user_name
+        })
+        setUserNames(prev => ({ ...prev, ...names }))
+      }
+    })
+  }, [missionId])
+
+  // Load thread when active COA changes
+  const loadThread = useCallback(async (coaId: string) => {
+    const res = await fetch(`/api/missions/${missionId}/log?subject_type=coa&subject_id=${coaId}`)
+    if (res.ok) {
+      const data = await res.json()
+      setThreadMessages(Array.isArray(data) ? data.reverse() : []) // API returns desc, we want asc
+    }
+  }, [missionId])
+
+  useEffect(() => {
+    if (activeCoa) loadThread(activeCoa)
+    else setThreadMessages([])
+  }, [activeCoa, loadThread])
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [threadMessages])
+
+  async function postThreadMessage() {
+    if (!threadInput.trim() || !activeCoa) return
+    const text = threadInput.trim()
+    setThreadInput('')
+    await fetch(`/api/missions/${missionId}/log`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: text, subject_type: 'coa', subject_id: activeCoa }),
+    })
+    loadThread(activeCoa)
+  }
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -466,34 +523,65 @@ export default function ArrangePage({ missionId }: Props) {
           )}
         </div>
 
-        {/* ── Right: Mission Context ──────────────────────────────────────── */}
-        <div className="arrange-context" style={{ padding: '16px 12px' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Mission</div>
-          <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 16, lineHeight: 1.5 }}>
-            {mission?.description || 'No description'}
+        {/* ── Right: COA Thread ─────────────────────────────────────────── */}
+        <div className="arrange-context" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
+          {/* Thread header */}
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid #E8E4DC', fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Thread{active ? ` · ${active.action.slice(0, 30)}${active.action.length > 30 ? '…' : ''}` : ''}
           </div>
 
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Factors</div>
-          <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 16 }}>
-            {factors.filter(f => f.status === 'active').length} active · {factors.filter(f => f.status === 'resolved').length} resolved · {pct}% accounted
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+            {!active ? (
+              <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 12 }}>Select a COA</div>
+            ) : threadMessages.length === 0 ? (
+              <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic', paddingTop: 12 }}>No messages yet</div>
+            ) : (
+              threadMessages.map(msg => {
+                const isOwn = msg.user_id === currentUserId
+                const authorName = userNames[msg.user_id] ?? 'Unknown'
+                const color = getAuthorColor(msg.user_id, isOwn)
+                const time = new Date(msg.created_at)
+                const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+                  time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
+                return (
+                  <div key={msg.id} style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 9, color: '#B5B0A8', marginBottom: 1 }}>{timeStr}</div>
+                    <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                      <span style={{ fontWeight: 600, color }}>{isOwn ? 'You' : authorName}:</span>{' '}
+                      <span style={{ color: '#2D2A26' }}>{msg.description}</span>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+            <div ref={threadEndRef} />
           </div>
 
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Note</div>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
-            <input value={noteInput} onChange={e => setNoteInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addNote() }}
-              placeholder="Add to mission log…"
-              style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
-            />
-            <button onClick={addNote} style={{ ...smallBtn, fontSize: 10 }}>+</button>
-          </div>
-
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Links</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Overview</span>
-            <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>COA page</span>
-            <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/commitments`)}>Commitments</span>
-            <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/close`)}>Close mission</span>
-          </div>
+          {/* Input */}
+          {active && (
+            <div style={{ padding: '6px 10px', borderTop: '1px solid #E8E4DC' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input
+                  value={threadInput}
+                  onChange={e => setThreadInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postThreadMessage() } }}
+                  placeholder="Message…"
+                  style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit' }}
+                />
+                <button onClick={postThreadMessage} disabled={!threadInput.trim()}
+                  style={{ ...smallBtn, fontSize: 10, background: threadInput.trim() ? '#2D2A26' : 'transparent', color: threadInput.trim() ? '#FFF' : '#B5B0A8', border: threadInput.trim() ? 'none' : '1px solid #E8E4DC' }}>
+                  Send
+                </button>
+              </div>
+              {/* Quick links */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 6, fontSize: 9, color: '#B5B0A8' }}>
+                <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Overview</span>
+                <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>COAs</span>
+                <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/close`)}>Close</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
