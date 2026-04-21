@@ -131,5 +131,37 @@ export async function POST(req: NextRequest, { params }: Params) {
     description: `Mission closed: ${closure_type}${closure_note ? '. ' + closure_note.slice(0, 200) : ''}`,
   })
 
+  // Auto-close sub-missions: find COAs of this mission, then find missions whose parent_coa_id matches
+  const { data: parentCoas } = await supabase
+    .from('coas')
+    .select('id')
+    .eq('mission_id', missionId)
+  const coaIds = (parentCoas ?? []).map(c => c.id)
+
+  if (coaIds.length > 0) {
+    const { data: subMissions } = await supabase
+      .from('missions')
+      .select('id, status')
+      .in('parent_coa_id', coaIds)
+      .not('status', 'in', '("completed","abandoned","shelved","superseded")')
+
+    for (const sub of subMissions ?? []) {
+      await supabase.from('missions').update({
+        status: newStatus,
+        closure_type,
+        closure_note: `Auto-closed with parent mission`,
+        closed_at: new Date().toISOString(),
+        closed_by: user.id,
+      }).eq('id', sub.id)
+
+      await supabase.from('mission_log').insert({
+        mission_id: sub.id,
+        user_id: user.id,
+        entry_type: 'mission_status_changed',
+        description: `Sub-mission auto-closed with parent: ${closure_type}`,
+      })
+    }
+  }
+
   return NextResponse.json(mission)
 }
