@@ -450,6 +450,7 @@ export interface Mission {
   parent_coa_id: string | null
   big_outcome_id: string | null
   status: 'planning' | 'active' | 'completed' | 'abandoned' | 'shelved' | 'superseded'
+  is_pinned: boolean
   is_public: boolean
   sort_order: number
   created_at: string
