@@ -378,7 +378,7 @@ export default function ArrangePage({ missionId }: Props) {
           ) : (
             <>
               {/* COA Details (left side of workspace) */}
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 0, minWidth: 0, maxWidth: 560 }}>
               {/* Header */}
               <div style={{ marginBottom: 20 }}>
                 {editingOutcome ? (
@@ -522,7 +522,7 @@ export default function ArrangePage({ missionId }: Props) {
               </div>{/* end COA details */}
 
               {/* COA Thread (right side of workspace) */}
-              <div style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', border: '1px solid #E8E4DC', borderRadius: 8, background: '#FAFAF7', maxHeight: 'calc(100vh - 120px)' }}>
+              <div style={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', border: '1px solid #E8E4DC', borderRadius: 8, background: '#FAFAF7', height: 'fit-content', maxHeight: 480 }}>
                 <div style={{ padding: '6px 10px', borderBottom: '1px solid #E8E4DC', fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                   Thread
                 </div>
