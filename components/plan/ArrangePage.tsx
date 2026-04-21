@@ -53,6 +53,8 @@ export default function ArrangePage({ missionId }: Props) {
   const [resKind, setResKind] = useState<string>('other')
   const [resQty, setResQty] = useState('')
   const [resUnit, setResUnit] = useState('')
+  const [editingAction, setEditingAction] = useState(false)
+  const [actionText, setActionText] = useState('')
   const [editingOutcome, setEditingOutcome] = useState(false)
   const [outcomeText, setOutcomeText] = useState('')
   const [noteInput, setNoteInput] = useState('')
@@ -210,6 +212,16 @@ export default function ArrangePage({ missionId }: Props) {
       body: JSON.stringify({ status }),
     })
     setResources(prev => ({ ...prev, [coaId]: (prev[coaId] ?? []).map(r => r.id === resId ? { ...r, status: status as COAResourceNeed['status'] } : r) }))
+  }
+
+  async function saveAction(coaId: string) {
+    if (!actionText.trim()) { setEditingAction(false); return }
+    await fetch(`/api/missions/${missionId}/coas/${coaId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: actionText.trim() }),
+    })
+    setCoas(prev => prev.map(c => c.id === coaId ? { ...c, action: actionText.trim() } : c))
+    setEditingAction(false)
   }
 
   async function saveOutcome(coaId: string) {
@@ -408,22 +420,33 @@ export default function ArrangePage({ missionId }: Props) {
             <div>
               {/* Header */}
               <div style={{ marginBottom: 20 }}>
+                {/* Editable COA action name */}
+                {editingAction ? (
+                  <input value={actionText} onChange={e => setActionText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveAction(active.id); if (e.key === 'Escape') setEditingAction(false) }}
+                    onBlur={() => saveAction(active.id)}
+                    autoFocus
+                    style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', border: '1px solid #C4725A', borderRadius: 6, padding: '4px 8px', outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', marginBottom: 4 }}
+                  />
+                ) : (
+                  <div onClick={() => { setEditingAction(true); setActionText(active.action) }} style={{ fontSize: 18, fontWeight: 700, cursor: 'pointer', marginBottom: 4 }}>
+                    {active.action}
+                  </div>
+                )}
+
+                {/* Editable outcome */}
                 {editingOutcome ? (
-                  <div>
-                    <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>{active.action}</div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, color: '#8A8578' }}>IOT</span>
-                      <input value={outcomeText} onChange={e => setOutcomeText(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveOutcome(active.id); if (e.key === 'Escape') setEditingOutcome(false) }}
-                        onBlur={() => saveOutcome(active.id)}
-                        autoFocus placeholder="In order to achieve what?"
-                        style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #C4725A', fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
-                      />
-                    </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: '#8A8578' }}>IOT</span>
+                    <input value={outcomeText} onChange={e => setOutcomeText(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveOutcome(active.id); if (e.key === 'Escape') setEditingOutcome(false) }}
+                      onBlur={() => saveOutcome(active.id)}
+                      autoFocus placeholder="In order to achieve what?"
+                      style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #C4725A', fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
+                    />
                   </div>
                 ) : (
                   <div onClick={() => { setEditingOutcome(true); setOutcomeText(active.outcome ?? '') }} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: 18, fontWeight: 700 }}>{active.action}</div>
                     {active.outcome ? (
                       <div style={{ fontSize: 13, color: '#8A8578', fontStyle: 'italic', marginTop: 2 }}>IOT {active.outcome}</div>
                     ) : (
