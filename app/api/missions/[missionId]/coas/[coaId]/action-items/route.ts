@@ -10,7 +10,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ mis
   const { coaId } = await params
   const { data, error } = await supabase
     .from('action_items')
-    .select('id, name, status, user_id, assigned_to, created_at')
+    .select('id, name, status, user_id, assigned_to, committed_date, completed_date, created_at, item_notes(*)')
     .eq('coa_id', coaId)
     .order('created_at')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

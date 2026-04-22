@@ -59,9 +59,16 @@ export default function ArrangePage({ missionId }: Props) {
   const [outcomeText, setOutcomeText] = useState('')
   const [noteInput, setNoteInput] = useState('')
   const [showLogPopover, setShowLogPopover] = useState(false)
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [toastVisible, setToastVisible] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null)
+  const [confirmVisible, setConfirmVisible] = useState(false)
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // COA action items (progress from /today)
+  const [coaActionItems, setCoaActionItems] = useState<Array<{
+    id: string; name: string; status: string; committed_date: string | null;
+    completed_date: string | null;
+    item_notes: Array<{ id: string; note_type: string; content: string; is_completed: boolean; sort_order: number; created_at: string }>
+  }>>([])
 
   // Factor review modal
   const [reviewModal, setReviewModal] = useState<{ coaId: string; coaAction: string; coaOutcome: string | null; factors: Factor[] } | null>(null)
@@ -69,10 +76,10 @@ export default function ArrangePage({ missionId }: Props) {
   const [reviewCreateFact, setReviewCreateFact] = useState<Record<string, boolean>>({})
   const [reviewFactText, setReviewFactText] = useState<Record<string, string>>({})
 
-  function showToast(msg: string) {
-    setToastMsg(msg); setToastVisible(true)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
+  function showConfirmation(msg: string) {
+    setConfirmMsg(msg); setConfirmVisible(true)
+    if (confirmTimer.current) clearTimeout(confirmTimer.current)
+    confirmTimer.current = setTimeout(() => setConfirmVisible(false), 3500)
   }
 
   const loadData = useCallback(async () => {
@@ -153,6 +160,14 @@ export default function ArrangePage({ missionId }: Props) {
     else setThreadMessages([])
   }, [activeCoa, loadThread])
 
+  // Load action items linked to active COA
+  useEffect(() => {
+    if (!activeCoa) { setCoaActionItems([]); return }
+    fetch(`/api/missions/${missionId}/coas/${activeCoa}/action-items`)
+      .then(r => r.json())
+      .then(data => setCoaActionItems(Array.isArray(data) ? data : []))
+  }, [activeCoa, missionId])
+
   // No auto-scroll — input is at the top, new messages appear at the bottom naturally
 
   async function postThreadMessage() {
@@ -187,7 +202,7 @@ export default function ArrangePage({ missionId }: Props) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ coa_id: depModal.from, depends_on_coa_id: depModal.to, reason: depReason.trim(), is_hard: depHard }),
     })
-    if (res.ok) { const dep = await res.json(); setDependencies(prev => [...prev, dep]); showToast('Dependency created') }
+    if (res.ok) { const dep = await res.json(); setDependencies(prev => [...prev, dep]); showConfirmation('Dependency created') }
     setDepModal(null); setDepReason(''); setDepHard(false); setLinkingDepFrom(null)
   }
 
@@ -244,8 +259,25 @@ export default function ArrangePage({ missionId }: Props) {
       if (data.targeted_factors?.length) {
         const coa = coas.find(c => c.id === coaId)
         setReviewModal({ coaId, coaAction: coa?.action ?? '', coaOutcome: coa?.outcome ?? null, factors: data.targeted_factors })
-      } else { showToast('COA completed') }
+      } else {
+        const coaName = coas.find(c => c.id === coaId)?.action ?? 'COA'
+        showConfirmation(`"${coaName}" completed`)
+      }
     }
+  }
+
+  async function handlePromote(coaId: string, target: 'hopper' | 'today') {
+    const coa = coas.find(c => c.id === coaId)
+    const res = await fetch(`/api/missions/${missionId}/coas/${coaId}/promote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: 'hopper', commit: target === 'today' }),
+    })
+    if (!res.ok) { showConfirmation('Failed to send'); return }
+    setCoas(prev => prev.map(c => c.id === coaId ? { ...c, status: 'committed' } : c))
+    showConfirmation(target === 'today'
+      ? `"${coa?.action}" added to today`
+      : `"${coa?.action}" added to hopper`)
   }
 
   async function resolveFactorFromReview(factorId: string, resolutionNote: string, createFact: boolean, factText: string) {
@@ -262,7 +294,7 @@ export default function ArrangePage({ missionId }: Props) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ description: noteInput.trim() }),
     })
-    showToast('Note added'); setNoteInput('')
+    showConfirmation('Note added'); setNoteInput('')
   }
 
   // ── Derived ─────────────────────────────────────────────────────────────────
@@ -560,8 +592,57 @@ export default function ArrangePage({ missionId }: Props) {
                 })}
               </div>
 
+              {/* Action Items from /today */}
+              {coaActionItems.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#8A857D', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Action Items</div>
+                  {coaActionItems.map(ai => {
+                    const steps = (ai.item_notes ?? []).filter(n => n.note_type === 'step').sort((a, b) => a.sort_order - b.sort_order)
+                    const notes = (ai.item_notes ?? []).filter(n => n.note_type === 'note').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                    const completedSteps = steps.filter(s => s.is_completed).length
+                    const statusColor = ai.status === 'completed' ? '#5A9E6F' : ai.status === 'in_progress' ? '#C4725A' : '#8A8578'
+                    return (
+                      <div key={ai.id} style={{ marginBottom: 6, padding: '5px 8px', border: '1px solid #E8E4DC', borderRadius: 6, background: '#FAFAF8' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 9, padding: '1px 4px', borderRadius: 3, fontWeight: 600, background: statusColor + '18', color: statusColor }}>{ai.status.replace('_', ' ')}</span>
+                          <span style={{ fontSize: 12, color: '#2D2A26' }}>{ai.name}</span>
+                        </div>
+                        {steps.length > 0 && (
+                          <div style={{ fontSize: 10, color: '#8A8578', marginTop: 3, paddingLeft: 2 }}>
+                            {completedSteps}/{steps.length} steps done
+                          </div>
+                        )}
+                        {notes.length > 0 && (
+                          <div style={{ marginTop: 3, paddingLeft: 2 }}>
+                            {notes.slice(-3).map(n => (
+                              <div key={n.id} style={{ fontSize: 10, color: '#8A8578', lineHeight: 1.4 }}>{n.content}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Sub-mission link */}
+              {active.has_sub_mission && active.sub_mission_id && (
+                <div style={{ marginBottom: 12 }}>
+                  <a
+                    href={`/plan/${active.sub_mission_id}`}
+                    style={{ fontSize: 12, color: '#4B82AF', textDecoration: 'none', fontWeight: 600 }}
+                  >Sub-mission →</a>
+                </div>
+              )}
+
               {/* Actions */}
-              <div style={{ display: 'flex', gap: 8, paddingTop: 8, borderTop: '1px solid #E8E4DC' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid #E8E4DC' }}>
+                {active.status === 'proposed' && !active.has_sub_mission && !active.big_outcome_id && (
+                  <>
+                    <button onClick={() => handlePromote(active.id, 'hopper')} style={smallBtn}>Send to hopper</button>
+                    <button onClick={() => handlePromote(active.id, 'today')} style={{ ...smallBtn, background: '#4B82AF', color: '#FFF', border: 'none' }}>Add to today</button>
+                  </>
+                )}
                 {active.status !== 'completed' && (
                   <button onClick={() => markCoaCompleted(active.id)} style={{ padding: '6px 16px', background: '#5A9E6F', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                     Complete this COA
@@ -569,6 +650,17 @@ export default function ArrangePage({ missionId }: Props) {
                 )}
                 <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={smallBtn}>View summary</button>
               </div>
+
+              {/* Inline confirmation */}
+              {confirmMsg && (
+                <div style={{
+                  marginTop: 8, padding: '6px 12px', borderRadius: 6,
+                  background: '#E8F5E9', color: '#2E7D32',
+                  fontSize: 12, fontWeight: 600,
+                  opacity: confirmVisible ? 1 : 0,
+                  transition: 'opacity 0.3s',
+                }}>{confirmMsg}</div>
+              )}
             </div>
           )}
         </div>
@@ -665,9 +757,9 @@ export default function ArrangePage({ missionId }: Props) {
                 <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
                   <button onClick={async () => {
                     await resolveFactorFromReview(f.id, reviewNotes[f.id] || '', f.kind === 'assumption' && (reviewCreateFact[f.id] ?? false), f.kind === 'assumption' ? (reviewFactText[f.id] || '') : '')
-                    showToast(`Factor resolved: ${f.name}`)
+                    showConfirmation(`Factor resolved: ${f.name}`)
                   }} style={{ ...smallBtn, color: '#5A9E6F' }}>Resolved</button>
-                  <button onClick={() => showToast('Skipped')} style={smallBtn}>Skip</button>
+                  <button onClick={() => showConfirmation('Skipped')} style={smallBtn}>Skip</button>
                 </div>
                 <input value={reviewNotes[f.id] ?? ''} onChange={e => setReviewNotes(p => ({ ...p, [f.id]: e.target.value }))}
                   placeholder="Resolution note…" style={{ width: '100%', padding: '4px 8px', borderRadius: 4, border: '1px solid #E8E4DC', fontSize: 11, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', marginBottom: 4 }}
@@ -692,14 +784,6 @@ export default function ArrangePage({ missionId }: Props) {
         </div>
       )}
 
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#2D2A26', color: '#FFF', padding: '8px 20px', borderRadius: 8,
-          fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
-          transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
-        }}>{toastMsg}</div>
-      )}
     </div>
   )
 }

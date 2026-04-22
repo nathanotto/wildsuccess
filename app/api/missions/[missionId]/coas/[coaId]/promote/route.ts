@@ -8,7 +8,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { missionId, coaId } = await params
-  const { target } = await request.json()
+  const { target, commit } = await request.json()
 
   // Get the COA
   const { data: coa, error: coaErr } = await supabase
@@ -62,7 +62,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
     return NextResponse.json({ outcome }, { status: 201 })
 
   } else if (target === 'hopper') {
-    // Create action item from COA
+    // Create action item from COA — optionally committed directly to today
+    const now = new Date()
+    const today = now.toISOString().split('T')[0]
     const { data: item, error: aiErr } = await supabase
       .from('action_items')
       .insert({
@@ -70,8 +72,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
         name: coa.action,
         source: 'planning_function',
         item_type: 'task',
-        status: 'candidate',
+        status: commit ? 'committed' : 'candidate',
+        ...(commit ? { committed_date: today, committed_at: now.toISOString() } : {}),
         coa_id: coaId,
+        mission_id: missionId,
         time_type: 'B',
         flexibility: 'anytime_this_week',
         emotional_weight: 'normal',
@@ -90,7 +94,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
     await writeMissionLog(supabase, {
       mission_id: missionId, user_id: user.id,
       entry_type: 'commitment_made',
-      description: `COA sent to hopper: ${coa.action}`,
+      description: commit ? `COA added to today: ${coa.action}` : `COA sent to hopper: ${coa.action}`,
       subject_type: 'coa', subject_id: coaId,
     })
 

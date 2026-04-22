@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserToday } from '@/lib/timezone'
+import { writeMissionLog } from '@/lib/mission-log'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -183,6 +184,62 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       task_suggestion_id: current.task_suggestion_id ?? null,
       event_date: extra.view_date ?? today,
     })
+  }
+
+  // ── COA completion sync ──
+
+  if (status === 'completed' && current.coa_id) {
+    // Check if ALL action items linked to this COA are now completed
+    const { data: siblingItems } = await supabase
+      .from('action_items')
+      .select('id, status')
+      .eq('coa_id', current.coa_id)
+      .eq('user_id', user.id)
+      .neq('id', id)
+
+    const allComplete = (siblingItems ?? []).every(si => si.status === 'completed')
+
+    if (allComplete) {
+      const { data: coa } = await supabase
+        .from('coas')
+        .select('mission_id, action, status')
+        .eq('id', current.coa_id)
+        .single()
+
+      if (coa && coa.status !== 'completed') {
+        await supabase.from('coas').update({ status: 'completed' }).eq('id', current.coa_id)
+
+        await writeMissionLog(supabase, {
+          mission_id: coa.mission_id,
+          user_id: user.id,
+          entry_type: 'coa_completed',
+          description: `COA auto-completed (all action items done): ${coa.action}`,
+          subject_type: 'coa',
+          subject_id: current.coa_id,
+        })
+      }
+    }
+  }
+
+  if (isReopening && current.coa_id) {
+    const { data: coa } = await supabase
+      .from('coas')
+      .select('mission_id, action, status')
+      .eq('id', current.coa_id)
+      .single()
+
+    if (coa && coa.status === 'completed') {
+      await supabase.from('coas').update({ status: 'in_progress' }).eq('id', current.coa_id)
+
+      await writeMissionLog(supabase, {
+        mission_id: coa.mission_id,
+        user_id: user.id,
+        entry_type: 'coa_committed',
+        description: `COA reopened (action item unchecked): ${coa.action}`,
+        subject_type: 'coa',
+        subject_id: current.coa_id,
+      })
+    }
   }
 
   return NextResponse.json({ item: updated })

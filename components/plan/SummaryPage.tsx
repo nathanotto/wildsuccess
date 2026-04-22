@@ -300,7 +300,7 @@ export default function SummaryPage({ missionId }: Props) {
       <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 16, display: 'flex', gap: 8 }}>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Mission overview</span>
         <span>|</span>
-        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Arrange plan</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Engage mission</span>
         <span>|</span>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/summary?print=true`)}>Print version</span>
         {ancestry.length > 0 && (

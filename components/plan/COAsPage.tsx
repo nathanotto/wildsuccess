@@ -147,13 +147,14 @@ export default function COAsPage({ missionId }: Props) {
     if (!res.ok) { showToast('Failed'); return }
     const data = await res.json()
 
+    const coaName = coas.find(c => c.id === coaId)?.action ?? 'COA'
     if (target === 'hopper') {
-      showToast('Added to hopper')
+      showToast(`"${coaName}" added to hopper`)
       setCoas(prev => prev.map(c => c.id === coaId ? { ...c, status: 'committed' } : c))
     } else if (target === 'sub_mission') {
       router.push(`/plan/${data.mission.id}/factors?kind=success`)
     } else if (target === 'big_outcome') {
-      showToast('Added to Map as Big Outcome')
+      showToast(`"${coaName}" added to Map as Big Outcome`)
       setCoas(prev => prev.map(c => c.id === coaId ? { ...c, status: 'committed', big_outcome_id: data.outcome.id, big_outcome_name: data.outcome.name } : c))
     }
   }
@@ -405,16 +406,17 @@ export default function COAsPage({ missionId }: Props) {
               background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6,
               padding: '8px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}
-          >Arrange plan →</button>
+          >Engage mission →</button>
         </div>
       )}
 
       {toastMsg && (
         <div style={{
           position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#2D2A26', color: '#FFF', padding: '8px 20px', borderRadius: 8,
+          background: '#E8F5E9', color: '#2E7D32', padding: '8px 20px', borderRadius: 8,
           fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
           transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
         }}>{toastMsg}</div>
       )}
     </div>

@@ -499,6 +499,18 @@ function FocusView({
         </div>
       )}
 
+      {/* COA link */}
+      {item.coa_id && item.mission_id && (
+        <div style={{ marginTop: 6 }}>
+          <a
+            href={`/plan/${item.mission_id}/arrange`}
+            target="_blank"
+            rel="noopener"
+            style={{ fontSize: 12, color: '#4B82AF', textDecoration: 'none' }}
+          >View in plan →</a>
+        </div>
+      )}
+
       {/* Steps section */}
       <div style={section}>
         <div
@@ -1840,6 +1852,15 @@ function TodoRow({
           }}>
             {item.name}
           </span>
+          {item.coa_id && item.mission_id && (
+            <a
+              href={`/plan/${item.mission_id}/arrange`}
+              target="_blank"
+              rel="noopener"
+              onClick={e => e.stopPropagation()}
+              style={{ fontSize: 9, color: '#4B82AF', marginLeft: 5, fontWeight: 600, textDecoration: 'none' }}
+            >plan</a>
+          )}
         </div>
       </div>
       {steps.length > 0 && displayStatus === 'in_progress' && (
@@ -1924,6 +1945,15 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
           }}>
             {item.name}
           </span>
+          {item.coa_id && item.mission_id && (
+            <a
+              href={`/plan/${item.mission_id}/arrange`}
+              target="_blank"
+              rel="noopener"
+              onClick={e => e.stopPropagation()}
+              style={{ fontSize: 9, color: '#4B82AF', marginLeft: 5, fontWeight: 600, textDecoration: 'none' }}
+            >plan</a>
+          )}
         </div>
       </div>
       {steps.length > 0 && displayStatus === 'in_progress' && (

@@ -179,6 +179,17 @@ export default function MissionOverviewPage({ missionId }: Props) {
     }
   }
 
+  async function editFactor(id: string, name: string) {
+    const res = await fetch(`/api/missions/${missionId}/factors/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (res.ok) {
+      setFactors(prev => prev.map(f => f.id === id ? { ...f, name } : f))
+    }
+  }
+
   async function moveFactor(id: string, direction: 'up' | 'down', kind: FactorKind) {
     const kindFactors = factors.filter(f => f.kind === kind).sort((a, b) => a.sort_order - b.sort_order)
     const idx = kindFactors.findIndex(f => f.id === id)
@@ -387,7 +398,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
                   Plan courses of action
                 </button>
                 <button onClick={() => router.push(`/plan/${missionId}/arrange`)} style={navLinkStyle}>
-                  Arrange plan
+                  Engage mission
                 </button>
                 <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={navLinkStyle}>
                   See plan summary
@@ -417,6 +428,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
             onInput={v => setInputs(p => ({ ...p, success: v }))}
             onAdd={() => addFactor('success')}
             onDelete={deleteFactor}
+            onEdit={editFactor}
             onMove={moveFactor}
             infoOpen={infoOpen === 'success'}
             onToggleInfo={() => setInfoOpen(infoOpen === 'success' ? null : 'success')}
@@ -432,6 +444,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
                 onInput={v => setInputs(p => ({ ...p, [kind]: v }))}
                 onAdd={() => addFactor(kind)}
                 onDelete={deleteFactor}
+                onEdit={editFactor}
                 onMove={moveFactor}
                 infoOpen={infoOpen === kind}
                 onToggleInfo={() => setInfoOpen(infoOpen === kind ? null : kind)}
@@ -518,7 +531,7 @@ const navLinkStyle: React.CSSProperties = {
 }
 
 function FactorCard({
-  kind, factors, input, onInput, onAdd, onDelete, onMove, infoOpen, onToggleInfo,
+  kind, factors, input, onInput, onAdd, onDelete, onEdit, onMove, infoOpen, onToggleInfo,
 }: {
   kind: FactorKind
   factors: Factor[]
@@ -526,11 +539,14 @@ function FactorCard({
   onInput: (v: string) => void
   onAdd: () => void
   onDelete: (id: string) => void
+  onEdit: (id: string, name: string) => void
   onMove: (id: string, dir: 'up' | 'down', kind: FactorKind) => void
   infoOpen: boolean
   onToggleInfo: () => void
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
   const meta = FACTOR_KINDS.find(f => f.kind === kind)!
   const items = factors.filter(f => f.kind === kind).sort((a, b) => a.sort_order - b.sort_order)
 
@@ -594,8 +610,25 @@ function FactorCard({
                 )
               ) : <span style={{ width: 14 }} />}
               <span style={{ color: getAuthorColor(f.user_id, !!f.is_own), fontWeight: 600, fontSize: 11 }}>{formatAuthorTag(f.author_name, f.is_own)}</span>
-              <span style={{ color: '#2D2A26' }}>{f.name}</span>
-              {(f.link_count ?? 0) > 0 && (
+              {editingId === f.id ? (
+                <input
+                  autoFocus
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  onBlur={() => { if (editText.trim() && editText.trim() !== f.name) onEdit(f.id, editText.trim()); setEditingId(null) }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { if (editText.trim() && editText.trim() !== f.name) onEdit(f.id, editText.trim()); setEditingId(null) }
+                    if (e.key === 'Escape') setEditingId(null)
+                  }}
+                  style={{ flex: 1, fontSize: 12, padding: '1px 4px', border: '1px solid #E8E4DC', borderRadius: 3, outline: 'none', fontFamily: 'inherit' }}
+                />
+              ) : (
+                <span
+                  onClick={f.is_own ? () => { setEditingId(f.id); setEditText(f.name) } : undefined}
+                  style={{ color: '#2D2A26', cursor: f.is_own ? 'text' : 'default' }}
+                >{f.name}</span>
+              )}
+              {(f.link_count ?? 0) > 0 && editingId !== f.id && (
                 <span style={{ color: '#C4504A', fontSize: 10, marginLeft: 'auto' }}>♥ {f.link_count}</span>
               )}
             </div>

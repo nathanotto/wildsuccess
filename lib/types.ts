@@ -288,6 +288,8 @@ export interface ActionItem {
   activity_id: string | null
   task_suggestion_id: string | null
   big_outcome_id: string | null
+  coa_id: string | null
+  mission_id: string | null
   time_block_id: string | null
   parent_action_item_id: string | null
   person_id: string | null
