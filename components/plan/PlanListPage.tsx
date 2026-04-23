@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { useActionToast } from '@/lib/useActionToast'
+import ActionToast from '@/components/shared/ActionToast'
 import { useRouter } from 'next/navigation'
 import type { Mission } from '@/lib/types'
 
@@ -19,17 +21,9 @@ export default function PlanListPage() {
   const router = useRouter()
   const [missions, setMissions] = useState<Mission[]>([])
   const [loading, setLoading] = useState(true)
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [toastVisible, setToastVisible] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { toast, visible, show } = useActionToast()
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-
-  function showToast(msg: string) {
-    setToastMsg(msg); setToastVisible(true)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
-  }
 
   useEffect(() => {
     fetch('/api/missions').then(r => r.json()).then(data => {
@@ -40,7 +34,8 @@ export default function PlanListPage() {
 
   async function handleDelete(id: string) {
     const res = await fetch(`/api/missions/${id}`, { method: 'DELETE' })
-    if (res.ok) { setMissions(prev => prev.filter(m => m.id !== id)); showToast('Mission deleted') }
+    const name = missions.find(m => m.id === id)?.name ?? 'Mission'
+    if (res.ok) { setMissions(prev => prev.filter(m => m.id !== id)); show('delete', `Mission "${name}" deleted`) }
     setDeleteConfirm(null); setMenuOpen(null)
   }
 
@@ -206,10 +201,13 @@ export default function PlanListPage() {
     <div style={{ padding: '24px 32px', maxWidth: 800, margin: '0 auto' }} onClick={() => { if (menuOpen) setMenuOpen(null) }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: '#2D2A26', margin: 0 }}>Missions</h1>
-        <button
-          onClick={() => router.push('/plan/new')}
-          style={{ padding: '6px 16px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-        >+ New mission</button>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button
+            onClick={() => router.push('/plan/new')}
+            style={{ padding: '6px 16px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          >+ New mission</button>
+          <ActionToast message={toast?.msg} visible={visible} position="left" />
+        </div>
       </div>
 
       {missions.length === 0 ? (
@@ -233,14 +231,6 @@ export default function PlanListPage() {
         </>
       )}
 
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#2D2A26', color: '#FFF', padding: '8px 20px', borderRadius: 8,
-          fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
-          transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
-        }}>{toastMsg}</div>
-      )}
     </div>
   )
 }

@@ -106,10 +106,15 @@ export default function MissionClosurePage() {
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 80px' }}>
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
-          <button onClick={() => router.push(`/plan/${missionId}`)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#8A8578', fontFamily: FONT, padding: 0, marginBottom: 8 }}>
-            ← Back to mission
-          </button>
+          <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 8, display: 'flex', gap: 8 }}>
+            <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Mission overview</span>
+            <span>|</span>
+            <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Plan COAs</span>
+            <span>|</span>
+            <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/summary`)}>See the finished plan</span>
+            <span>|</span>
+            <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Engage mission</span>
+          </div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>
             {isClosed ? 'Mission Closed' : 'Close Mission'}
           </h1>

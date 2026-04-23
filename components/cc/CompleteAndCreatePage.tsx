@@ -200,7 +200,7 @@ export default function CompleteAndCreatePage() {
               onClick={() => setShowHelp(showHelp === 'complete' ? null : 'complete')}
               style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}
             >?</span>
-            {saved === 'complete_statement' && <span style={{ fontSize: 10, color: '#5A9E6F' }}>saved</span>}
+            {saved === 'complete_statement' && <span style={{ fontSize: 10, fontWeight: 600, color: '#2E7D32', padding: '2px 6px', background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 4, boxShadow: '0 0 6px rgba(90,158,111,0.3)' }}>saved</span>}
           </div>
           {showHelp === 'complete' && (
             <div style={{ fontSize: 12, color: '#8A857D', background: '#F5F3EF', borderRadius: 6, padding: '8px 12px', marginBottom: 8, lineHeight: 1.5 }}>
@@ -241,7 +241,7 @@ export default function CompleteAndCreatePage() {
               onClick={() => setShowHelp(showHelp === 'create' ? null : 'create')}
               style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #C4BFB4', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#8A857D', cursor: 'pointer' }}
             >?</span>
-            {saved === 'create_statement' && <span style={{ fontSize: 10, color: '#5A9E6F' }}>saved</span>}
+            {saved === 'create_statement' && <span style={{ fontSize: 10, fontWeight: 600, color: '#2E7D32', padding: '2px 6px', background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 4, boxShadow: '0 0 6px rgba(90,158,111,0.3)' }}>saved</span>}
           </div>
           {showHelp === 'create' && (
             <div style={{ fontSize: 12, color: '#8A857D', background: '#F5F3EF', borderRadius: 6, padding: '8px 12px', marginBottom: 8, lineHeight: 1.5 }}>

@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { useActionToast } from '@/lib/useActionToast'
+import ActionToast from '@/components/shared/ActionToast'
 
 interface AccessRequest {
   id: string; user_name: string; user_email: string; note: string | null; requested_at: string; status: string
@@ -12,15 +14,7 @@ export default function AdminPage({ emailOverride }: { emailOverride?: string })
   const [requests, setRequests] = useState<AccessRequest[]>([])
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [toastVisible, setToastVisible] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function showToast(msg: string) {
-    setToastMsg(msg); setToastVisible(true)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
-  }
+  const { toast, visible, show } = useActionToast()
 
   useEffect(() => {
     Promise.all([
@@ -42,8 +36,9 @@ export default function AdminPage({ emailOverride }: { emailOverride?: string })
       body: JSON.stringify({ status }),
     })
     if (res.ok) {
+      const req = requests.find(r => r.id === id)
       setRequests(prev => prev.filter(r => r.id !== id))
-      showToast(status === 'approved' ? 'Access approved' : 'Request denied')
+      show(`resolve-${id}`, status === 'approved' ? `Access approved for ${req?.user_name ?? 'user'}` : `Request denied for ${req?.user_name ?? 'user'}`)
     }
   }
 
@@ -66,8 +61,11 @@ export default function AdminPage({ emailOverride }: { emailOverride?: string })
                 {r.note && <div style={{ fontSize: 11, color: '#8A8578' }}>{r.note}</div>}
                 <div style={{ fontSize: 10, color: '#B5B0A8' }}>{new Date(r.requested_at).toLocaleDateString()}</div>
               </div>
-              <button onClick={() => handleResolve(r.id, 'approved')} style={{ padding: '4px 10px', background: '#5A9E6F', color: '#FFF', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Approve</button>
-              <button onClick={() => handleResolve(r.id, 'denied')} style={{ padding: '4px 10px', background: '#F8F7F4', border: '1px solid #E8E4DC', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>Deny</button>
+              <div style={{ position: 'relative', flexShrink: 0, display: 'flex', gap: 4 }}>
+                <button onClick={() => handleResolve(r.id, 'approved')} style={{ padding: '4px 10px', background: '#5A9E6F', color: '#FFF', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Approve</button>
+                <button onClick={() => handleResolve(r.id, 'denied')} style={{ padding: '4px 10px', background: '#F8F7F4', border: '1px solid #E8E4DC', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>Deny</button>
+                <ActionToast message={toast?.id === `resolve-${r.id}` ? toast.msg : null} visible={visible && toast?.id === `resolve-${r.id}`} position="left" />
+              </div>
             </div>
           ))}
         </div>
@@ -90,14 +88,6 @@ export default function AdminPage({ emailOverride }: { emailOverride?: string })
         EMAIL_OVERRIDE: <strong>{emailOverride || '(not set — emails go to real recipients)'}</strong>
       </div>
 
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#2D2A26', color: '#FFF', padding: '8px 20px', borderRadius: 8,
-          fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
-          transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
-        }}>{toastMsg}</div>
-      )}
     </div>
   )
 }

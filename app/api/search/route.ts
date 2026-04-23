@@ -51,6 +51,21 @@ export async function GET(req: NextRequest) {
     for (const p of parents ?? []) parentNames[p.id] = p.name
   }
 
+  // Fetch notes/steps attached to matched action items
+  const matchedItemIds = (itemsRes.data ?? []).map(i => i.id)
+  const itemChildren: Record<string, Array<{ content: string; note_type: string; is_completed: boolean }>> = {}
+  if (matchedItemIds.length > 0) {
+    const { data: childNotes } = await supabase
+      .from('item_notes')
+      .select('action_item_id, content, note_type, is_completed, sort_order')
+      .in('action_item_id', matchedItemIds)
+      .order('sort_order', { ascending: true })
+    for (const cn of childNotes ?? []) {
+      if (!itemChildren[cn.action_item_id]) itemChildren[cn.action_item_id] = []
+      itemChildren[cn.action_item_id].push({ content: cn.content, note_type: cn.note_type, is_completed: cn.is_completed })
+    }
+  }
+
   const results: Array<{
     id: string
     type: 'action_item' | 'note' | 'log'
@@ -59,6 +74,7 @@ export async function GET(req: NextRequest) {
     parent_name?: string | null
     status?: string
     note_type?: string
+    children?: Array<{ content: string; note_type: string; is_completed: boolean }>
   }> = []
 
   // Action items
@@ -69,6 +85,7 @@ export async function GET(req: NextRequest) {
       text: item.name,
       date: item.committed_date ?? item.created_at?.split('T')[0] ?? null,
       status: item.status,
+      children: itemChildren[item.id],
     })
   }
 

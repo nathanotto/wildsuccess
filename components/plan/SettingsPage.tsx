@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { useActionToast } from '@/lib/useActionToast'
+import ActionToast from '@/components/shared/ActionToast'
 
 const COMMON_TIMEZONES = [
   'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -29,15 +31,7 @@ export default function SettingsPage() {
   const [prefs, setPrefs] = useState({ digest_enabled: true, digest_frequency: 'weekly', invitation_emails: true, commitment_reminders: true })
   const [timezone, setTimezone] = useState('America/Denver')
   const [loading, setLoading] = useState(true)
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [toastVisible, setToastVisible] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function showToast(msg: string) {
-    setToastMsg(msg); setToastVisible(true)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
-  }
+  const { toast, visible, show } = useActionToast()
 
   useEffect(() => {
     fetch('/api/profile').then(r => r.json()).then(data => {
@@ -52,7 +46,7 @@ export default function SettingsPage() {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ communication_preferences: prefs, timezone }),
     })
-    if (res.ok) showToast('Settings saved')
+    if (res.ok) show('save', 'Preferences saved')
   }
 
   if (loading) return <div style={{ padding: 40, color: '#8A8578', fontSize: 13 }}>Loading…</div>
@@ -101,18 +95,12 @@ export default function SettingsPage() {
         </label>
       </div>
 
-      <button onClick={save} style={{ marginTop: 20, padding: '8px 20px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-        Save preferences
-      </button>
-
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#2D2A26', color: '#FFF', padding: '8px 20px', borderRadius: 8,
-          fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
-          transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
-        }}>{toastMsg}</div>
-      )}
+      <div style={{ position: 'relative', display: 'inline-block', marginTop: 20 }}>
+        <button onClick={save} style={{ padding: '8px 20px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          Save preferences
+        </button>
+        <ActionToast message={toast?.msg} visible={visible} position="right" />
+      </div>
     </div>
   )
 }

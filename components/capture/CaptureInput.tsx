@@ -288,8 +288,10 @@ export default function CaptureInput({
             if (toastParsedRef.current) showCard(toastParsedRef.current)
           }}
           style={{
-            fontSize: 13, color: '#8A8578', cursor: 'pointer',
-            paddingBottom: 6, lineHeight: 1.4,
+            fontSize: 12, fontWeight: 600, color: '#2E7D32', cursor: 'pointer',
+            padding: '6px 12px', lineHeight: 1.4, marginTop: 4, marginBottom: 4,
+            background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 6,
+            boxShadow: '0 0 8px rgba(90,158,111,0.4)',
             animation: 'fadeOut 0.5s ease 3s forwards',
           }}
         >
@@ -301,11 +303,11 @@ export default function CaptureInput({
       {cardVisible && card && (
         <div style={{
           background: '#FFF',
-          border: '1px solid #E8E4DC',
-          borderRadius: 4,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          border: '1px solid #5A9E6F',
+          borderRadius: 6,
+          boxShadow: '0 0 8px rgba(90,158,111,0.4)',
           padding: '10px 12px',
-          marginBottom: 4,
+          marginTop: 4, marginBottom: 4,
         }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#2D2A26', marginBottom: 4 }}>
             {card.cleanedName}

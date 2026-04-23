@@ -481,7 +481,11 @@ function FocusView({
           </div>
         )}
         {wasTitle && (
-          <div style={{ fontSize: 11, color: '#8A8578', fontStyle: 'italic', marginTop: 2 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: '#2E7D32', marginTop: 4,
+            padding: '4px 10px', background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 6,
+            boxShadow: '0 0 8px rgba(90,158,111,0.4)', display: 'inline-block',
+          }}>
             was: {wasTitle}
           </div>
         )}
@@ -595,7 +599,11 @@ function FocusView({
             style={inputStyle}
           />
           {confirmMsg && (
-            <div style={{ fontSize: 12, color: '#5A9E6F', fontWeight: 600, marginTop: 4 }}>
+            <div style={{
+              fontSize: 12, fontWeight: 600, color: '#2E7D32', marginTop: 4,
+              padding: '6px 12px', background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 6,
+              boxShadow: '0 0 8px rgba(90,158,111,0.4)',
+            }}>
               {confirmMsg}
             </div>
           )}
@@ -668,7 +676,11 @@ function FocusView({
           </button>
         )}
         {confirmMsg ? (
-          <div style={{ fontSize: 13, color: '#5A9E6F', fontWeight: 600, padding: '6px 0' }}>
+          <div style={{
+            fontSize: 12, fontWeight: 600, color: '#2E7D32', margin: '6px 0',
+            padding: '6px 12px', background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 6,
+            boxShadow: '0 0 8px rgba(90,158,111,0.4)',
+          }}>
             {confirmMsg}
           </div>
         ) : showCaptureFollowUp ? (

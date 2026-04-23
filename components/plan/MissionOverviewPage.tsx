@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { useActionToast } from '@/lib/useActionToast'
+import ActionToast from '@/components/shared/ActionToast'
 import { useRouter } from 'next/navigation'
 import type { Mission, Factor, FactorKind, COA } from '@/lib/types'
 import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
@@ -41,16 +43,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
   const [editingDesc, setEditingDesc] = useState(false)
   const [descDraft, setDescDraft] = useState('')
   const [collaborators, setCollaborators] = useState<{ user_id: string; role: string; name: string }[]>([])
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [toastVisible, setToastVisible] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function showToast(msg: string) {
-    setToastMsg(msg)
-    setToastVisible(true)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
-  }
+  const { toast, visible, show } = useActionToast()
 
   async function handleRename() {
     const trimmed = nameDraft.trim()
@@ -62,7 +55,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
     })
     if (res.ok) {
       setMission({ ...mission, name: trimmed })
-      showToast('Mission renamed')
+      show('rename', `Mission renamed to "${trimmed}"`)
     }
     setEditingName(false)
   }
@@ -77,7 +70,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
     })
     if (res.ok) {
       setMission({ ...mission, description: trimmed || null })
-      showToast('Description saved')
+      show('desc', 'Description updated')
     }
     setEditingDesc(false)
   }
@@ -175,7 +168,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
     if (res.ok) {
       setFactors(prev => prev.filter(f => f.id !== id))
       setMission(prev => prev ? { ...prev, factor_count: Math.max(0, (prev.factor_count ?? 1) - 1) } : prev)
-      showToast('Factor deleted')
+      show('factor-del', 'Factor deleted')
     }
   }
 
@@ -227,7 +220,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
     const res = await fetch(`/api/missions/${missionId}/coas/${id}`, { method: 'DELETE' })
     if (res.ok) {
       setCoas(prev => prev.filter(c => c.id !== id))
-      showToast('COA deleted')
+      show('coa-del', 'COA deleted')
     }
   }
 
@@ -251,7 +244,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
   return (
     <div style={{ padding: '24px 32px', maxWidth: 1100, margin: '0 auto' }}>
       {/* Breadcrumb */}
-      <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 12, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 4, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push('/plan')}>Plan</span>
         {ancestry.map(a => (
           <span key={a.id} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -262,6 +255,16 @@ export default function MissionOverviewPage({ missionId }: Props) {
         ))}
         <span>→</span>
         <span style={{ color: '#2D2A26', fontWeight: 600 }}>{mission.name}</span>
+      </div>
+      {/* Nav */}
+      <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 12, display: 'flex', gap: 8 }}>
+        <span style={{ color: '#2D2A26', fontWeight: 600 }}>Mission overview</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Plan COAs</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/summary`)}>See the finished plan</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Engage mission</span>
       </div>
 
       <div style={{ display: 'flex', gap: 24 }}>
@@ -307,12 +310,13 @@ export default function MissionOverviewPage({ missionId }: Props) {
               style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: '0 0 8px', border: '1px solid #C4725A', borderRadius: 4, padding: '4px 6px', outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', resize: 'none', lineHeight: 1.3 }}
             />
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px', position: 'relative' }}>
               <h1 style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: 0 }}>{mission.name}</h1>
               {!CLOSED_STATUSES.includes(mission.status) && (
                 <button onClick={() => { setEditingName(true); setNameDraft(mission.name) }} title="Rename mission"
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14, color: '#B5B0A8', lineHeight: 1 }}>✎</button>
               )}
+              <ActionToast message={toast?.id === 'rename' ? toast.msg : null} visible={visible && toast?.id === 'rename'} position="below" width={180} />
             </div>
           )}
 
@@ -327,7 +331,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
               style={{ fontSize: 12, color: '#8A8578', margin: '0 0 12px', lineHeight: 1.5, width: '100%', border: '1px solid #C4725A', borderRadius: 4, padding: '4px 6px', outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
             />
           ) : (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '0 0 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '0 0 12px', position: 'relative' }}>
               <p style={{ fontSize: 12, color: '#8A8578', margin: 0, lineHeight: 1.5, flex: 1 }}>
                 {mission.description || <span style={{ fontStyle: 'italic', color: '#B5B0A8' }}>No description</span>}
               </p>
@@ -335,6 +339,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
                 <button onClick={() => { setEditingDesc(true); setDescDraft(mission.description ?? '') }} title="Edit description"
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: '#B5B0A8', lineHeight: 1, flexShrink: 0 }}>✎</button>
               )}
+              <ActionToast message={toast?.id === 'desc' ? toast.msg : null} visible={visible && toast?.id === 'desc'} position="below" width={160} />
             </div>
           )}
           <div style={{ fontSize: 11, color: STATUS_COLORS[mission.status], fontWeight: 600, marginBottom: 12 }}>
@@ -502,14 +507,6 @@ export default function MissionOverviewPage({ missionId }: Props) {
         </div>
       </div>
 
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#2D2A26', color: '#FFF', padding: '8px 20px', borderRadius: 8,
-          fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
-          transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
-        }}>{toastMsg}</div>
-      )}
     </div>
   )
 }

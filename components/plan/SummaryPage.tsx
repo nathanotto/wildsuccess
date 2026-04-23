@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useActionToast } from '@/lib/useActionToast'
+import ActionToast from '@/components/shared/ActionToast'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Factor, COA, COADependency, COAResourceNeed, MissionLogEntry, Mission, MissionValueLink, FactorKind } from '@/lib/types'
 
@@ -36,16 +38,7 @@ export default function SummaryPage({ missionId }: Props) {
   const [logFilter, setLogFilter] = useState('')
   const [expandedFactors, setExpandedFactors] = useState<Record<string, boolean>>({}) // "coaId:kind" → expanded
   const [showUnaccounted, setShowUnaccounted] = useState(false)
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [toastVisible, setToastVisible] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function showToast(msg: string) {
-    setToastMsg(msg)
-    setToastVisible(true)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
-  }
+  const { toast, visible, show } = useActionToast()
 
   async function handlePromote(coaId: string, target: string) {
     const res = await fetch(`/api/missions/${missionId}/coas/${coaId}/promote`, {
@@ -53,15 +46,16 @@ export default function SummaryPage({ missionId }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target }),
     })
-    if (!res.ok) { showToast('Failed'); return }
+    if (!res.ok) { show(`promote-${coaId}`, 'Promote failed — try again', 'error'); return }
     const data = await res.json()
+    const coaName = coas.find(c => c.id === coaId)?.action ?? 'COA'
     if (target === 'hopper') {
-      showToast('Added to hopper')
+      show(`promote-${coaId}`, `"${coaName}" added to hopper`)
       setCoas(prev => prev.map(c => c.id === coaId ? { ...c, status: 'committed' } : c))
     } else if (target === 'sub_mission') {
       router.push(`/plan/${data.mission.id}/factors?kind=success`)
     } else if (target === 'big_outcome') {
-      showToast('Added to Map as Big Outcome')
+      show(`promote-${coaId}`, `"${coaName}" added to Map as Big Outcome`)
       setCoas(prev => prev.map(c => c.id === coaId ? { ...c, status: 'committed', big_outcome_id: data.outcome.id } : c))
     }
   }
@@ -297,8 +291,12 @@ export default function SummaryPage({ missionId }: Props) {
   return (
     <div style={{ padding: '24px 32px', maxWidth: 800, margin: '0 auto' }}>
       {/* Nav */}
-      <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 16, display: 'flex', gap: 8 }}>
+      <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Mission overview</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Plan COAs</span>
+        <span>|</span>
+        <span style={{ color: '#2D2A26', fontWeight: 600 }}>See the finished plan</span>
         <span>|</span>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Engage mission</span>
         <span>|</span>
@@ -441,11 +439,12 @@ export default function SummaryPage({ missionId }: Props) {
                       )}
                       {c.big_outcome_id && <span style={{ fontSize: 10, color: '#5A9E6F' }}>On Map</span>}
                       {canPromote && (
-                        <>
+                        <div style={{ position: 'relative', display: 'inline-flex', gap: 6 }}>
                           <button onClick={() => handlePromote(c.id, 'hopper')} style={promoteBtn}>Send to hopper</button>
                           <button onClick={() => handlePromote(c.id, 'sub_mission')} style={promoteBtn}>Plan this</button>
                           <button onClick={() => handlePromote(c.id, 'big_outcome')} style={promoteBtn}>Add to Map</button>
-                        </>
+                          <ActionToast message={toast?.id === `promote-${c.id}` ? toast.msg : null} visible={visible && toast?.id === `promote-${c.id}`} type={toast?.type} position="above" />
+                        </div>
                       )}
                     </div>
                   </div>
@@ -525,14 +524,6 @@ export default function SummaryPage({ missionId }: Props) {
         )}
       </div>
 
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#2D2A26', color: '#FFF', padding: '8px 20px', borderRadius: 8,
-          fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
-          transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
-        }}>{toastMsg}</div>
-      )}
     </div>
   )
 }

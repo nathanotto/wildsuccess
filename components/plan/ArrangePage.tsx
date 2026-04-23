@@ -343,9 +343,13 @@ export default function ArrangePage({ missionId }: Props) {
 
       {/* Header row 2: links + mission log button */}
       <div style={{ padding: '4px 16px 6px', borderBottom: '1px solid #E8E4DC', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Overview</span>
-        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>COA page</span>
-        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/commitments`)}>Commitments</span>
+        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Mission overview</span>
+        <span style={{ fontSize: 11, color: '#8A8578' }}>|</span>
+        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Plan COAs</span>
+        <span style={{ fontSize: 11, color: '#8A8578' }}>|</span>
+        <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/summary`)}>See the finished plan</span>
+        <span style={{ fontSize: 11, color: '#8A8578' }}>|</span>
+        <span style={{ fontSize: 11, color: '#2D2A26', fontWeight: 600 }}>Engage mission</span>
         <div style={{ flex: 1 }} />
         <div style={{ position: 'relative' }}>
           <button onClick={() => setShowLogPopover(!showLogPopover)} style={{ ...smallBtn, fontSize: 10 }}>+ Add to mission log</button>

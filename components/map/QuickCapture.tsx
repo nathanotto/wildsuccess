@@ -1,5 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
+import { useActionToast } from '@/lib/useActionToast'
+import ActionToast from '@/components/shared/ActionToast'
 
 const FONT = "'Source Sans 3', sans-serif"
 const ACCENT = '#C4725A'
@@ -9,14 +11,14 @@ const TEXT = '#2D2A26'
 
 interface Props {
   onCaptured: () => void
-  showToast: (msg: string, type?: 'success' | 'error') => void
 }
 
-export default function QuickCapture({ onCaptured, showToast }: Props) {
+export default function QuickCapture({ onCaptured }: Props) {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const { toast, visible, show } = useActionToast()
 
   async function handleSubmit() {
     const text = value.trim()
@@ -29,7 +31,7 @@ export default function QuickCapture({ onCaptured, showToast }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawInput: text, source: 'map' }),
       })
-      if (!res.ok) { showToast('Failed to capture', 'error'); return }
+      if (!res.ok) { show('capture', 'Failed to capture', 'error'); return }
 
       const { parsed } = await res.json()
       const name = parsed?.cleanedName ?? text
@@ -41,12 +43,12 @@ export default function QuickCapture({ onCaptured, showToast }: Props) {
         parsed?.outcome === 'outside_request' ? `From ${parsed.person}: ${name}` :
         parsed?.outcome === 'commitment'      ? `Committed: ${name}` :
                                                 `Captured: ${name}`
-      showToast(label)
+      show('capture', label)
       setValue('')
       setFocused(false)
       onCaptured()
     } catch {
-      showToast('Failed to capture', 'error')
+      show('capture', 'Failed to capture', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -83,17 +85,25 @@ export default function QuickCapture({ onCaptured, showToast }: Props) {
             }}
           />
           {value && (
-            <button
-              disabled={submitting}
-              onClick={handleSubmit}
-              style={{
-                padding: '6px 16px', borderRadius: 20,
-                background: submitting ? MUTED : ACCENT,
-                color: '#fff', fontSize: 12, fontWeight: 600,
-                border: 'none', cursor: submitting ? 'default' : 'pointer',
-                fontFamily: FONT, flexShrink: 0, whiteSpace: 'nowrap',
-              }}
-            >{submitting ? '...' : 'Capture'}</button>
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                disabled={submitting}
+                onClick={handleSubmit}
+                style={{
+                  padding: '6px 16px', borderRadius: 20,
+                  background: submitting ? MUTED : ACCENT,
+                  color: '#fff', fontSize: 12, fontWeight: 600,
+                  border: 'none', cursor: submitting ? 'default' : 'pointer',
+                  fontFamily: FONT, flexShrink: 0, whiteSpace: 'nowrap',
+                }}
+              >{submitting ? '...' : 'Capture'}</button>
+              <ActionToast message={toast?.msg} visible={visible} type={toast?.type} position="above" />
+            </div>
+          )}
+          {!value && toast && (
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <ActionToast message={toast.msg} visible={visible} type={toast.type} position="above" />
+            </div>
           )}
         </div>
         {focused && !value && (

@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 import type { Factor, COA, FactorKind } from '@/lib/types'
 import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
 import { useRealtimeMission } from '@/lib/useRealtimeMission'
+import { useActionToast } from '@/lib/useActionToast'
+import ActionToast from '@/components/shared/ActionToast'
 
 const KIND_ORDER: FactorKind[] = ['success', 'driver', 'constraint', 'fact', 'assumption']
 const KIND_LABELS: Record<string, string> = {
@@ -27,16 +29,17 @@ export default function COAsPage({ missionId }: Props) {
   const [actionInput, setActionInput] = useState('')
   const [outcomeInput, setOutcomeInput] = useState('')
   const [loading, setLoading] = useState(true)
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [toastVisible, setToastVisible] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { toast, visible, show } = useActionToast()
   const actionRef = useRef<HTMLInputElement>(null)
 
-  function showToast(msg: string) {
-    setToastMsg(msg)
-    setToastVisible(true)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
+  function handleSaveLinks(coaId: string) {
+    const count = coaFactorLinks[coaId]?.size ?? 0
+    const allLinked = new Set<string>()
+    Object.values(coaFactorLinks).forEach(s => s.forEach(fid => allLinked.add(fid)))
+    const unmatched = factors.filter(f => !allLinked.has(f.id)).length
+    const pctDone = factors.length > 0 ? Math.round((allLinked.size / factors.length) * 100) : 0
+    show(`save-${coaId}`, `You linked ${count} factor${count !== 1 ? 's' : ''}. ${unmatched} unmatched factor${unmatched !== 1 ? 's' : ''} remain, ${pctDone}% done.`)
+    setSelectedCoaId(null)
   }
 
   const loadData = useCallback(async () => {
@@ -111,7 +114,7 @@ export default function COAsPage({ missionId }: Props) {
       setCoas(prev => prev.filter(c => c.id !== id))
       if (selectedCoaId === id) setSelectedCoaId(null)
       setCoaFactorLinks(prev => { const n = { ...prev }; delete n[id]; return n })
-      showToast('COA deleted')
+      show('coa-del', 'COA deleted')
     }
   }
 
@@ -144,17 +147,17 @@ export default function COAsPage({ missionId }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target }),
     })
-    if (!res.ok) { showToast('Failed'); return }
+    if (!res.ok) { show(`promote-${coaId}`, 'Promote failed — try again', 'error'); return }
     const data = await res.json()
 
     const coaName = coas.find(c => c.id === coaId)?.action ?? 'COA'
     if (target === 'hopper') {
-      showToast(`"${coaName}" added to hopper`)
+      show(`promote-${coaId}`, `"${coaName}" added to hopper`)
       setCoas(prev => prev.map(c => c.id === coaId ? { ...c, status: 'committed' } : c))
     } else if (target === 'sub_mission') {
       router.push(`/plan/${data.mission.id}/factors?kind=success`)
     } else if (target === 'big_outcome') {
-      showToast(`"${coaName}" added to Map as Big Outcome`)
+      show(`promote-${coaId}`, `"${coaName}" added to Map as Big Outcome`)
       setCoas(prev => prev.map(c => c.id === coaId ? { ...c, status: 'committed', big_outcome_id: data.outcome.id, big_outcome_name: data.outcome.name } : c))
     }
   }
@@ -191,11 +194,15 @@ export default function COAsPage({ missionId }: Props) {
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 1000, margin: '0 auto' }}>
-      {/* Header */}
+      {/* Nav */}
       <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 8, display: 'flex', gap: 8 }}>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Mission overview</span>
         <span>|</span>
+        <span style={{ color: '#2D2A26', fontWeight: 600 }}>Plan COAs</span>
+        <span>|</span>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/summary`)}>See the finished plan</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Engage mission</span>
       </div>
 
       <h1 style={{ fontSize: 16, fontWeight: 700, color: '#2D2A26', margin: '0 0 12px' }}>
@@ -274,14 +281,17 @@ export default function COAsPage({ missionId }: Props) {
                   {c.time_horizon !== 'unset' && (
                     <span style={{ fontSize: 9, fontWeight: 600, color: '#4B82AF', background: '#4B82AF15', padding: '1px 5px', borderRadius: 3 }}>{c.time_horizon}</span>
                   )}
-                  <button
-                    onClick={() => setSelectedCoaId(isSelected ? null : c.id)}
-                    style={{
-                      background: isSelected ? '#C4725A' : '#F8F7F4', border: isSelected ? '1px solid #C4725A' : '1px solid #E8E4DC',
-                      borderRadius: 4, padding: '3px 8px', fontSize: 10, fontWeight: 600,
-                      color: isSelected ? '#FFF' : '#C4725A', cursor: 'pointer', whiteSpace: 'nowrap',
-                    }}
-                  >{isSelected ? 'Close' : 'Link factors'}</button>
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <button
+                      onClick={() => isSelected ? handleSaveLinks(c.id) : setSelectedCoaId(c.id)}
+                      style={{
+                        background: isSelected ? '#C4725A' : '#F8F7F4', border: isSelected ? '1px solid #C4725A' : '1px solid #E8E4DC',
+                        borderRadius: 4, padding: '3px 8px', fontSize: 10, fontWeight: 600,
+                        color: isSelected ? '#FFF' : '#C4725A', cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >{isSelected ? 'Save' : 'Link factors'}</button>
+                    <ActionToast message={toast?.id === `save-${c.id}` ? toast.msg : null} visible={visible && toast?.id === `save-${c.id}`} position="left" />
+                  </div>
 
                   {/* Status indicators */}
                   {c.has_sub_mission && c.sub_mission_id && (
@@ -299,10 +309,11 @@ export default function COAsPage({ missionId }: Props) {
 
                   {/* Action buttons - visible when COA has linked factors and linking panel is closed */}
                   {linkCount > 0 && !isSelected && !c.has_sub_mission && !c.big_outcome_id && c.status === 'proposed' && (
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <div style={{ position: 'relative', display: 'flex', gap: 4, flexShrink: 0 }}>
                       <button onClick={() => handlePromote(c.id, 'hopper')} style={actionBtn}>Send to hopper</button>
                       <button onClick={() => handlePromote(c.id, 'sub_mission')} style={actionBtn}>Plan this</button>
                       <button onClick={() => handlePromote(c.id, 'big_outcome')} style={actionBtn}>Add to Map</button>
+                      <ActionToast message={toast?.id === `promote-${c.id}` ? toast.msg : null} visible={visible && toast?.id === `promote-${c.id}`} type={toast?.type} position="above" />
                     </div>
                   )}
                 </div>
@@ -397,28 +408,7 @@ export default function COAsPage({ missionId }: Props) {
         </div>
       )}
 
-      {/* Arrange link */}
-      {coas.length > 0 && pct > 0 && (
-        <div style={{ marginTop: 20, textAlign: 'center' }}>
-          <button
-            onClick={() => router.push(`/plan/${missionId}/arrange`)}
-            style={{
-              background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6,
-              padding: '8px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}
-          >Engage mission →</button>
-        </div>
-      )}
 
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#E8F5E9', color: '#2E7D32', padding: '8px 20px', borderRadius: 8,
-          fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
-          transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-        }}>{toastMsg}</div>
-      )}
     </div>
   )
 }

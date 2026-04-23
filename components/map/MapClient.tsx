@@ -8,7 +8,7 @@ import EditValueModal from './EditValueModal'
 import EditActivityModal from './EditActivityModal'
 import EditBigOutcomeModal from './EditBigOutcomeModal'
 import EditDomainModal from './EditDomainModal'
-import Toast from './Toast'
+// Toast.tsx removed — using inline green-bordered toast style
 import SeedQuestionsModal from './SeedQuestionsModal'
 import QuickCapture from './QuickCapture'
 import ContextualNudge from './ContextualNudge'
@@ -501,7 +501,6 @@ export default function MapClient({ userId, userEmail }: Props) {
       {!anyModalOpen && (
         <QuickCapture
           onCaptured={() => {}}
-          showToast={showToast}
         />
       )}
 
@@ -796,7 +795,18 @@ export default function MapClient({ userId, userEmail }: Props) {
         </div>
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} />}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 200,
+          fontSize: 12, fontWeight: 600, lineHeight: 1.4, width: 260,
+          color: toast.type === 'error' ? '#C4504A' : '#2E7D32',
+          background: '#FFF',
+          border: `1px solid ${toast.type === 'error' ? '#C4504A' : '#5A9E6F'}`,
+          borderRadius: 6, padding: '6px 12px',
+          boxShadow: `0 0 8px ${toast.type === 'error' ? 'rgba(196,80,74,0.4)' : 'rgba(90,158,111,0.4)'}`,
+          pointerEvents: 'none',
+        }}>{toast.message}</div>
+      )}
     </div>
   )
 }

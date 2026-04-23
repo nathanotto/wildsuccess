@@ -137,7 +137,11 @@ export default function FactorsGuidedPage({ missionId }: Props) {
       <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 16, display: 'flex', gap: 8 }}>
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Mission overview</span>
         <span>|</span>
-        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Plan courses of action</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Plan COAs</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/summary`)}>See the finished plan</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Engage mission</span>
       </div>
 
       {/* Header */}

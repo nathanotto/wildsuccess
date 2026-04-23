@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { useActionToast } from '@/lib/useActionToast'
+import ActionToast from '@/components/shared/ActionToast'
 import { useRouter } from 'next/navigation'
 import type { MissionInvitation } from '@/lib/types'
 
@@ -13,15 +15,7 @@ export default function InvitePage({ missionId }: Props) {
   const [participants, setParticipants] = useState<{ user_id: string; role: string; name: string }[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ id: string; preferred_name: string; full_name: string }[]>([])
-  const [toastMsg, setToastMsg] = useState<string | null>(null)
-  const [toastVisible, setToastVisible] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function showToast(msg: string) {
-    setToastMsg(msg); setToastVisible(true)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
-  }
+  const { toast, visible, show } = useActionToast()
 
   useEffect(() => {
     Promise.all([
@@ -43,11 +37,11 @@ export default function InvitePage({ missionId }: Props) {
     if (res.ok) {
       const inv = await res.json()
       setInvitations(prev => [inv, ...prev])
-      showToast(`Invitation sent to ${email.trim()}`)
+      show('invite', `Invitation sent to ${email.trim()}`)
       setEmail('')
     } else {
       const e = await res.json()
-      showToast(e.error ?? 'Failed')
+      show('invite', e.error ?? 'Failed to send invitation', 'error')
     }
   }
 
@@ -65,9 +59,15 @@ export default function InvitePage({ missionId }: Props) {
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 600, margin: '0 auto' }}>
-      <button onClick={() => router.push(`/plan/${missionId}`)} style={{ background: 'none', border: 'none', color: '#8A8578', fontSize: 12, cursor: 'pointer', marginBottom: 16 }}>
-        ← Done inviting, continue
-      </button>
+      <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 8, display: 'flex', gap: 8 }}>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}`)}>Mission overview</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Plan COAs</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/summary`)}>See the finished plan</span>
+        <span>|</span>
+        <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Engage mission</span>
+      </div>
       <h1 style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: '0 0 20px' }}>
         Invite collaborators to: <span style={{ color: '#C4725A' }}>{missionName}</span>
       </h1>
@@ -78,7 +78,10 @@ export default function InvitePage({ missionId }: Props) {
         <div style={{ display: 'flex', gap: 8 }}>
           <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleInviteByEmail() }}
             placeholder="colleague@example.com" style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #E8E4DC', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
-          <button onClick={handleInviteByEmail} style={{ padding: '8px 16px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Invite</button>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button onClick={handleInviteByEmail} style={{ padding: '8px 16px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Invite</button>
+            <ActionToast message={toast?.msg} visible={visible} type={toast?.type} position="below" />
+          </div>
         </div>
       </div>
 
@@ -116,14 +119,6 @@ export default function InvitePage({ missionId }: Props) {
         </div>
       )}
 
-      {toastMsg && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-          background: '#2D2A26', color: '#FFF', padding: '8px 20px', borderRadius: 8,
-          fontSize: 12, fontWeight: 600, opacity: toastVisible ? 1 : 0,
-          transition: 'opacity 0.3s', pointerEvents: 'none', zIndex: 100,
-        }}>{toastMsg}</div>
-      )}
     </div>
   )
 }

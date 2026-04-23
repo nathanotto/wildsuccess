@@ -11,6 +11,7 @@ interface SearchResult {
   parent_name?: string | null
   status?: string
   note_type?: string
+  children?: Array<{ content: string; note_type: string; is_completed: boolean }>
 }
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
@@ -109,6 +110,24 @@ export default function SearchPage() {
                   )}
                   {r.status === 'completed' && (
                     <span style={{ fontSize: 9, color: '#5A9E6F', marginTop: 2, display: 'inline-block' }}>completed</span>
+                  )}
+                  {r.children && r.children.length > 0 && (
+                    <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '2px solid #E8E4DC' }}>
+                      {r.children.map((child, i) => (
+                        <div key={i} style={{ fontSize: 12, color: '#5C5850', lineHeight: 1.6, display: 'flex', gap: 5 }}>
+                          {child.note_type === 'step' ? (
+                            <span style={{ color: child.is_completed ? '#5A9E6F' : '#B5B0A8', flexShrink: 0 }}>
+                              {child.is_completed ? '✓' : '○'}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#B5B0A8', flexShrink: 0 }}>·</span>
+                          )}
+                          <span style={{ textDecoration: child.is_completed ? 'line-through' : 'none', opacity: child.is_completed ? 0.6 : 1 }}>
+                            {child.content}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
