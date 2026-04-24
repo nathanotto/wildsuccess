@@ -990,7 +990,7 @@ export default function TodayPage({ displayName }: Props) {
   // Derived — skipped scheduled items stay in the schedule (something changed, but it was planned)
   const todoItems = items
     .filter(i => !i.scheduled_time)
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .sort((a, b) => new Date(b.parked_until ?? b.created_at).getTime() - new Date(a.parked_until ?? a.created_at).getTime())
 
   const scheduleItems = items
     .filter(i => !!i.scheduled_time)
@@ -1857,6 +1857,9 @@ function TodoRow({
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <Checkbox status={displayStatus} onClick={isPast ? undefined : onCheckbox} />
         <div style={{ flex: 1, minWidth: 0 }}>
+          {item.parked_until && item.parked_until === selectedDate && !muted && (
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#5A9E6F', marginRight: 5, verticalAlign: 'middle', flexShrink: 0 }} />
+          )}
           <span style={{
             fontSize: 14,
             color: muted ? '#B5B0A8' : '#2D2A26',
