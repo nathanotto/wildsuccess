@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { COA, Factor, COADependency, COAResourceNeed, Mission } from '@/lib/types'
 import { getAuthorColor } from '@/lib/author-colors'
 
@@ -21,6 +21,8 @@ interface Props {
 
 export default function ArrangePage({ missionId }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const coaParam = searchParams.get('coa')
   const [mission, setMission] = useState<Mission | null>(null)
   const [coas, setCoas] = useState<COA[]>([])
   const [factors, setFactors] = useState<Factor[]>([])
@@ -115,11 +117,15 @@ export default function ArrangePage({ missionId }: Props) {
     linkMap.forEach(l => { lm[l.id] = Array.isArray(l.data) ? l.data : [] })
     setCoaFactorLinks(lm)
 
-    // Auto-select first non-completed COA
+    // Auto-select: query param COA, or first non-completed
     if (!activeCoa) {
-      const first = coaArr.find((c: COA) => c.status !== 'completed')
-      if (first) setActiveCoa(first.id)
-      else if (coaArr.length > 0) setActiveCoa(coaArr[0].id)
+      const fromParam = coaParam ? coaArr.find((c: COA) => c.id === coaParam) : null
+      if (fromParam) setActiveCoa(fromParam.id)
+      else {
+        const first = coaArr.find((c: COA) => c.status !== 'completed')
+        if (first) setActiveCoa(first.id)
+        else if (coaArr.length > 0) setActiveCoa(coaArr[0].id)
+      }
     }
 
     setLoading(false)

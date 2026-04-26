@@ -92,6 +92,12 @@ function fmtTime(t: string) {
   return `${hour}:${String(m).padStart(2, '0')}${ampm}`
 }
 
+function fmtShortDate(dateStr: string) {
+  const d = new Date(dateStr + 'T12:00:00')
+  const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+  return `${day} ${d.getMonth() + 1}/${d.getDate()}`
+}
+
 function fmtNoteTime(isoStr: string) {
   const d = new Date(isoStr)
   const h = d.getHours()
@@ -507,7 +513,7 @@ function FocusView({
       {item.coa_id && item.mission_id && (
         <div style={{ marginTop: 6 }}>
           <a
-            href={`/plan/${item.mission_id}/arrange`}
+            href={`/plan/${item.mission_id}/arrange${item.coa_id ? `?coa=${item.coa_id}` : ''}`}
             target="_blank"
             rel="noopener"
             style={{ fontSize: 12, color: '#4B82AF', textDecoration: 'none' }}
@@ -921,6 +927,8 @@ export default function TodayPage({ displayName }: Props) {
   const [dismissedVirtualIds, setDismissedVirtualIds] = useState<Set<string>>(new Set())
   const [yesterdayUnfinished, setYesterdayUnfinished] = useState<ActionItemWithNotes[]>([])
   const [weekIntent, setWeekIntent] = useState<string | null>(null)
+  const [futureItems, setFutureItems] = useState<ActionItemWithNotes[]>([])
+  const [showLookingForward, setShowLookingForward] = useState(false)
 
   const isToday = selectedDate === todayStr
   const isPast = selectedDate < todayStr
@@ -961,14 +969,16 @@ export default function TodayPage({ displayName }: Props) {
       monday.setDate(monday.getDate() + mondayOffset)
       const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
 
-      const [todayRes, dcRes, weekRes] = await Promise.all([
+      const [todayRes, dcRes, weekRes, futureRes] = await Promise.all([
         fetch(`/api/today?date=${date}`),
         fetch(`/api/day-completion?date=${date}`),
         fetch(`/api/weeks/${mondayStr}`),
+        fetch(`/api/today/future?after=${date}`),
       ])
       const data = await todayRes.json()
       const dcData = await dcRes.json()
       const weekData = await weekRes.json()
+      const futureData = await futureRes.json()
       setItems(data.items ?? [])
       setLoggedItems(data.loggedItems ?? [])
       setNextUp(data.nextUp ?? null)
@@ -978,6 +988,7 @@ export default function TodayPage({ displayName }: Props) {
       setDismissedVirtualIds(new Set())
       setYesterdayUnfinished(data.yesterdayUnfinished ?? [])
       setWeekIntent(weekData?.create_statement ?? null)
+      setFutureItems(Array.isArray(futureData) ? futureData : [])
     } finally {
       setLoading(false)
     }
@@ -1674,27 +1685,22 @@ export default function TodayPage({ displayName }: Props) {
                   </div>
                 )}
 
-                {/* Balanced two-column flow on desktop, single column on mobile */}
-                <style>{`
-                  .today-flow { column-count: 1; }
-                  .today-flow > div { break-inside: avoid; }
-                  @media (min-width: 768px) {
-                    .today-flow { column-count: 2; column-gap: 24px; }
+                {/* Two explicit columns on desktop, single column on mobile */}
+                {(() => {
+                  // Build a flat list of all renderable items
+                  const allRows: { key: string; node: React.ReactNode }[] = []
+                  if (scheduleItems.length > 0) {
+                    allRows.push({ key: 'schedule', node: (
+                      <div style={{ marginBottom: 0 }}>
+                        {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
+                      </div>
+                    )})
+                    if (todoItems.length > 0) {
+                      allRows.push({ key: 'divider', node: <div style={{ borderTop: '1px solid #E8E4DC', margin: '12px 0' }} /> })
+                    }
                   }
-                `}</style>
-                <div className="today-flow">
-                  {scheduleItems.length > 0 && (
-                    <div style={{ marginBottom: 0 }}>
-                      {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
-                    </div>
-                  )}
-
-                  {scheduleItems.length > 0 && todoItems.length > 0 && (
-                    <div style={{ borderTop: '1px solid #E8E4DC', margin: '12px 0' }} />
-                  )}
-
-                  {todoItems.map(item => (
-                    <div key={item.id}>
+                  todoItems.forEach(item => {
+                    allRows.push({ key: item.id, node: (
                       <TodoRow
                         item={item}
                         isPast={isPast}
@@ -1704,9 +1710,72 @@ export default function TodayPage({ displayName }: Props) {
                         onReschedule={() => handleStatusChange(item.id, 'rescheduled')}
                         onSkip={() => handleStatusChange(item.id, 'skipped')}
                       />
-                    </div>
-                  ))}
-                </div>
+                    )})
+                  })
+                  // Split into two columns round-robin
+                  const left: typeof allRows = []
+                  const right: typeof allRows = []
+                  allRows.forEach((r, i) => (i % 2 === 0 ? left : right).push(r))
+                  return (
+                    <>
+                      <style>{`
+                        .today-cols { display: block; }
+                        @media (min-width: 768px) {
+                          .today-cols { display: flex; gap: 24px; }
+                          .today-col { flex: 1; min-width: 0; }
+                        }
+                      `}</style>
+                      <div className="today-cols">
+                        <div className="today-col">
+                          {left.map(r => <div key={r.key}>{r.node}</div>)}
+                        </div>
+                        <div className="today-col">
+                          {right.map(r => <div key={r.key}>{r.node}</div>)}
+                          {futureItems.length > 0 && (
+                            <div style={{ marginTop: 16 }}>
+                              <div
+                                onClick={() => setShowLookingForward(!showLookingForward)}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                                  padding: '6px 0', borderTop: '1px solid #E8E4DC',
+                                }}
+                              >
+                                <span style={{ fontSize: 8, color: '#B5B0A8' }}>{showLookingForward ? '▼' : '▶'}</span>
+                                <span style={{ fontSize: 11, color: '#B5B0A8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Looking forward</span>
+                                <span style={{ fontSize: 10, color: '#B5B0A8' }}>({futureItems.length})</span>
+                              </div>
+                              {showLookingForward && (() => {
+                                let lastDate = ''
+                                return futureItems.map(item => {
+                                  const effectiveDate = item.status === 'parked' ? (item.parked_until ?? item.committed_date) : item.committed_date
+                                  const dateLabel = effectiveDate ? fmtShortDate(effectiveDate) : ''
+                                  const showDivider = effectiveDate && effectiveDate !== lastDate
+                                  if (effectiveDate) lastDate = effectiveDate
+                                  return (
+                                    <div key={item.id}>
+                                      {showDivider && (
+                                        <div style={{ fontSize: 10, fontWeight: 600, color: '#8A8578', padding: '8px 0 3px', borderTop: '1px solid #F0EDE8', marginTop: 4 }}>
+                                          {dateLabel}
+                                        </div>
+                                      )}
+                                      <div
+                                        onClick={() => setFocusItemId(item.id)}
+                                        style={{ padding: '3px 0 3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 8 }}
+                                      >
+                                        <span style={{ fontSize: 13, color: item.status === 'parked' ? '#8A8578' : '#2D2A26', flex: 1 }}>{item.name}</span>
+                                        {item.status === 'parked' && <span style={{ fontSize: 9, color: '#9B7EC8', flexShrink: 0 }}>parked</span>}
+                                      </div>
+                                    </div>
+                                  )
+                                })
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )
+                })()}
 
                 {todoItems.length === 0 && scheduleItems.length === 0 && (
                   <div style={{ fontSize: 12, color: '#B5B0A8', paddingTop: 20 }}>
@@ -1830,7 +1899,7 @@ function TodoRow({
   onSkip: () => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
-  const [showSteps, setShowSteps] = useState(true)
+  const [showSteps, setShowSteps] = useState(false)
   const menuOpenedAt = useRef(0)
   // For past views, derive display status from snapshot logic
   const displayStatus = isPast && selectedDate ? computeDisplayStatus(item, selectedDate) : item.status
@@ -1869,25 +1938,24 @@ function TodoRow({
           </span>
           {item.coa_id && item.mission_id && (
             <a
-              href={`/plan/${item.mission_id}/arrange`}
+              href={`/plan/${item.mission_id}/arrange${item.coa_id ? `?coa=${item.coa_id}` : ''}`}
               target="_blank"
               rel="noopener"
               onClick={e => e.stopPropagation()}
               style={{ fontSize: 9, color: '#4B82AF', marginLeft: 5, fontWeight: 600, textDecoration: 'none' }}
             >plan</a>
           )}
+          {(steps.length > 0 || notes.length > 0) && (
+            <span
+              onClick={e => { e.stopPropagation(); setShowSteps(!showSteps) }}
+              style={{ fontSize: 8, color: '#B5B0A8', marginLeft: 5, cursor: 'pointer', verticalAlign: 'middle' }}
+            >{showSteps ? '▼' : '▶'}</span>
+          )}
         </div>
       </div>
-      {steps.length > 0 && displayStatus === 'in_progress' && (
+      {showSteps && steps.length > 0 && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
-          <div
-            onClick={e => { e.stopPropagation(); setShowSteps(!showSteps) }}
-            style={{ fontSize: 10, color: '#B5B0A8', cursor: 'pointer', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 3 }}
-          >
-            <span style={{ fontSize: 7 }}>{showSteps ? '▼' : '▶'}</span>
-            {showSteps ? 'steps' : `${steps.filter(s => !s.is_completed).length} of ${steps.length} steps remaining`}
-          </div>
-          {showSteps && steps.map(s => (
+          {steps.map(s => (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
               <span style={{
                 width: 10, height: 10, borderRadius: 1, flexShrink: 0,
@@ -1905,7 +1973,7 @@ function TodoRow({
           ))}
         </div>
       )}
-      {notes.length > 0 && displayStatus === 'in_progress' && (
+      {showSteps && notes.length > 0 && (
         <div style={{ paddingLeft: 22, marginTop: 3 }}>
           {notes.map(n => (
             <div key={n.id} style={{ fontSize: 11, color: '#8A8578', marginBottom: 2, lineHeight: 1.4 }}>
@@ -1930,6 +1998,7 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
   onSkip: () => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const displayStatus = isPast && selectedDate ? computeDisplayStatus(item, selectedDate) : item.status
   const isCompleted = displayStatus === 'completed'
   const isParked = displayStatus === 'parked'
@@ -1962,16 +2031,22 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
           </span>
           {item.coa_id && item.mission_id && (
             <a
-              href={`/plan/${item.mission_id}/arrange`}
+              href={`/plan/${item.mission_id}/arrange${item.coa_id ? `?coa=${item.coa_id}` : ''}`}
               target="_blank"
               rel="noopener"
               onClick={e => e.stopPropagation()}
               style={{ fontSize: 9, color: '#4B82AF', marginLeft: 5, fontWeight: 600, textDecoration: 'none' }}
             >plan</a>
           )}
+          {(steps.length > 0 || notes.length > 0) && (
+            <span
+              onClick={e => { e.stopPropagation(); setExpanded(!expanded) }}
+              style={{ fontSize: 8, color: '#B5B0A8', marginLeft: 5, cursor: 'pointer', verticalAlign: 'middle' }}
+            >{expanded ? '▼' : '▶'}</span>
+          )}
         </div>
       </div>
-      {steps.length > 0 && displayStatus === 'in_progress' && (
+      {expanded && steps.length > 0 && (
         <div style={{ paddingLeft: 66, marginTop: 3 }}>
           {steps.map(s => (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -1987,7 +2062,7 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
           ))}
         </div>
       )}
-      {notes.length > 0 && displayStatus === 'in_progress' && (
+      {expanded && notes.length > 0 && (
         <div style={{ paddingLeft: 66, marginTop: 3 }}>
           {notes.map(n => (
             <div key={n.id} style={{ fontSize: 11, color: '#8A8578', marginBottom: 2, lineHeight: 1.4 }}>{n.content}</div>
