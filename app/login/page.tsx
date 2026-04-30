@@ -29,7 +29,7 @@ export default function LoginPage() {
       alignItems: 'center', justifyContent: 'center', fontFamily: "'Source Sans 3', sans-serif",
     }}>
       <div style={{ width: 360, background: '#FFF', borderRadius: 16, border: '1px solid #F0EDE6', padding: '40px 36px' }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: COLORS.primary, marginBottom: 6 }}>Wild Success</div>
+        <div style={{ marginBottom: 24, textAlign: 'center' }}><img src="/brand/wordmark.svg" alt="Wild Success" style={{ height: 72, display: 'inline-block' }} /></div>
         <div style={{ fontSize: 13, color: '#8A8578', marginBottom: 28 }}>Sign in to your account</div>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>

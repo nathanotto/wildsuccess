@@ -98,7 +98,7 @@ function AcceptContent() {
 
   return (
     <div style={{ maxWidth: 420, margin: '60px auto', padding: '0 20px', fontFamily: 'inherit' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.primary, marginBottom: 20 }}>Wild Success</div>
+      <div style={{ marginBottom: 20 }}><img src="/brand/wordmark.svg" alt="Wild Success" style={{ height: 40, display: 'block' }} /></div>
       <h1 style={{ fontSize: 20, fontWeight: 700, color: '#2D2A26', margin: '0 0 8px' }}>You&apos;re invited to plan</h1>
       <h2 style={{ fontSize: 16, fontWeight: 600, color: '#2D2A26', margin: '0 0 8px' }}>{invitation.mission_name}</h2>
       {invitation.mission_description && <p style={{ fontSize: 13, color: '#8A8578', margin: '0 0 12px' }}>{invitation.mission_description.slice(0, 200)}</p>}

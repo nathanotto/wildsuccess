@@ -1920,13 +1920,14 @@ function TodoRow({
     <div
       onClick={onFocus}
       style={{
-        padding: '5px 0', cursor: 'pointer', userSelect: 'none',
+        paddingTop: 5, paddingBottom: 5, paddingLeft: isInProgress ? 8 : 0, paddingRight: 0,
+        cursor: 'pointer', userSelect: 'none',
         borderBottom: '1px solid #F8F7F4',
         borderRadius: 4,
         ...(isInProgress ? {
           background: 'rgba(253,246,243,0.6)',
           boxShadow: `inset 2px 0 0 ${COLORS.primary}`,
-          paddingLeft: 8, marginLeft: -8,
+          marginLeft: -8,
         } : {}),
       }}
     >
@@ -2021,13 +2022,14 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
     <div
       onClick={onFocus}
       style={{
-        padding: '5px 0', cursor: 'pointer', userSelect: 'none',
+        paddingTop: 5, paddingBottom: 5, paddingLeft: isInProgress ? 8 : 0, paddingRight: 0,
+        cursor: 'pointer', userSelect: 'none',
         borderBottom: '1px solid #F8F7F4',
         borderRadius: 4,
         ...(isInProgress ? {
           background: 'rgba(253,246,243,0.6)',
           boxShadow: `inset 2px 0 0 ${COLORS.primary}`,
-          paddingLeft: 8, marginLeft: -8,
+          marginLeft: -8,
         } : {}),
       }}
     >
