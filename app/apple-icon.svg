@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+
+  <rect width="180" height="180" fill="#FAFAF7"></rect>
+  <path d="M40 80 L90 70 L140 80" fill="none" stroke="#B8552E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>
+  <text x="90" y="138" text-anchor="middle" font-family="'Source Sans 3', system-ui, -apple-system, sans-serif" font-weight="700" font-size="80" letter-spacing="-3.5" fill="#B8552E">ws</text>
+</svg>

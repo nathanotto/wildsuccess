@@ -103,8 +103,8 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
       }}>
         <div
           onClick={() => router.push('/map')}
-          style={{ fontSize: 14, fontWeight: 700, color: COLORS.primary, marginRight: 10, cursor: 'pointer' }}
-        >Wild Success</div>
+          style={{ marginRight: 10, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+        ><img src="/brand/wordmark.svg" alt="Wild Success" style={{ display: 'block', height: 24, width: 'auto' }} /></div>
 
         {/* Desktop: full tab bar */}
         <div className="nav-full-tabs">

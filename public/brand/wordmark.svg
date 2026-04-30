@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 110" width="200" height="110" font-family="'Source Sans 3', system-ui, sans-serif">
+  <text x="100" y="56" text-anchor="middle" font-weight="600" font-size="48" letter-spacing="2.88" fill="#B8552E">wild</text>
+  <path d="M14 70 L100 60 L186 70" fill="none" stroke="#B8552E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+  <text x="100" y="102" text-anchor="middle" font-weight="500" font-size="36" letter-spacing="-0.36" fill="#1F1B17">success</text>
+</svg>
