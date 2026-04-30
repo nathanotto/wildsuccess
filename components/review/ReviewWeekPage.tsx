@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import ReviewSubNav from './ReviewSubNav'
+import { COLORS } from '@/lib/theme'
 
 const FONT = "'Source Sans 3', 'Source Sans Pro', sans-serif"
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EC: Record<string, string> = { A: COLORS.primary, B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
 const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection', D: 'Restore', '0': 'Open' }
 const MOOD_COLORS: Record<number, string> = { 5: '#5A9E6F', 4: '#5A9E6F', 3: '#BA7517', 2: '#B8443E', 1: '#B8443E' }
 

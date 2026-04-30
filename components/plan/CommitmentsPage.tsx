@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { COLORS } from '@/lib/theme'
 
 interface CommitmentData {
   id: string; coa_id: string; user_id: string; description: string | null
@@ -58,7 +59,7 @@ export default function CommitmentsPage({ missionId }: Props) {
       </div>
 
       <h1 style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: '0 0 12px' }}>
-        Commitments for: <span style={{ color: '#C4725A' }}>{missionName}</span>
+        Commitments for: <span style={{ color: COLORS.primary }}>{missionName}</span>
       </h1>
 
       {/* Stats */}
@@ -78,9 +79,9 @@ export default function CommitmentsPage({ missionId }: Props) {
             </div>
             <div style={{ fontSize: 10, color: '#8A8578', marginBottom: 8 }}>{coa.status} · {coa.horizon}</div>
             {coa.commitments.map(c => (
-              <div key={c.id} style={{ paddingLeft: 12, borderLeft: '2px solid #C4725A40', marginBottom: 6, fontSize: 12 }}>
+              <div key={c.id} style={{ paddingLeft: 12, borderLeft: `2px solid ${COLORS.primaryMuted}`, marginBottom: 6, fontSize: 12 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ color: '#C4725A', fontWeight: 600 }}>{c.user_name}</span>
+                  <span style={{ color: COLORS.primary, fontWeight: 600 }}>{c.user_name}</span>
                   <span style={{ fontSize: 10, color: c.status === 'completed' ? '#5A9E6F' : c.status === 'abandoned' ? '#C4504A' : '#8A8578', fontWeight: 600 }}>{c.status}</span>
                   {c.deadline && <span style={{ fontSize: 10, color: '#8A8578' }}>Due: {new Date(c.deadline).toLocaleDateString()}</span>}
                 </div>

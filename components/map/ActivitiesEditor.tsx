@@ -2,8 +2,9 @@
 import { useState, useMemo } from 'react'
 import { Activity, UserValue, LifeDomain, BigOutcome } from '@/lib/types'
 import EditActivityModal from './EditActivityModal'
+import { COLORS } from '@/lib/theme'
 
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EC: Record<string, string> = { A: COLORS.primary, B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
 const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection', D: 'Restore', '0': 'Open' }
 const FREQ_LABELS: Record<string, string> = {
   daily: 'Daily', weekly: 'Weekly', biweekly: 'Biweekly',
@@ -14,7 +15,7 @@ const STATUS_LABELS: Record<string, string> = {
   active: 'Active', aspirational: 'Aspirational', paused: 'Paused', completed: 'Completed',
 }
 const STATUS_COLORS: Record<string, string> = {
-  active: '#5A9E6F', aspirational: '#4B82AF', paused: '#B5B0A8', completed: '#C4725A',
+  active: '#5A9E6F', aspirational: '#4B82AF', paused: '#B5B0A8', completed: COLORS.primary,
 }
 
 interface Props {
@@ -94,7 +95,7 @@ export default function ActivitiesEditor({ activities, values, domains, outcomes
             onClick={() => setEditing('new')}
             style={{
               padding: '6px 14px', borderRadius: 8, border: 'none',
-              background: '#C4725A', color: '#FFF', fontSize: 12, fontWeight: 600,
+              background: COLORS.primary, color: '#FFF', fontSize: 12, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
@@ -131,9 +132,9 @@ export default function ActivitiesEditor({ activities, values, domains, outcomes
                 onClick={() => setFilterStatus(s)}
                 style={{
                   padding: '4px 10px', borderRadius: 6,
-                  border: `1px solid ${filterStatus === s ? '#C4725A' : '#E8E4DC'}`,
+                  border: `1px solid ${filterStatus === s ? COLORS.primary : '#E8E4DC'}`,
                   background: filterStatus === s ? '#FDF6F3' : 'transparent',
-                  color: filterStatus === s ? '#C4725A' : '#8A857D',
+                  color: filterStatus === s ? COLORS.primary : '#8A857D',
                   fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >

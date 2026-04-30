@@ -14,6 +14,7 @@ import QuickCapture from './QuickCapture'
 import ContextualNudge from './ContextualNudge'
 import WaterfallDiagram from './WaterfallDiagram'
 import ActivitiesEditor from './ActivitiesEditor'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   userId: string
@@ -259,7 +260,7 @@ export default function MapClient({ userId, userEmail }: Props) {
                     <a
                       key={d}
                       href={`/today/complete?date=${d}`}
-                      style={{ display: 'block', fontSize: 11, color: '#C4725A', textDecoration: 'none', padding: '2px 0', cursor: 'pointer' }}
+                      style={{ display: 'block', fontSize: 11, color: COLORS.primary, textDecoration: 'none', padding: '2px 0', cursor: 'pointer' }}
                     >
                       {label} →
                     </a>
@@ -273,7 +274,7 @@ export default function MapClient({ userId, userEmail }: Props) {
                   Recent Markers
                 </div>
                 {markers.map(m => {
-                  const typeColor: Record<string, string> = { accomplished: '#5A9E6F', declared_complete: '#4B6A82', closed_with_succession: '#4B6A82', abandoned: '#8A857D', life_event: '#C4725A' }
+                  const typeColor: Record<string, string> = { accomplished: '#5A9E6F', declared_complete: '#4B6A82', closed_with_succession: '#4B6A82', abandoned: '#8A857D', life_event: COLORS.primary }
                   return (
                     <div key={m.id} style={{ marginBottom: 6, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>

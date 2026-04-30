@@ -1,4 +1,4 @@
-// Distinct colors for plan collaborators — avoiding the brand brick red (#C4725A)
+// Distinct colors for plan collaborators — avoiding the brand primary color
 const AUTHOR_COLORS = [
   '#1A5FB4', // strong blue
   '#9A2E6F', // deep magenta

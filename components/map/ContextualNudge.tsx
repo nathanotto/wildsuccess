@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
 import type { IntakeQuestion } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 const FONT = "'Source Sans 3', sans-serif"
-const ACCENT = '#C4725A'
+const ACCENT = COLORS.primary
 const MUTED = '#8A8578'
 const BORDER = '#E8E4DC'
 const TEXT = '#2D2A26'

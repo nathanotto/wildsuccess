@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { UserValue, LifeDomain, Activity, BigOutcome } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   values: UserValue[]
@@ -23,7 +24,7 @@ const CY = 255
 
 // 8 distinct colors for up to 8 values; cycles if more
 const VALUE_COLORS = [
-  '#C4725A', '#4B82AF', '#5A9E6F', '#9E6A46',
+  COLORS.primary, '#4B82AF', '#5A9E6F', '#9E6A46',
   '#8B7CB8', '#E09B3D', '#5BADA0', '#C97B8E',
 ]
 
@@ -275,7 +276,7 @@ export default function LifeMapSVG({
         return (
           <line key={`ao-${a.id}`}
             x1={ap.x} y1={ap.y} x2={ox} y2={outcomeY}
-            stroke={hl ? '#C4725A' : '#E8E4DC'}
+            stroke={hl ? COLORS.primary : '#E8E4DC'}
             strokeWidth={hl ? 1.2 : 0.5}
             strokeOpacity={hl ? 0.5 : 0.15}
             strokeDasharray="4 4"
@@ -310,7 +311,7 @@ export default function LifeMapSVG({
         const rightHeats = rightDomains.map(d => domainHeat?.[d.id]?.heat ?? 0)
         const leftAvg = leftHeats.length > 0 ? leftHeats.reduce((s, h) => s + h, 0) / leftHeats.length : 0
         const rightAvg = rightHeats.length > 0 ? rightHeats.reduce((s, h) => s + h, 0) / rightHeats.length : 0
-        const colorForHeat = (h: number) => { const s = Math.round(1 + h * 9); return s >= 8 ? '#5A9E6F' : s >= 5 ? '#8A857D' : s >= 2 ? '#C4725A' : '#B5B0A8' }
+        const colorForHeat = (h: number) => { const s = Math.round(1 + h * 9); return s >= 8 ? '#5A9E6F' : s >= 5 ? '#8A857D' : s >= 2 ? COLORS.primary : '#B5B0A8' }
         return (
           <>
             <circle cx={CX} cy={CY} r={52} fill="#FFFFFF" stroke="#E8E4DC" strokeWidth={2} />
@@ -339,7 +340,7 @@ export default function LifeMapSVG({
         const score = Math.round(1 + heat * 9)
         const empty = actCount === 0
         // Health-driven colors: red (neglected) → amber → green (thriving)
-        const healthColor = empty ? '#C4BFB4' : score >= 8 ? '#5A9E6F' : score >= 5 ? '#8A857D' : score >= 2 ? '#C4725A' : '#B5B0A8'
+        const healthColor = empty ? '#C4BFB4' : score >= 8 ? '#5A9E6F' : score >= 5 ? '#8A857D' : score >= 2 ? COLORS.primary : '#B5B0A8'
         const fillAlpha = empty ? '00' : Math.round(Math.min(0.50, 0.15 + heat * 0.45) * 255).toString(16).padStart(2, '0')
         const fillColor = empty ? '#FAFAF7' : `${healthColor}${fillAlpha}`
         const strokeColor = healthColor
@@ -476,7 +477,7 @@ export default function LifeMapSVG({
                 style={{ cursor: 'pointer' }}
               >
                 <rect x={ox} y={outcomeY} width={outcomeBoxW} height={outcomeBoxH} rx={12}
-                  fill="#FFFFFF" stroke={isSel ? '#C4725A' : '#E8E4DC'} strokeWidth={isSel ? 1.5 : 1} />
+                  fill="#FFFFFF" stroke={isSel ? COLORS.primary : '#E8E4DC'} strokeWidth={isSel ? 1.5 : 1} />
                 <text x={ox + outcomeBoxW / 2} y={outcomeY + 18} textAnchor="middle" fontSize={10} fontWeight={700} fill="#2D2A26">
                   {o.name.length > 18 ? o.name.slice(0, 17) + '…' : o.name}
                 </text>

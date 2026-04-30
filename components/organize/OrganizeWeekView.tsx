@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { ActionItem, TimeBlock, UserValue, LifeDomain, Activity } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EC: Record<string, string> = { A: COLORS.primary, B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
 const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection', D: 'Restore', '0': 'Open' }
 const SL: Record<string, string> = { template_proposal: 'Suggested', outside_request: 'Request', quick_capture: 'Captured', planning_function: 'From Plan' }
 const SI: Record<string, string> = { template_proposal: '◈', outside_request: '↗', quick_capture: '✎', planning_function: '◎' }
@@ -525,14 +526,14 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                         <span style={{ width: 7, height: 7, borderRadius: '50%', background: EC[item.energyLevel], flexShrink: 0, display: 'inline-block' }} />
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#2D2A26', lineHeight: 1.2 }}>
                           {item.name}
-                          {WI[item.emotionalWeight] && <span style={{ color: '#C4725A', marginLeft: 3, fontSize: 9 }}>{WI[item.emotionalWeight]}</span>}
+                          {WI[item.emotionalWeight] && <span style={{ color: COLORS.primary, marginLeft: 3, fontSize: 9 }}>{WI[item.emotionalWeight]}</span>}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span style={{ fontSize: 9, color: '#8A857D', background: '#F5F3EF', padding: '0 5px', borderRadius: 3 }}>{SI[item.source] ?? '●'} {SL[item.source] ?? item.source}</span>
                         <span style={{ fontSize: 9, color: '#8A857D' }}>{item.durationMin}–{item.durationMax}m</span>
                       </div>
-                      {item.meta?.requestedBy && <div style={{ fontSize: 10, color: '#C4725A', marginTop: 2, fontStyle: 'italic' }}>↗ {item.meta.requestedBy}</div>}
+                      {item.meta?.requestedBy && <div style={{ fontSize: 10, color: COLORS.primary, marginTop: 2, fontStyle: 'italic' }}>↗ {item.meta.requestedBy}</div>}
                     </div>
                     <button onClick={e => { e.stopPropagation(); dismissHopper(item.localId) }}
                       style={{ width: 18, height: 18, borderRadius: 4, border: '1px solid #E8E4DC', background: 'transparent', cursor: 'pointer', fontSize: 10, color: '#B5B0A8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>×</button>
@@ -566,10 +567,10 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                   <div key={ds} style={{
                     flex: 1, padding: '8px 4px', textAlign: 'center',
                     borderRight: i < 6 ? '1px solid #F0EDE8' : 'none',
-                    background: isToday ? '#C4725A06' : 'transparent',
+                    background: isToday ? COLORS.primary + '06' : 'transparent',
                   }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: isToday ? '#C4725A' : '#2D2A26' }}>{DAY_LABELS[i]}</div>
-                    <div style={{ fontSize: 10, color: isToday ? '#C4725A' : '#8A857D' }}>{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: isToday ? COLORS.primary : '#2D2A26' }}>{DAY_LABELS[i]}</div>
+                    <div style={{ fontSize: 10, color: isToday ? COLORS.primary : '#8A857D' }}>{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                     <div style={{ fontSize: 9, color: '#B5B0A8', marginTop: 2 }}>{count} item{count !== 1 ? 's' : ''}</div>
                   </div>
                 )
@@ -586,7 +587,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                   <div key={ds} style={{
                     flex: 1, overflowY: 'auto', padding: '6px 4px',
                     borderRight: i < 6 ? '1px solid #F0EDE8' : 'none',
-                    background: isToday ? '#C4725A03' : 'transparent',
+                    background: isToday ? COLORS.primary + '03' : 'transparent',
                   }}>
                     {loading && i === 0 && <div style={{ padding: 8, color: '#B5B0A8', fontSize: 10, textAlign: 'center' }}>Loading...</div>}
                     {blocks.map(block => (
@@ -630,7 +631,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                             <span style={{ width: 5, height: 5, borderRadius: '50%', background: item.isHard ? '#9E6A46' : EC[item.energyLevel], flexShrink: 0 }} />
                             <span style={{ fontSize: 10, fontWeight: 500, color: '#2D2A26', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {item.name}
-                              {WI[item.emotionalWeight] && <span style={{ color: '#C4725A', fontSize: 8, marginLeft: 2 }}>{WI[item.emotionalWeight]}</span>}
+                              {WI[item.emotionalWeight] && <span style={{ color: COLORS.primary, fontSize: 8, marginLeft: 2 }}>{WI[item.emotionalWeight]}</span>}
                             </span>
                             {!item.isHard && (
                               <button onClick={e => { e.stopPropagation(); returnToHopper(item, ds, block.localId) }}
@@ -700,8 +701,8 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
               {([{ key: 'summary', label: 'Week View' }, { key: 'completed', label: 'Done ✓' }] as const).map(t => (
                 <button key={t.key} onClick={() => setRightPanel(t.key)} style={{
                   flex: 1, padding: '10px 0', border: 'none', borderBottom: '2px solid',
-                  borderBottomColor: rightPanel === t.key ? '#C4725A' : 'transparent',
-                  background: 'transparent', color: rightPanel === t.key ? '#C4725A' : '#8A857D',
+                  borderBottomColor: rightPanel === t.key ? COLORS.primary : 'transparent',
+                  background: 'transparent', color: rightPanel === t.key ? COLORS.primary : '#8A857D',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif",
                 }}>{t.label}</button>
               ))}
@@ -750,10 +751,10 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                             <div style={{
                               width: '100%', borderRadius: 3,
                               height: Math.max(4, (count / maxDayCount) * 48),
-                              background: isToday ? '#C4725A' : '#4B82AF40',
+                              background: isToday ? COLORS.primary : '#4B82AF40',
                               transition: 'height 0.3s',
                             }} />
-                            <span style={{ fontSize: 8, color: isToday ? '#C4725A' : '#8A857D', fontWeight: 600 }}>{DAY_LABELS[i]}</span>
+                            <span style={{ fontSize: 8, color: isToday ? COLORS.primary : '#8A857D', fontWeight: 600 }}>{DAY_LABELS[i]}</span>
                           </div>
                         )
                       })}
@@ -763,7 +764,7 @@ export default function OrganizeWeekView({ onClose, onSwitchToDay, onEditTemplat
                   {/* Unscheduled */}
                   <div style={{ padding: 10, borderRadius: 8, background: '#F5F3EF', border: '1px solid #E8E4DC' }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: '#8A857D', marginBottom: 3 }}>Unscheduled</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: hopper.length > 0 ? '#C4725A' : '#5A9E6F' }}>{hopper.length}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: hopper.length > 0 ? COLORS.primary : '#5A9E6F' }}>{hopper.length}</div>
                     <div style={{ fontSize: 10, color: '#B5B0A8' }}>{hopper.length > 0 ? 'items still in hopper' : 'everything placed'}</div>
                   </div>
                 </>

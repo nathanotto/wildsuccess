@@ -2,9 +2,10 @@
 import { useState, useRef } from 'react'
 import { useActionToast } from '@/lib/useActionToast'
 import ActionToast from '@/components/shared/ActionToast'
+import { COLORS } from '@/lib/theme'
 
 const FONT = "'Source Sans 3', sans-serif"
-const ACCENT = '#C4725A'
+const ACCENT = COLORS.primary
 const MUTED = '#8A8578'
 const BORDER = '#E8E4DC'
 const TEXT = '#2D2A26'

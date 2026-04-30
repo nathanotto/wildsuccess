@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
 import { UserValue, LifeDomain, Activity } from '@/lib/types'
 import EditActivityModal from '@/components/map/EditActivityModal'
+import { COLORS } from '@/lib/theme'
 
 const CADENCE_DAYS: Record<string, number> = {
   daily: 1, weekly: 7, biweekly: 14, monthly: 30, quarterly: 90, annual: 365,
@@ -25,9 +26,9 @@ const GRID_END = 22
 const GRID_HOURS = GRID_END - GRID_START
 const GRID_HEIGHT = GRID_HOURS * HOUR_HEIGHT
 
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EC: Record<string, string> = { A: COLORS.primary, B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
 const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection', D: 'Restore', '0': 'Open' }
-const TIER_COLORS: Record<string, string> = { urgent: '#C4725A', normal: '#2D2A26', suggested: '#2D2A26' }
+const TIER_COLORS: Record<string, string> = { urgent: COLORS.primary, normal: '#2D2A26', suggested: '#2D2A26' }
 
 // ── Local types ───────────────────────────────────────────────────────────────
 interface BlockType {
@@ -129,7 +130,7 @@ interface KnownPersonLocal {
   name: string
 }
 
-const SPAN_COLORS = ['#E8E4DC', '#C4725A', '#4B6A82', '#7A6BAF', '#5A9E6F', '#B8896E', '#8A857D', '#BA7517']
+const SPAN_COLORS = ['#E8E4DC', COLORS.primary, '#4B6A82', '#7A6BAF', '#5A9E6F', '#B8896E', '#8A857D', '#BA7517']
 const DEFAULT_SPAN_COLOR = '#E8E4DC'
 
 interface ClassifyState {
@@ -2615,7 +2616,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                 HOPPER
               </span>
               {(hopper.length + carriedOverItems.length) > 0 && (
-                <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#C4725A', color: '#FFF', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: COLORS.primary, color: '#FFF', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
                   {(hopper.length + carriedOverItems.length) > 9 ? '9+' : hopper.length + carriedOverItems.length}
                 </div>
               )}
@@ -2631,7 +2632,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                 overflow: 'hidden',
                 flexShrink: 0,
                 transition: 'background 0.15s',
-                outline: draggingBlock ? '2px dashed #C4725A50' : 'none',
+                outline: draggingBlock ? `2px dashed ${COLORS.primary}50` : 'none',
                 outlineOffset: -2,
               }}
               onDragOver={draggingBlock ? e => e.preventDefault() : undefined}
@@ -2646,7 +2647,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
               {/* Hopper header */}
               <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid #E8E4DC', flexShrink: 0 }}>
                 {draggingBlock && (
-                  <div style={{ marginBottom: 8, padding: '6px 8px', borderRadius: 6, background: '#C4725A15', border: '1px dashed #C4725A60', fontSize: 11, color: '#C4725A', textAlign: 'center' }}>
+                  <div style={{ marginBottom: 8, padding: '6px 8px', borderRadius: 6, background: COLORS.primary + '15', border: `1px dashed ${COLORS.primary}60`, fontSize: 11, color: COLORS.primary, textAlign: 'center' }}>
                     Drop here to delete block
                     {draggingBlock.block.items.length > 0 && ` · ${draggingBlock.block.items.length} item${draggingBlock.block.items.length > 1 ? 's' : ''} return to hopper`}
                   </div>
@@ -2738,7 +2739,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                 {/* Carried Over — committed items from past weeks */}
                 {carriedOverItems.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: '#C4725A', letterSpacing: 1, marginBottom: 4, paddingLeft: 4 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: COLORS.primary, letterSpacing: 1, marginBottom: 4, paddingLeft: 4 }}>
                       CARRIED OVER
                     </div>
                     {carriedOverItems.map(item => {
@@ -2780,10 +2781,10 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                         >
                           {item.status === 'in_progress' ? (
                             <span style={{
-                              width: 10, height: 10, border: '1.5px solid #C4725A', borderRadius: 1,
+                              width: 10, height: 10, border: `1.5px solid ${COLORS.primary}`, borderRadius: 1,
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                             }}>
-                              <span style={{ width: 4, height: 4, background: '#C4725A', borderRadius: 1 }} />
+                              <span style={{ width: 4, height: 4, background: COLORS.primary, borderRadius: 1 }} />
                             </span>
                           ) : (
                             <span style={{
@@ -2898,7 +2899,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                     <span style={{
                       fontSize: 11,
                       fontWeight: isToday ? 700 : 400,
-                      color: isToday ? '#C4725A' : '#5A5650',
+                      color: isToday ? COLORS.primary : '#5A5650',
                     }}>
                       {DAY_LABELS[i]} {d.getDate()}
                     </span>
@@ -3170,11 +3171,11 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                           left: 0,
                           right: 0,
                           height: 2,
-                          background: '#C4725A',
+                          background: COLORS.primary,
                           zIndex: 5,
                           pointerEvents: 'none',
                         }}>
-                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#C4725A', position: 'absolute', left: -3, top: -2 }} />
+                          <div style={{ width: 6, height: 6, borderRadius: '50%', background: COLORS.primary, position: 'absolute', left: -3, top: -2 }} />
                         </div>
                       )}
 
@@ -3232,8 +3233,8 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                                 top: blockTopPx(startT),
                                 height: blockHeightPx(dur),
                                 borderRadius: 6,
-                                border: '2px dashed #C4725A60',
-                                background: '#C4725A05',
+                                border: `2px dashed ${COLORS.primary}60`,
+                                background: COLORS.primary + '05',
                                 padding: '3px 6px',
                                 display: 'flex',
                                 alignItems: 'flex-start',
@@ -3241,9 +3242,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                                 overflow: 'hidden',
                               }}
                             >
-                              <span onClick={() => openClassifyDialog(calEv)} style={{ fontSize: 9, background: '#C4725A', color: 'white', borderRadius: 3, padding: '1px 4px', fontWeight: 700, flexShrink: 0, marginTop: 1, pointerEvents: 'auto', cursor: 'pointer' }}>?</span>
+                              <span onClick={() => openClassifyDialog(calEv)} style={{ fontSize: 9, background: COLORS.primary, color: 'white', borderRadius: 3, padding: '1px 4px', fontWeight: 700, flexShrink: 0, marginTop: 1, pointerEvents: 'auto', cursor: 'pointer' }}>?</span>
                               <span onClick={() => openClassifyDialog(calEv)} style={{ fontSize: 9, color: '#2D2A26', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, pointerEvents: 'auto', cursor: 'pointer' }}>{calEv.title}</span>
-                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#C4725A80', padding: '0 2px', lineHeight: 1, flexShrink: 0, marginTop: 1, pointerEvents: 'auto' }} title="Hide event">×</button>
+                              <button onClick={e => { e.stopPropagation(); hideCalEvent(calEv) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: COLORS.primary + '80', padding: '0 2px', lineHeight: 1, flexShrink: 0, marginTop: 1, pointerEvents: 'auto' }} title="Hide event">×</button>
                             </div>
                           )
                         })
@@ -3471,7 +3472,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                                       }}>
                                         {item.name}
                                         {item.emotional_weight === 'heavy' && (
-                                          <span style={{ color: '#C4725A', marginLeft: 2, fontSize: 7 }}>◆</span>
+                                          <span style={{ color: COLORS.primary, marginLeft: 2, fontSize: 7 }}>◆</span>
                                         )}
                                       </span>
                                       {item.status !== 'completed' && (
@@ -3736,10 +3737,10 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                               <div style={{
                                 width: '100%',
                                 height: count === 0 ? 2 : Math.max(4, (count / maxDayCount) * 32),
-                                background: isToday ? '#C4725A' : '#D0CBC3',
+                                background: isToday ? COLORS.primary : '#D0CBC3',
                                 borderRadius: 2,
                               }} />
-                              <span style={{ fontSize: 8, color: isToday ? '#C4725A' : '#B5B0A8' }}>{DAY_LABELS[i].charAt(0)}</span>
+                              <span style={{ fontSize: 8, color: isToday ? COLORS.primary : '#B5B0A8' }}>{DAY_LABELS[i].charAt(0)}</span>
                             </div>
                           )
                         })}
@@ -3750,9 +3751,9 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
                     <div style={{ marginBottom: 16 }}>
                       <div style={{ fontSize: 10, fontWeight: 600, color: '#5A5650', letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' }}>Hopper Remaining</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 22, fontWeight: 700, color: hopper.length > 5 ? '#C4725A' : '#2D2A26' }}>{hopper.length}</span>
+                        <span style={{ fontSize: 22, fontWeight: 700, color: hopper.length > 5 ? COLORS.primary : '#2D2A26' }}>{hopper.length}</span>
                         <div style={{ fontSize: 10, color: '#8A857D', lineHeight: 1.3 }}>
-                          {urgentHopper.length > 0 && <div style={{ color: '#C4725A' }}>{urgentHopper.length} urgent</div>}
+                          {urgentHopper.length > 0 && <div style={{ color: COLORS.primary }}>{urgentHopper.length} urgent</div>}
                           <div>{normalHopper.length} to do</div>
                           {suggestedHopper.length > 0 && <div style={{ color: '#B5B0A8' }}>{suggestedHopper.length} suggested</div>}
                         </div>
@@ -3976,7 +3977,7 @@ export default function OrganizeWeekModal({ onClose, values, domains, mode = 'pa
 
 const SOURCE_COLORS: Record<string, string> = {
   template_proposal: '#7A9E82',
-  outside_request: '#C4725A',
+  outside_request: COLORS.primary,
   quick_capture: '#4B82AF',
   planning_function: '#9E6A82',
 }
@@ -4075,7 +4076,7 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
     return 30
   })
 
-  const leftBorderColor: Record<string, string> = { urgent: '#C4725A', normal: '#D0CBC3', suggested: '#7BAF7B' }
+  const leftBorderColor: Record<string, string> = { urgent: COLORS.primary, normal: '#D0CBC3', suggested: '#7BAF7B' }
   const bgColor: Record<string, string> = { urgent: '#FDF8F5', normal: '#FFFFFF', suggested: '#FFFFFF' }
 
   function handleScheduleConfirm(e: React.MouseEvent, force = false) {
@@ -4127,7 +4128,7 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
           wordBreak: 'break-word',
         }}>
           {item.name}
-          {item.emotional_weight === 'heavy' && <span style={{ color: '#C4725A', marginLeft: 3, fontSize: 8 }}>◆</span>}
+          {item.emotional_weight === 'heavy' && <span style={{ color: COLORS.primary, marginLeft: 3, fontSize: 8 }}>◆</span>}
         </div>
         {item.big_outcome_id && outcomes && (() => {
           const bo = outcomes.find(o => o.id === item.big_outcome_id)
@@ -4214,7 +4215,7 @@ const HopperItemCard = memo(function HopperItemCard({ item, onDismiss, onRevive,
                     )}
                     {onDelete && (
                       <button onClick={() => { setShowOverflow(false); onDelete() }}
-                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#C4725A', fontFamily: 'inherit' }}>
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: COLORS.primary, fontFamily: 'inherit' }}>
                         Delete
                       </button>
                     )}
@@ -4453,7 +4454,7 @@ const SpanEditPopover = memo(function SpanEditPopover({
         {onDelete && (
           <button
             onClick={onDelete}
-            style={{ fontSize: 12, color: '#C4725A', background: 'none', border: '1px solid #C4725A40', borderRadius: 4, padding: '5px 12px', cursor: 'pointer', marginRight: 'auto' }}
+            style={{ fontSize: 12, color: COLORS.primary, background: 'none', border: `1px solid ${COLORS.primaryMuted}`, borderRadius: 4, padding: '5px 12px', cursor: 'pointer', marginRight: 'auto' }}
           >Delete</button>
         )}
         <button

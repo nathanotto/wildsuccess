@@ -3,9 +3,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { ActionItem, TimeBlock, UserValue, LifeDomain, Activity } from '@/lib/types'
 import OrganizeWeekView from './OrganizeWeekView'
 import TimeTemplateEditor from './TimeTemplateEditor'
+import { COLORS } from '@/lib/theme'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#7A9E82' }
+const EC: Record<string, string> = { A: COLORS.primary, B: '#4B82AF', C: '#7A9E82' }
 const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection' }
 const SL: Record<string, string> = { template_proposal: 'Suggested', outside_request: 'Request', quick_capture: 'Captured', planning_function: 'From Plan' }
 const SI: Record<string, string> = { template_proposal: '◈', outside_request: '↗', quick_capture: '✎', planning_function: '◎' }
@@ -168,9 +169,9 @@ function InlineAdd({ placeholder, onAdd }: { placeholder: string; onAdd: (name: 
 // ── Small shared styles ────────────────────────────────────────────────────────
 const btnSm = (active?: boolean, color?: string): React.CSSProperties => ({
   padding: '4px 10px', borderRadius: 6, border: '1px solid',
-  borderColor: active ? (color ?? '#C4725A') : '#E8E4DC',
-  background: active ? (color ?? '#C4725A') + '14' : 'transparent',
-  color: active ? (color ?? '#C4725A') : '#8A857D',
+  borderColor: active ? (color ?? COLORS.primary) : '#E8E4DC',
+  background: active ? (color ?? COLORS.primary) + '14' : 'transparent',
+  color: active ? (color ?? COLORS.primary) : '#8A857D',
   fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif",
 })
 
@@ -624,7 +625,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
         onDrop={e => { e.stopPropagation(); hopperReorderDrop(item.localId) }}
         style={{
           marginBottom: 6, background: 'white', borderRadius: 10,
-          border: '1.5px solid', borderColor: isEditing ? '#C4725A' : hopperDragOver === item.localId ? '#C4725A' : '#E8E4DC',
+          border: '1.5px solid', borderColor: isEditing ? COLORS.primary : hopperDragOver === item.localId ? COLORS.primary : '#E8E4DC',
           transition: 'all 0.15s', opacity: hopperDrag === item.localId ? 0.4 : 1,
           cursor: isEditing ? 'default' : 'grab',
         }}
@@ -643,14 +644,14 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
               <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: EC[item.energyLevel] }} />
               <span style={{ fontSize: 13, fontWeight: 600, color: '#2D2A26', lineHeight: 1.2 }}>
                 {item.name}
-                {WI[item.emotionalWeight] && <span style={{ color: '#C4725A', marginLeft: 4, fontSize: 10 }}>{WI[item.emotionalWeight]}</span>}
+                {WI[item.emotionalWeight] && <span style={{ color: COLORS.primary, marginLeft: 4, fontSize: 10 }}>{WI[item.emotionalWeight]}</span>}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 10, color: '#8A857D', background: '#F5F3EF', padding: '1px 6px', borderRadius: 4 }}>{SI[item.source] ?? '●'} {SL[item.source] ?? item.source}</span>
               <span style={{ fontSize: 10, color: '#8A857D' }}>{item.durationMin}–{item.durationMax}m</span>
             </div>
-            {item.meta?.requestedBy && <div style={{ fontSize: 11, color: '#C4725A', marginTop: 4, fontStyle: 'italic' }}>↗ {item.meta.requestedBy}: {item.meta.note}</div>}
+            {item.meta?.requestedBy && <div style={{ fontSize: 11, color: COLORS.primary, marginTop: 4, fontStyle: 'italic' }}>↗ {item.meta.requestedBy}: {item.meta.note}</div>}
           </div>
           {!isEditing && (
             <button onClick={e => { e.stopPropagation(); dismissHopper(item.localId) }} title="Dismiss"
@@ -671,7 +672,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
 
             {hopperEdit.mode === 'menu' && (
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setHopperEdit(h => h ? { ...h, mode: 'schedule' } : h)} style={{ ...btnSm(false), background: '#C4725A', color: 'white', borderColor: '#C4725A' }}>Schedule it</button>
+                <button onClick={() => setHopperEdit(h => h ? { ...h, mode: 'schedule' } : h)} style={{ ...btnSm(false), background: COLORS.primary, color: 'white', borderColor: COLORS.primary }}>Schedule it</button>
                 <button onClick={() => setHopperEdit(h => h ? { ...h, mode: 'ask-later' } : h)} style={btnSm()}>Ask me later</button>
                 <button onClick={() => dismissHopper(item.localId)} style={{ ...btnSm(), color: '#D4564E', borderColor: '#D4564E30' }}>Dismiss</button>
               </div>
@@ -685,7 +686,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
                     onChange={e => setHopperEdit(h => h ? { ...h, askLaterDate: e.target.value } : h)}
                     style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px solid #E8E4DC', fontSize: 12, fontFamily: "'Source Sans 3', sans-serif", outline: 'none' }} />
                   <button onClick={snoozeHopper} disabled={!hopperEdit.askLaterDate}
-                    style={{ ...btnSm(!!hopperEdit.askLaterDate), background: hopperEdit.askLaterDate ? '#C4725A' : 'transparent', color: hopperEdit.askLaterDate ? 'white' : '#B5B0A8', borderColor: hopperEdit.askLaterDate ? '#C4725A' : '#E8E4DC' }}>OK</button>
+                    style={{ ...btnSm(!!hopperEdit.askLaterDate), background: hopperEdit.askLaterDate ? COLORS.primary : 'transparent', color: hopperEdit.askLaterDate ? 'white' : '#B5B0A8', borderColor: hopperEdit.askLaterDate ? COLORS.primary : '#E8E4DC' }}>OK</button>
                   <button onClick={() => setHopperEdit(h => h ? { ...h, mode: 'menu' } : h)} style={btnSm()}>Back</button>
                 </div>
               </div>
@@ -725,7 +726,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
                   </select>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={scheduleFromHopper} style={{ ...btnSm(), background: '#C4725A', color: 'white', borderColor: '#C4725A' }}>Schedule</button>
+                  <button onClick={scheduleFromHopper} style={{ ...btnSm(), background: COLORS.primary, color: 'white', borderColor: COLORS.primary }}>Schedule</button>
                   <button onClick={() => setHopperEdit(h => h ? { ...h, mode: 'menu' } : h)} style={btnSm()}>Back</button>
                 </div>
               </div>
@@ -742,7 +743,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
     const isEditing = schedEdit?.localId === item.localId
     return (
       <div key={item.localId}
-        style={{ marginBottom: 3, borderRadius: 8, border: '1px solid', borderColor: isEditing ? '#C4725A' : 'transparent', background: item.isHard ? '#9E6A4608' : '#FAFAF7', overflow: 'hidden' }}
+        style={{ marginBottom: 3, borderRadius: 8, border: '1px solid', borderColor: isEditing ? COLORS.primary : 'transparent', background: item.isHard ? '#9E6A4608' : '#FAFAF7', overflow: 'hidden' }}
       >
         {/* Item row */}
         <div
@@ -759,7 +760,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
           <span style={{ flex: 1, fontWeight: 500 }}>
             {item.name}
             {item.isHard && item.scheduledTime && <span style={{ fontSize: 10, color: '#9E6A46', marginLeft: 6 }}>{item.scheduledTime}{item.endTime ? ` – ${item.endTime}` : ''}</span>}
-            {WI[item.emotionalWeight] && <span style={{ color: '#C4725A', marginLeft: 4, fontSize: 10 }}>{WI[item.emotionalWeight]}</span>}
+            {WI[item.emotionalWeight] && <span style={{ color: COLORS.primary, marginLeft: 4, fontSize: 10 }}>{WI[item.emotionalWeight]}</span>}
           </span>
           {!item.isHard && !isEditing && <>
             <span style={{ fontSize: 11, color: '#B5B0A8' }}>{item.durationMin}–{item.durationMax}m</span>
@@ -789,7 +790,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={saveSchedEdit} style={{ ...btnSm(), background: '#C4725A', color: 'white', borderColor: '#C4725A' }}>Save</button>
+              <button onClick={saveSchedEdit} style={{ ...btnSm(), background: COLORS.primary, color: 'white', borderColor: COLORS.primary }}>Save</button>
               <button onClick={() => deleteSchedItem(item, from)} style={{ ...btnSm(), color: '#D4564E', borderColor: '#D4564E30' }}>Delete</button>
               <button onClick={() => setSchedEdit(null)} style={btnSm()}>Cancel</button>
             </div>
@@ -834,7 +835,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
             <span style={{ fontSize: 14, color: '#8A857D' }}>{todayLabel()}</span>
             <div style={{ display: 'flex', gap: 4, marginLeft: 4 }}>
               {([{ key: 'setup', label: 'Setup' }, { key: 'reorg', label: 'Reorg' }, { key: 'capture', label: 'Capture' }] as const).map(m => (
-                <button key={m.key} onClick={() => setMode(m.key)} style={{ padding: '6px 16px', borderRadius: 8, border: '1.5px solid', borderColor: mode === m.key ? '#C4725A' : '#E8E4DC', background: mode === m.key ? '#C4725A10' : 'transparent', color: mode === m.key ? '#C4725A' : '#8A857D', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>{m.label}</button>
+                <button key={m.key} onClick={() => setMode(m.key)} style={{ padding: '6px 16px', borderRadius: 8, border: '1.5px solid', borderColor: mode === m.key ? COLORS.primary : '#E8E4DC', background: mode === m.key ? COLORS.primary + '10' : 'transparent', color: mode === m.key ? COLORS.primary : '#8A857D', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>{m.label}</button>
               ))}
             </div>
           </div>
@@ -854,7 +855,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
               <span style={{ fontSize: 11, color: '#5A9E6F' }}>📅 Calendar connected</span>
             )}
             {mode !== 'capture' && !committed && totalSched > 0 && (
-              <button onClick={commitPlan} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#C4725A', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>Commit Plan ({totalSched} items)</button>
+              <button onClick={commitPlan} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: COLORS.primary, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>Commit Plan ({totalSched} items)</button>
             )}
             {committed && mode !== 'capture' && <span style={{ fontSize: 13, color: '#5A9E6F', fontWeight: 600 }}>✓ Plan committed</span>}
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid #E8E4DC', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#8A857D', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
@@ -934,7 +935,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                         <span style={{ fontSize: 12, color: '#8A857D', width: 80 }}>Energy / Mood</span>
                         {[1, 2, 3, 4, 5].map(n => (
-                          <button key={n} onClick={() => setMoodEnergy(n)} style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid', borderColor: moodEnergy === n ? '#C4725A' : '#E8E4DC', background: moodEnergy === n ? '#C4725A10' : 'transparent', color: moodEnergy === n ? '#C4725A' : '#8A857D', fontSize: 14, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>{n}</button>
+                          <button key={n} onClick={() => setMoodEnergy(n)} style={{ width: 32, height: 32, borderRadius: 8, border: '1.5px solid', borderColor: moodEnergy === n ? COLORS.primary : '#E8E4DC', background: moodEnergy === n ? COLORS.primary + '10' : 'transparent', color: moodEnergy === n ? COLORS.primary : '#8A857D', fontSize: 14, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>{n}</button>
                         ))}
                       </div>
                       <textarea placeholder="How was today? (optional)" value={reflection} onChange={e => setReflection(e.target.value)}
@@ -957,7 +958,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
                         onDragLeave={() => { setDragOver(null); setDragBlockOver(null) }}
                         onDrop={() => { if (dragItem) dropOnBlock(block.localId); else if (dragBlock) blockDrop(block.localId) }}
                         onDragEnd={() => { setDragBlock(null); setDragBlockOver(null) }}
-                        style={{ position: 'relative', zIndex: 1, borderRadius: 12, border: '1.5px solid', borderColor: dragBlockOver === block.localId ? '#C4725A' : dragOver === block.localId ? EC[block.energyLevel] : '#E8E4DC', background: dragBlockOver === block.localId ? '#C4725A08' : dragOver === block.localId ? EC[block.energyLevel] + '08' : 'white', transition: 'all 0.15s', overflow: 'hidden', opacity: dragBlock === block.localId ? 0.4 : 1, cursor: block.isHardBlock ? 'default' : (dragItem ? 'default' : 'grab') }}
+                        style={{ position: 'relative', zIndex: 1, borderRadius: 12, border: '1.5px solid', borderColor: dragBlockOver === block.localId ? COLORS.primary : dragOver === block.localId ? EC[block.energyLevel] : '#E8E4DC', background: dragBlockOver === block.localId ? COLORS.primaryFaint : dragOver === block.localId ? EC[block.energyLevel] + '08' : 'white', transition: 'all 0.15s', overflow: 'hidden', opacity: dragBlock === block.localId ? 0.4 : 1, cursor: block.isHardBlock ? 'default' : (dragItem ? 'default' : 'grab') }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: (block.items.length > 0 || !block.isHardBlock) ? '1px solid #E8E4DC' : 'none' }}>
                           {!block.isHardBlock && <div title="Drag to reorder block" style={{ cursor: 'grab', color: '#C4BFB4', fontSize: 16, userSelect: 'none', lineHeight: 1 }}>⠿</div>}
@@ -978,11 +979,11 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
 
                 {!addingBlock ? (
                   <button onClick={() => setAddingBlock(true)} style={{ width: '100%', padding: '10px', marginBottom: 12, borderRadius: 12, border: '1.5px dashed #D0CBC3', background: 'transparent', color: '#8A857D', fontSize: 13, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600, transition: 'all 0.15s' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#C4725A'; (e.currentTarget as HTMLElement).style.color = '#C4725A' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = COLORS.primary; (e.currentTarget as HTMLElement).style.color = COLORS.primary }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D0CBC3'; (e.currentTarget as HTMLElement).style.color = '#8A857D' }}
                   >+ Add time block</button>
                 ) : (
-                  <div style={{ padding: '14px 16px', marginBottom: 12, borderRadius: 12, border: '1.5px solid #C4725A', background: 'white' }}>
+                  <div style={{ padding: '14px 16px', marginBottom: 12, borderRadius: 12, border: `1.5px solid ${COLORS.primary}`, background: 'white' }}>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                       <input type="text" placeholder="Block name" value={newBlock.label} onChange={e => setNewBlock(b => ({ ...b, label: e.target.value }))}
                         onKeyDown={e => { if (e.key === 'Enter') createBlock(); if (e.key === 'Escape') setAddingBlock(false) }} autoFocus
@@ -999,7 +1000,7 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={createBlock} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#C4725A', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>Add Block</button>
+                      <button onClick={createBlock} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: COLORS.primary, color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>Add Block</button>
                       <button onClick={() => { setAddingBlock(false); setNewBlock({ label: '', start: '', end: '', energyLevel: 'B' }) }} style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #E8E4DC', background: 'transparent', color: '#8A857D', fontSize: 12, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>Cancel</button>
                     </div>
                   </div>
@@ -1072,8 +1073,8 @@ export default function OrganizeModal({ onClose, values, domains, activities }: 
               const hv = [...timeBlocks.flatMap(b => b.items), ...unscheduledTasks].filter(i => i.emotionalWeight === 'heavy')
               if (!hv.length) return null
               return (
-                <div style={{ padding: '10px 12px', borderRadius: 8, background: '#C4725A08', border: '1px solid #C4725A20' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#C4725A', marginBottom: 4 }}>◆ Heavy items today</div>
+                <div style={{ padding: '10px 12px', borderRadius: 8, background: COLORS.primaryFaint, border: `1px solid ${COLORS.primaryLight}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.primary, marginBottom: 4 }}>◆ Heavy items today</div>
                   {hv.map(i => <div key={i.localId} style={{ fontSize: 11, color: '#8A857D', marginBottom: 2 }}>{i.name}</div>)}
                   <div style={{ fontSize: 10, color: '#B5B0A8', marginTop: 4, fontStyle: 'italic' }}>Consider scheduling these during your best energy</div>
                 </div>

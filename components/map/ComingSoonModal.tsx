@@ -1,3 +1,5 @@
+import { COLORS } from '@/lib/theme'
+
 interface Props {
   name: string
   description: string
@@ -16,7 +18,7 @@ export default function ComingSoonModal({ name, description, onClose }: Props) {
       }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 16, fontWeight: 700, color: '#2D2A26', marginBottom: 10 }}>{name}</div>
         <div style={{ fontSize: 13, color: '#8A8578', lineHeight: 1.6, marginBottom: 20 }}>{description}</div>
-        <div style={{ fontSize: 12, color: '#C4725A', fontWeight: 600 }}>Coming soon</div>
+        <div style={{ fontSize: 12, color: COLORS.primary, fontWeight: 600 }}>Coming soon</div>
         <button onClick={onClose} style={{
           marginTop: 20, padding: '8px 20px', background: '#F8F7F4', border: '1px solid #E8E4DC',
           borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#2D2A26',

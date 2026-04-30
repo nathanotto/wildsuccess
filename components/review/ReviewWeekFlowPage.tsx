@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import ReviewSubNav from './ReviewSubNav'
+import { COLORS } from '@/lib/theme'
 
 const FONT = "'Source Sans 3', 'Source Sans Pro', sans-serif"
 const DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -14,7 +15,7 @@ const STATUS_ICONS: Record<string, { icon: string; color: string }> = {
   committed: { icon: '□', color: '#D0CBC3' },
 }
 
-const TIME_TYPE_COLORS: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const TIME_TYPE_COLORS: Record<string, string> = { A: COLORS.primary, B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
 
 interface StreamEntry {
   time: string

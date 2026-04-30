@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { LifeDomain, Activity, UserValue } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   domain: LifeDomain | null
@@ -11,14 +12,14 @@ interface Props {
   onClose: () => void
 }
 
-const SWATCHES = ['#C4725A', '#5A9E6F', '#3A7CB8', '#9E6A46', '#C4504A', '#8A5FC4', '#C4A82A', '#8A8578']
+const SWATCHES = [COLORS.primary, '#5A9E6F', '#3A7CB8', '#9E6A46', '#C4504A', '#8A5FC4', '#C4A82A', '#8A8578']
 const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #E8E4DC', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#2D2A26', display: 'block', marginBottom: 6 }
 const fieldStyle: React.CSSProperties = { marginBottom: 16 }
 
 export default function EditDomainModal({ domain, activities, values, onSave, onDelete, onClose }: Props) {
   const [name, setName] = useState(domain?.name ?? '')
-  const [color, setColor] = useState(domain?.color ?? '#C4725A')
+  const [color, setColor] = useState(domain?.color ?? COLORS.primary)
   const [description, setDescription] = useState(domain?.description ?? '')
   const [isActive, setIsActive] = useState(domain?.is_active ?? true)
   const [saving, setSaving] = useState(false)
@@ -63,7 +64,7 @@ export default function EditDomainModal({ domain, activities, values, onSave, on
 
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-            <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} style={{ accentColor: '#C4725A', width: 14, height: 14 }} />
+            <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} style={{ accentColor: COLORS.primary, width: 14, height: 14 }} />
             Active
           </label>
         </div>
@@ -87,7 +88,7 @@ export default function EditDomainModal({ domain, activities, values, onSave, on
         {error && <div style={{ fontSize: 12, color: '#C4504A', marginBottom: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={handleSave} disabled={saving} style={{ background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={handleSave} disabled={saving} style={{ background: COLORS.primary, color: '#FFF', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button onClick={onClose} style={{ background: '#F8F7F4', border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 20px', fontSize: 13, cursor: 'pointer', color: '#2D2A26' }}>Cancel</button>

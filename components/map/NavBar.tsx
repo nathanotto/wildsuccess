@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import ComingSoonModal from './ComingSoonModal'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   displayName: string
@@ -69,7 +70,7 @@ export default function NavBar({ displayName, userInitial, overdueCount, hopperC
         padding: '8px 20px', display: 'flex', alignItems: 'center', gap: 5,
         borderBottom: '1px solid #F0EDE6', background: '#FFFFFF', position: 'sticky', top: 0, zIndex: 10,
       }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#C4725A', marginRight: 10 }}>Wild Success</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.primary, marginRight: 10 }}>Wild Success</div>
         {ACTION_MODES.map(m => (
           <button key={m.name}
             onClick={() => {
@@ -83,14 +84,14 @@ export default function NavBar({ displayName, userInitial, overdueCount, hopperC
               fontSize: 10, fontWeight: 600, color: '#2D2A26', cursor: 'pointer', background: 'transparent',
               position: 'relative',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F8F7F4'; (e.currentTarget as HTMLElement).style.borderColor = '#C4725A40' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F8F7F4'; (e.currentTarget as HTMLElement).style.borderColor = COLORS.primaryMuted }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.borderColor = '#F0EDE6' }}
           >
             {m.name}
             {m.name === 'Organize' && hopperCount > 0 && (
               <span style={{
                 position: 'absolute', top: -4, right: -4, minWidth: 14, height: 14, borderRadius: 7,
-                background: '#C4725A', color: 'white', fontSize: 8, fontWeight: 700,
+                background: COLORS.primary, color: 'white', fontSize: 8, fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
               }}>{hopperCount}</span>
             )}
@@ -119,9 +120,9 @@ export default function NavBar({ displayName, userInitial, overdueCount, hopperC
           <div
             onClick={() => setShowUserMenu(!showUserMenu)}
             style={{
-              width: 24, height: 24, borderRadius: '50%', background: '#C4725A20',
+              width: 24, height: 24, borderRadius: '50%', background: COLORS.primaryLight,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 10, fontWeight: 700, color: '#C4725A', cursor: 'pointer',
+              fontSize: 10, fontWeight: 700, color: COLORS.primary, cursor: 'pointer',
             }}>{userInitial}</div>
           {showUserMenu && (
             <div style={{

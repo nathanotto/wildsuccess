@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
+import { COLORS } from '@/lib/theme'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ requestId: string }> }) {
   const supabase = await createClient()
@@ -46,7 +47,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ re
             subject: 'Welcome to Wild Success',
             html: `<p>Your request for full access has been approved.</p>
               <p>You now have access to your personal Map, daily view, weekly planning, and everything else Wild Success offers.</p>
-              <p><a href="${appUrl}/map" style="display:inline-block;padding:10px 20px;background:#C4725A;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Go to your Map</a></p>`,
+              <p><a href="${appUrl}/map" style="display:inline-block;padding:10px 20px;background:${COLORS.primary};color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Go to your Map</a></p>`,
           })
         } catch (e) { console.error('Failed to send approval email:', e) }
       }

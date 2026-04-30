@@ -6,13 +6,14 @@ import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
 import { useRealtimeMission } from '@/lib/useRealtimeMission'
 import { useActionToast } from '@/lib/useActionToast'
 import ActionToast from '@/components/shared/ActionToast'
+import { COLORS } from '@/lib/theme'
 
 const KIND_ORDER: FactorKind[] = ['success', 'driver', 'constraint', 'fact', 'assumption']
 const KIND_LABELS: Record<string, string> = {
   success: 'Successes', driver: 'Drivers', constraint: 'Constraints', fact: 'Facts', assumption: 'Assumptions',
 }
 const KIND_COLORS: Record<string, string> = {
-  success: '#C4725A', driver: '#5A9E6F', constraint: '#C4504A', fact: '#4B82AF', assumption: '#9B7EC8',
+  success: COLORS.primary, driver: '#5A9E6F', constraint: '#C4504A', fact: '#4B82AF', assumption: '#9B7EC8',
 }
 
 interface Props {
@@ -206,7 +207,7 @@ export default function COAsPage({ missionId }: Props) {
       </div>
 
       <h1 style={{ fontSize: 16, fontWeight: 700, color: '#2D2A26', margin: '0 0 12px' }}>
-        Plan courses of action for: <span style={{ color: '#C4725A' }}>{missionName}</span>
+        Plan courses of action for: <span style={{ color: COLORS.primary }}>{missionName}</span>
       </h1>
 
       {/* Progress bar */}
@@ -247,7 +248,7 @@ export default function COAsPage({ missionId }: Props) {
           }}
         />
         <button onClick={handleAddCoa} style={{
-          padding: '8px 14px', background: '#C4725A', color: '#FFF', border: 'none',
+          padding: '8px 14px', background: COLORS.primary, color: '#FFF', border: 'none',
           borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
         }}>+ Add</button>
       </div>
@@ -265,8 +266,8 @@ export default function COAsPage({ missionId }: Props) {
             return (
               <div key={c.id}>
                 <div style={{
-                  padding: '8px 12px', border: isSelected ? '2px solid #C4725A' : '1px solid #E8E4DC',
-                  borderRadius: 8, background: isSelected ? '#C4725A08' : '#FFF',
+                  padding: '8px 12px', border: isSelected ? `2px solid ${COLORS.primary}` : '1px solid #E8E4DC',
+                  borderRadius: 8, background: isSelected ? COLORS.primaryFaint : '#FFF',
                   display: 'flex', alignItems: 'center', gap: 6,
                 }}>
                   <button onClick={() => moveCoa(c.id, 'up')} style={arrowBtn}>↑</button>
@@ -276,7 +277,7 @@ export default function COAsPage({ missionId }: Props) {
                   <span style={{ color: getAuthorColor(c.user_id, !!c.is_own), fontWeight: 600, fontSize: 11 }}>{formatAuthorTag(c.author_name, c.is_own)}</span>
                   <span
                     onClick={() => setSelectedCoaId(isSelected ? null : c.id)}
-                    style={{ color: isSelected ? '#C4725A' : '#2D2A26', cursor: 'pointer', flex: 1, fontSize: 13 }}
+                    style={{ color: isSelected ? COLORS.primary : '#2D2A26', cursor: 'pointer', flex: 1, fontSize: 13 }}
                   >{c.action}{c.outcome ? <><span style={{ color: '#B5B0A8', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, margin: '0 4px' }}>IOT</span>{c.outcome}</> : ''}</span>
                   {c.time_horizon !== 'unset' && (
                     <span style={{ fontSize: 9, fontWeight: 600, color: '#4B82AF', background: '#4B82AF15', padding: '1px 5px', borderRadius: 3 }}>{c.time_horizon}</span>
@@ -285,9 +286,9 @@ export default function COAsPage({ missionId }: Props) {
                     <button
                       onClick={() => isSelected ? handleSaveLinks(c.id) : setSelectedCoaId(c.id)}
                       style={{
-                        background: isSelected ? '#C4725A' : '#F8F7F4', border: isSelected ? '1px solid #C4725A' : '1px solid #E8E4DC',
+                        background: isSelected ? COLORS.primary : '#F8F7F4', border: isSelected ? `1px solid ${COLORS.primary}` : '1px solid #E8E4DC',
                         borderRadius: 4, padding: '3px 8px', fontSize: 10, fontWeight: 600,
-                        color: isSelected ? '#FFF' : '#C4725A', cursor: 'pointer', whiteSpace: 'nowrap',
+                        color: isSelected ? '#FFF' : COLORS.primary, cursor: 'pointer', whiteSpace: 'nowrap',
                       }}
                     >{isSelected ? 'Save' : 'Link factors'}</button>
                     <ActionToast message={toast?.id === `save-${c.id}` ? toast.msg : null} visible={visible && toast?.id === `save-${c.id}`} position="left" />
@@ -321,7 +322,7 @@ export default function COAsPage({ missionId }: Props) {
                 {/* Factor linking table */}
                 {isSelected && (
                   <div style={{ margin: '8px 0 4px', padding: 12, background: '#F8F7F4', borderRadius: 8, border: '1px solid #E8E4DC' }}>
-                    <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#C4725A', marginBottom: 10 }}>
+                    <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: COLORS.primary, marginBottom: 10 }}>
                       &gt;&gt;&gt; Click factors for: ♥ <strong>{c.action}</strong> &lt;&lt;&lt;
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>

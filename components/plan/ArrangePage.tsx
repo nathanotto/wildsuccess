@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { COA, Factor, COADependency, COAResourceNeed, Mission } from '@/lib/types'
 import { getAuthorColor } from '@/lib/author-colors'
+import { COLORS } from '@/lib/theme'
 
 const FONT = '"Source Sans 3", "Source Sans Pro", sans-serif'
 
@@ -340,7 +341,7 @@ export default function ArrangePage({ missionId }: Props) {
       {/* Header row 1: mission context */}
       <div style={{ padding: '6px 16px', borderBottom: '1px solid #F0EDE8', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11, color: '#8A8578', cursor: 'pointer', flexShrink: 0 }} onClick={() => router.push(`/plan/${missionId}`)}>← Mission</span>
-        <span style={{ fontSize: 15, fontWeight: 700, color: '#C4725A' }}>{mission?.name ?? ''}</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.primary }}>{mission?.name ?? ''}</span>
         {mission?.description && (
           <span style={{ fontSize: 12, color: '#B5B0A8', fontStyle: 'italic', flex: 1, minWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{mission.description}</span>
         )}
@@ -417,7 +418,7 @@ export default function ArrangePage({ missionId }: Props) {
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}
                       >
-                        {c.status === 'committed' && <span style={{ color: '#C4725A', marginRight: 3 }}>●</span>}
+                        {c.status === 'committed' && <span style={{ color: COLORS.primary, marginRight: 3 }}>●</span>}
                         {c.action}
                       </div>
                     ))}
@@ -468,7 +469,7 @@ export default function ArrangePage({ missionId }: Props) {
                     onKeyDown={e => { if (e.key === 'Enter') saveAction(active.id); if (e.key === 'Escape') setEditingAction(false) }}
                     onBlur={() => saveAction(active.id)}
                     autoFocus
-                    style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', border: '1px solid #C4725A', borderRadius: 6, padding: '4px 8px', outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', marginBottom: 4 }}
+                    style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', border: `1px solid ${COLORS.primary}`, borderRadius: 6, padding: '4px 8px', outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', marginBottom: 4 }}
                   />
                 ) : (
                   <div onClick={() => { setEditingAction(true); setActionText(active.action) }} style={{ fontSize: 18, fontWeight: 700, cursor: 'pointer', marginBottom: 4 }}>
@@ -484,7 +485,7 @@ export default function ArrangePage({ missionId }: Props) {
                       onKeyDown={e => { if (e.key === 'Enter') saveOutcome(active.id); if (e.key === 'Escape') setEditingOutcome(false) }}
                       onBlur={() => saveOutcome(active.id)}
                       autoFocus placeholder="In order to achieve what?"
-                      style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid #C4725A', fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
+                      style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: `1px solid ${COLORS.primary}`, fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
                     />
                   </div>
                 ) : (
@@ -499,7 +500,7 @@ export default function ArrangePage({ missionId }: Props) {
 
                 {/* Status + time horizon */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'nowrap' }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: active.status === 'completed' ? '#5A9E6F' : active.status === 'committed' ? '#C4725A' : '#8A8578' }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: active.status === 'completed' ? '#5A9E6F' : active.status === 'committed' ? COLORS.primary : '#8A8578' }}>
                     {active.status}
                   </span>
                   <div style={{ display: 'flex', gap: 2 }}>
@@ -582,7 +583,7 @@ export default function ArrangePage({ missionId }: Props) {
                 {activeLinks.length === 0 ? (
                   <div style={{ fontSize: 11, color: '#B5B0A8', fontStyle: 'italic' }}>
                     No linked factors.{' '}
-                    <span style={{ cursor: 'pointer', color: '#C4725A' }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Link on COA page →</span>
+                    <span style={{ cursor: 'pointer', color: COLORS.primary }} onClick={() => router.push(`/plan/${missionId}/coas`)}>Link on COA page →</span>
                   </div>
                 ) : activeLinks.map(l => {
                   const f = factorMap.get(l.factor_id)
@@ -610,7 +611,7 @@ export default function ArrangePage({ missionId }: Props) {
                     const steps = (ai.item_notes ?? []).filter(n => n.note_type === 'step').sort((a, b) => a.sort_order - b.sort_order)
                     const notes = (ai.item_notes ?? []).filter(n => n.note_type === 'note').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                     const completedSteps = steps.filter(s => s.is_completed).length
-                    const statusColor = ai.status === 'completed' ? '#5A9E6F' : ai.status === 'in_progress' ? '#C4725A' : '#8A8578'
+                    const statusColor = ai.status === 'completed' ? '#5A9E6F' : ai.status === 'in_progress' ? COLORS.primary : '#8A8578'
                     return (
                       <div key={ai.id} style={{ marginBottom: 6, padding: '5px 8px', border: '1px solid #E8E4DC', borderRadius: 6, background: '#FAFAF8' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -789,7 +790,7 @@ export default function ArrangePage({ missionId }: Props) {
                 )}
               </div>
             ))}
-            <button onClick={() => setReviewModal(null)} style={{ padding: '6px 16px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Done</button>
+            <button onClick={() => setReviewModal(null)} style={{ padding: '6px 16px', background: COLORS.primary, color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Done</button>
           </div>
         </div>
       )}

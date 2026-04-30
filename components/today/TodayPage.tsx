@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { ActionItemWithNotes, ItemNote } from '@/lib/types'
 import { computeDisplayStatus } from '@/lib/snapshot'
 import CaptureInput from '@/components/capture/CaptureInput'
+import { COLORS } from '@/lib/theme'
 
 // ─── Hopper types & constants ────────────────────────────────────────────────
 
@@ -162,9 +163,9 @@ function Checkbox({ status, onClick }: { status: string; onClick?: () => void })
   }
   if (status === 'in_progress') {
     return (
-      <span style={{ ...base, borderColor: '#C4725A', background: 'transparent' }}
+      <span style={{ ...base, borderColor: COLORS.primary, background: 'transparent' }}
         onClick={e => { e.stopPropagation(); onClick?.() }}>
-        <span style={{ width: 6, height: 6, background: '#C4725A', borderRadius: 1 }} />
+        <span style={{ width: 6, height: 6, background: COLORS.primary, borderRadius: 1 }} />
       </span>
     )
   }
@@ -733,7 +734,7 @@ function FocusView({
         </button>
         <button
           onClick={() => { if (window.confirm('Delete this item permanently?')) onDelete(item.id).then(onBack) }}
-          style={{ ...actionBtnStyle, color: '#C4725A' }}>
+          style={{ ...actionBtnStyle, color: COLORS.primary }}>
           ⌫ Delete like it never happened
         </button>
       </div>
@@ -1006,14 +1007,6 @@ export default function TodayPage({ displayName }: Props) {
   const scheduleItems = items
     .filter(i => !!i.scheduled_time)
     .sort((a, b) => (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? ''))
-
-  const stats = {
-    done: items.filter(i => i.status === 'completed').length,
-    inProgress: items.filter(i => i.status === 'in_progress').length,
-    scheduled: items.filter(i => i.status === 'committed' && i.scheduled_time).length,
-    todo: items.filter(i => i.status === 'committed' && !i.scheduled_time).length,
-    skipped: items.filter(i => i.status === 'skipped').length,
-  }
 
   const focusItem = items.find(i => i.id === focusItemId) ?? null
 
@@ -1584,16 +1577,7 @@ export default function TodayPage({ displayName }: Props) {
               )
             })()}
 
-            {/* Week intent — ambient reminder */}
-            {weekIntent && (
-              <div
-                style={{ fontSize: 12, color: '#8A857D', fontStyle: 'italic', marginBottom: 8, lineHeight: 1.5, cursor: 'pointer' }}
-                title={weekIntent}
-                onClick={() => router.push('/week')}
-              >
-                {weekIntent.length > 120 ? weekIntent.slice(0, 117) + '...' : weekIntent}
-              </div>
-            )}
+
 
             {/* Capture — active on today and future, grayed out on past */}
             {isPast ? (
@@ -1628,22 +1612,26 @@ export default function TodayPage({ displayName }: Props) {
               <>
                 {/* Close this day link — for past days without day completion */}
                 {isPast && !dayCompletion && (
-                  <a href={`/today/complete?date=${selectedDate}`} style={{ fontSize: 13, color: '#C4725A', textDecoration: 'none', display: 'block', marginBottom: 8 }}>
+                  <a href={`/today/complete?date=${selectedDate}`} style={{ fontSize: 13, color: COLORS.primary, textDecoration: 'none', display: 'block', marginBottom: 8 }}>
                     Close this day →
                   </a>
                 )}
 
-                {/* Next up */}
+                {/* Next up — promoted with terracotta left rule */}
                 {listNextUp && (
-                  <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 4 }}>
-                    Next up: {listNextUp.name}{listNextUp.scheduled_time ? ` at ${fmtTime(listNextUp.scheduled_time)}` : ''}
+                  <div style={{
+                    margin: '8px 0 22px', padding: '8px 0 8px 14px',
+                    borderLeft: `2px solid ${COLORS.primary}`,
+                    display: 'flex', alignItems: 'baseline', gap: 10,
+                  }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: COLORS.primary, textTransform: 'uppercase' }}>Next up</span>
+                    {listNextUp.scheduled_time && (
+                      <span style={{ fontSize: 13, color: '#8A8578', fontVariantNumeric: 'tabular-nums' }}>{fmtTime(listNextUp.scheduled_time)}</span>
+                    )}
+                    <span style={{ fontSize: 15, color: '#2D2A26', fontWeight: 600 }}>{listNextUp.name}</span>
                   </div>
                 )}
 
-                {/* Stats */}
-                <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 12 }}>
-                  {stats.done} done{stats.inProgress > 0 ? ` · ${stats.inProgress} in progress` : ''}{stats.scheduled > 0 ? ` · ${stats.scheduled} scheduled` : ''}{stats.todo > 0 ? ` · ${stats.todo} to-do` : ''}{stats.skipped > 0 ? ` · ${stats.skipped} skipped` : ''}
-                </div>
 
                 {/* Yesterday's unfinished — triage box */}
                 {isToday && yesterdayUnfinished.length > 0 && (
@@ -1673,7 +1661,7 @@ export default function TodayPage({ displayName }: Props) {
                         <button
                           onClick={() => handleYesterdaySkip(item.id)}
                           title="Didn't happen"
-                          style={{ background: 'none', border: '1px solid #8A857D', borderRadius: 3, cursor: 'pointer', fontSize: 9, color: '#C4725A', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                          style={{ background: 'none', border: '1px solid #8A857D', borderRadius: 3, cursor: 'pointer', fontSize: 9, color: COLORS.primary, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                         >✕</button>
                         <button
                           onClick={() => handleYesterdayMoveToToday(item.id)}
@@ -1685,23 +1673,22 @@ export default function TodayPage({ displayName }: Props) {
                   </div>
                 )}
 
-                {/* Two explicit columns on desktop, single column on mobile */}
-                {(() => {
-                  // Build a flat list of all renderable items
-                  const allRows: { key: string; node: React.ReactNode }[] = []
-                  if (scheduleItems.length > 0) {
-                    allRows.push({ key: 'schedule', node: (
-                      <div style={{ marginBottom: 0 }}>
-                        {renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
-                      </div>
-                    )})
-                    if (todoItems.length > 0) {
-                      allRows.push({ key: 'divider', node: <div style={{ borderTop: '1px solid #E8E4DC', margin: '12px 0' }} /> })
-                    }
+                {/* Equal-weight columns: schedule left, to-do right */}
+                <style>{`
+                  .today-cols { display: block; }
+                  @media (min-width: 768px) {
+                    .today-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+                    .today-col { min-width: 0; }
                   }
-                  todoItems.forEach(item => {
-                    allRows.push({ key: item.id, node: (
+                `}</style>
+                <div className="today-cols">
+                  <div className="today-col">
+                    {scheduleItems.length > 0 && renderScheduleItems(scheduleItems, nowTime, isToday, handleCheckboxCycle, setFocusItemId, handleStatusChange, isPast, selectedDate)}
+                  </div>
+                  <div className="today-col">
+                    {todoItems.map(item => (
                       <TodoRow
+                        key={item.id}
                         item={item}
                         isPast={isPast}
                         selectedDate={selectedDate}
@@ -1710,28 +1697,8 @@ export default function TodayPage({ displayName }: Props) {
                         onReschedule={() => handleStatusChange(item.id, 'rescheduled')}
                         onSkip={() => handleStatusChange(item.id, 'skipped')}
                       />
-                    )})
-                  })
-                  // Split into two columns round-robin
-                  const left: typeof allRows = []
-                  const right: typeof allRows = []
-                  allRows.forEach((r, i) => (i % 2 === 0 ? left : right).push(r))
-                  return (
-                    <>
-                      <style>{`
-                        .today-cols { display: block; }
-                        @media (min-width: 768px) {
-                          .today-cols { display: flex; gap: 24px; }
-                          .today-col { flex: 1; min-width: 0; }
-                        }
-                      `}</style>
-                      <div className="today-cols">
-                        <div className="today-col">
-                          {left.map(r => <div key={r.key}>{r.node}</div>)}
-                        </div>
-                        <div className="today-col">
-                          {right.map(r => <div key={r.key}>{r.node}</div>)}
-                          {futureItems.length > 0 && (
+                    ))}
+                    {futureItems.length > 0 && (
                             <div style={{ marginTop: 16 }}>
                               <div
                                 onClick={() => setShowLookingForward(!showLookingForward)}
@@ -1771,11 +1738,23 @@ export default function TodayPage({ displayName }: Props) {
                               })()}
                             </div>
                           )}
-                        </div>
-                      </div>
-                    </>
-                  )
-                })()}
+                  </div>
+                </div>
+
+                {/* Week intent — vision-board: full text, warm left rule, below columns */}
+                {weekIntent && (
+                  <div
+                    style={{
+                      margin: '20px 0 18px', padding: '2px 0 2px 14px',
+                      borderLeft: `2px solid ${COLORS.primary}`,
+                      fontSize: 14, lineHeight: 1.55, color: '#3D3933',
+                      maxWidth: 820, cursor: 'pointer',
+                    }}
+                    onClick={() => router.push('/week')}
+                  >
+                    {weekIntent}
+                  </div>
+                )}
 
                 {todoItems.length === 0 && scheduleItems.length === 0 && (
                   <div style={{ fontSize: 12, color: '#B5B0A8', paddingTop: 20 }}>
@@ -1785,10 +1764,11 @@ export default function TodayPage({ displayName }: Props) {
 
                 {/* This Week + Suggested hopper sections */}
                 {showHopperSections && (normalizedHopper.length > 0 || suggestedItems.length > 0) && (
-                  <div style={{ marginTop: 24 }}>
+                  <div style={{ marginTop: 0 }}>
+                    <div style={{ height: 1, background: '#F0EDE6', margin: '32px 0 0' }} />
                     {normalizedHopper.length > 0 && (
                       <>
-                        <div style={{ fontSize: 11, color: '#B5B0A8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                        <div style={{ fontSize: 11, color: '#B5B0A8', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 600, marginTop: 18, marginBottom: 6 }}>
                           This Week
                         </div>
                         {normalizedHopper.slice(0, 5).map(item => (
@@ -1879,6 +1859,22 @@ export default function TodayPage({ displayName }: Props) {
 
               </>
             )}
+
+            {/* Close the day — quiet affordance, always available */}
+            <div
+              onClick={() => router.push(`/today/complete?date=${selectedDate}`)}
+              style={{
+                marginTop: 28, padding: '12px 0', borderTop: '1px solid #F0EDE6',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 8, fontSize: 13, color: '#8A8578', cursor: 'pointer',
+              }}
+            >
+              <span style={{
+                width: 14, height: 14, borderRadius: '50%',
+                background: 'radial-gradient(circle at 65% 35%, #FAFAF7 0 50%, #C4BFB4 50% 100%)',
+              }} />
+              <span>Close the day</span>
+            </div>
           </>
         )}
       </div>
@@ -1906,7 +1902,12 @@ function TodoRow({
   const isCompleted = displayStatus === 'completed'
   const isParked = displayStatus === 'parked'
   const isSkipped = displayStatus === 'skipped'
+  const isInProgress = displayStatus === 'in_progress'
   const muted = isCompleted || isParked || isSkipped
+
+  // Bounded aging: <=1 day = fresh (#2D2A26), >=2 days = settled (#5C5750), floor at one step
+  const capturedAgo = item.created_at ? Math.floor((Date.now() - new Date(item.created_at).getTime()) / 86400000) : 0
+  const itemColor = muted ? '#B5B0A8' : isInProgress ? '#2D2A26' : capturedAgo <= 1 ? '#2D2A26' : '#5C5750'
 
   const steps = (item.item_notes ?? [])
     .filter(n => n.note_type === 'step')
@@ -1921,6 +1922,12 @@ function TodoRow({
       style={{
         padding: '5px 0', cursor: 'pointer', userSelect: 'none',
         borderBottom: '1px solid #F8F7F4',
+        borderRadius: 4,
+        ...(isInProgress ? {
+          background: 'rgba(253,246,243,0.6)',
+          boxShadow: `inset 2px 0 0 ${COLORS.primary}`,
+          paddingLeft: 8, marginLeft: -8,
+        } : {}),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -1931,7 +1938,8 @@ function TodoRow({
           )}
           <span style={{
             fontSize: 14,
-            color: muted ? '#B5B0A8' : '#2D2A26',
+            color: itemColor,
+            fontWeight: isInProgress ? 500 : 400,
             textDecoration: isCompleted ? 'line-through' : 'none',
           }}>
             {item.name}
@@ -2003,6 +2011,7 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
   const isCompleted = displayStatus === 'completed'
   const isParked = displayStatus === 'parked'
   const isSkipped = displayStatus === 'skipped'
+  const isInProgress = displayStatus === 'in_progress'
   const muted = isCompleted || isParked || isSkipped
 
   const steps = (item.item_notes ?? []).filter(n => n.note_type === 'step').sort((a, b) => a.sort_order - b.sort_order)
@@ -2014,10 +2023,16 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
       style={{
         padding: '5px 0', cursor: 'pointer', userSelect: 'none',
         borderBottom: '1px solid #F8F7F4',
+        borderRadius: 4,
+        ...(isInProgress ? {
+          background: 'rgba(253,246,243,0.6)',
+          boxShadow: `inset 2px 0 0 ${COLORS.primary}`,
+          paddingLeft: 8, marginLeft: -8,
+        } : {}),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <span style={{ fontSize: 12, color: '#8A8578', width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 1 }}>
+        <span style={{ fontSize: 12, color: '#8A8578', width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 1, fontVariantNumeric: 'tabular-nums' }}>
           {item.scheduled_time ? fmtTime(item.scheduled_time) : ''}
         </span>
         <Checkbox status={displayStatus} onClick={isPast ? undefined : onCheckbox} />
@@ -2025,6 +2040,7 @@ function ScheduleRow({ item, isPast, selectedDate, onCheckbox, onFocus, onResche
           <span style={{
             fontSize: 14,
             color: muted ? '#B5B0A8' : '#2D2A26',
+            fontWeight: isInProgress ? 500 : 400,
             textDecoration: isCompleted ? 'line-through' : 'none',
           }}>
             {item.name}
@@ -2102,12 +2118,12 @@ function renderScheduleItems(
       })
       result.push(
         <div key="now-line" style={{
-          fontSize: 12, color: '#C4725A', margin: '6px 0',
+          fontSize: 12, color: COLORS.primary, margin: '6px 0',
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
-          <span style={{ height: 1, background: '#C4725A', flex: 1 }} />
+          <span style={{ height: 1, background: COLORS.primary, flex: 1 }} />
           <span>{fmtTime(nowTime)}{currentItem ? ` ${currentItem.name}` : ''}</span>
-          <span style={{ height: 1, background: '#C4725A', flex: 1 }} />
+          <span style={{ height: 1, background: COLORS.primary, flex: 1 }} />
         </div>
       )
     }
@@ -2135,12 +2151,12 @@ function renderScheduleItems(
     })
     result.push(
       <div key="now-line" style={{
-        fontSize: 12, color: '#C4725A', margin: '6px 0',
+        fontSize: 12, color: COLORS.primary, margin: '6px 0',
         display: 'flex', alignItems: 'center', gap: 6,
       }}>
-        <span style={{ height: 1, background: '#C4725A', flex: 1 }} />
+        <span style={{ height: 1, background: COLORS.primary, flex: 1 }} />
         <span>{fmtTime(nowTime)}{currentItem ? ` ${currentItem.name}` : ''}</span>
-        <span style={{ height: 1, background: '#C4725A', flex: 1 }} />
+        <span style={{ height: 1, background: COLORS.primary, flex: 1 }} />
       </div>
     )
   }
@@ -2231,7 +2247,7 @@ function HopperRow({ item, isVirtual, onCommit, onAutoPlace, onTimeShift, onDism
                   </button>
                 )}
                 {!isVirtual && onDelete && (
-                  <button onClick={e => { e.stopPropagation(); setShowMenu(false); onDelete() }} style={{ ...menuItemStyle, color: '#C4725A', borderBottom: 'none' }}>
+                  <button onClick={e => { e.stopPropagation(); setShowMenu(false); onDelete() }} style={{ ...menuItemStyle, color: COLORS.primary, borderBottom: 'none' }}>
                     Delete
                   </button>
                 )}

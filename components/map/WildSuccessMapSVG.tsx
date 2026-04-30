@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { UserValue, LifeDomain, BigOutcome, Activity } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   values: UserValue[]
@@ -300,7 +301,7 @@ export default function WildSuccessMapSVG({
         return (
           <line key={`ao-${a.id}`}
             x1={ap.x} y1={ap.y} x2={ox} y2={oy}
-            stroke={hl ? '#C4725A' : '#E8E4DC'}
+            stroke={hl ? COLORS.primary : '#E8E4DC'}
             strokeWidth={hl ? 1.2 : 0.5}
             strokeOpacity={hl ? 0.5 : 0.15}
             strokeDasharray="4 4"
@@ -450,7 +451,7 @@ export default function WildSuccessMapSVG({
               >
                 <rect x={ox} y={outcomeY} width={outcomeBoxW} height={boxH} rx={12}
                   fill="#FFFFFF"
-                  stroke={isClosed && o.closure_type === 'accomplished' ? '#5A9E6F' : isSel ? '#C4725A' : '#E8E4DC'}
+                  stroke={isClosed && o.closure_type === 'accomplished' ? '#5A9E6F' : isSel ? COLORS.primary : '#E8E4DC'}
                   strokeWidth={isClosed && o.closure_type === 'accomplished' ? 1.5 : isSel ? 1.5 : 1}
                   opacity={isClosed ? 0.7 : 1}
                 />
@@ -491,7 +492,7 @@ export default function WildSuccessMapSVG({
                   <text
                     x={ox + outcomeBoxW / 2}
                     y={outcomeY + (needsActivities ? 54 : 44)}
-                    textAnchor="middle" fontSize={8} fontWeight={600} fill="#C4725A"
+                    textAnchor="middle" fontSize={8} fontWeight={600} fill={COLORS.primary}
                     style={{ cursor: 'pointer' }}
                     onClick={(e) => { e.stopPropagation(); window.location.href = `/plan/${missionsByOutcome[o.id]}` }}
                   >

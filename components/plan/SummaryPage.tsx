@@ -4,6 +4,7 @@ import { useActionToast } from '@/lib/useActionToast'
 import ActionToast from '@/components/shared/ActionToast'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Factor, COA, COADependency, COAResourceNeed, MissionLogEntry, Mission, MissionValueLink, FactorKind } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 const HORIZONS: { key: COA['time_horizon']; label: string; color: string }[] = [
   { key: 'now', label: 'Now', color: '#5A9E6F' },
@@ -165,7 +166,7 @@ export default function SummaryPage({ missionId }: Props) {
         `}</style>
         <div style={{ padding: '16px 24px', maxWidth: 700, margin: '0 auto', fontFamily: 'inherit', fontSize: 12, color: '#2D2A26', lineHeight: 1.5 }}>
           <div className="no-print" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button onClick={() => window.print()} style={{ padding: '4px 12px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Print</button>
+            <button onClick={() => window.print()} style={{ padding: '4px 12px', background: COLORS.primary, color: '#FFF', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Print</button>
             <button onClick={() => router.push(`/plan/${missionId}/summary`)} style={{ padding: '4px 12px', background: '#F8F7F4', border: '1px solid #E8E4DC', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>Back to summary</button>
           </div>
 
@@ -179,9 +180,9 @@ export default function SummaryPage({ missionId }: Props) {
           {/* Intended results */}
           {successFactors.length > 0 && (
             <div style={{ marginBottom: 12 }}>
-              <h2 style={{ fontSize: 12, fontWeight: 700, margin: '0 0 4px', color: '#C4725A' }}>Intended Results</h2>
+              <h2 style={{ fontSize: 12, fontWeight: 700, margin: '0 0 4px', color: COLORS.primary }}>Intended Results</h2>
               {successFactors.map(f => (
-                <div key={f.id} style={{ paddingLeft: 10, borderLeft: '2px solid #C4725A40', marginBottom: 2, fontSize: 11 }}>{f.name}</div>
+                <div key={f.id} style={{ paddingLeft: 10, borderLeft: `2px solid ${COLORS.primaryMuted}`, marginBottom: 2, fontSize: 11 }}>{f.name}</div>
               ))}
             </div>
           )}
@@ -332,10 +333,10 @@ export default function SummaryPage({ missionId }: Props) {
       {/* 3. Intended results */}
       {successFactors.length > 0 && (
         <div style={{ marginBottom: 28 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#C4725A', margin: '0 0 10px' }}>Intended results</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: COLORS.primary, margin: '0 0 10px' }}>Intended results</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {successFactors.map(f => (
-              <div key={f.id} style={{ fontSize: 13, color: '#2D2A26', lineHeight: 1.5, paddingLeft: 16, borderLeft: '3px solid #C4725A30' }}>
+              <div key={f.id} style={{ fontSize: 13, color: '#2D2A26', lineHeight: 1.5, paddingLeft: 16, borderLeft: `3px solid ${COLORS.primary}30` }}>
                 {f.name}
               </div>
             ))}
@@ -377,7 +378,7 @@ export default function SummaryPage({ missionId }: Props) {
                       <div style={{ flex: 1, fontSize: 13, color: '#2D2A26' }}>
                         {c.action}{c.outcome ? <><span style={{ color: '#B5B0A8', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, margin: '0 4px' }}>IOT</span>{c.outcome}</> : ''}
                       </div>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: c.status === 'completed' ? '#5A9E6F' : c.status === 'committed' ? '#C4725A' : '#8A8578' }}>{c.status}</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: c.status === 'completed' ? '#5A9E6F' : c.status === 'committed' ? COLORS.primary : '#8A8578' }}>{c.status}</span>
                     </div>
 
                     {/* Dependencies */}

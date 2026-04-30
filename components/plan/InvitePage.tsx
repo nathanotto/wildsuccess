@@ -4,6 +4,7 @@ import { useActionToast } from '@/lib/useActionToast'
 import ActionToast from '@/components/shared/ActionToast'
 import { useRouter } from 'next/navigation'
 import type { MissionInvitation } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 interface Props { missionId: string }
 
@@ -69,7 +70,7 @@ export default function InvitePage({ missionId }: Props) {
         <span style={{ cursor: 'pointer' }} onClick={() => router.push(`/plan/${missionId}/arrange`)}>Engage mission</span>
       </div>
       <h1 style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: '0 0 20px' }}>
-        Invite collaborators to: <span style={{ color: '#C4725A' }}>{missionName}</span>
+        Invite collaborators to: <span style={{ color: COLORS.primary }}>{missionName}</span>
       </h1>
 
       {/* Invite by email */}
@@ -79,7 +80,7 @@ export default function InvitePage({ missionId }: Props) {
           <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleInviteByEmail() }}
             placeholder="colleague@example.com" style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #E8E4DC', fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button onClick={handleInviteByEmail} style={{ padding: '8px 16px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Invite</button>
+            <button onClick={handleInviteByEmail} style={{ padding: '8px 16px', background: COLORS.primary, color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Invite</button>
             <ActionToast message={toast?.msg} visible={visible} type={toast?.type} position="below" />
           </div>
         </div>

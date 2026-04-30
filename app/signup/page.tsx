@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { COLORS } from '@/lib/theme'
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState('')
@@ -41,7 +42,7 @@ export default function SignupPage() {
       alignItems: 'center', justifyContent: 'center', fontFamily: "'Source Sans 3', sans-serif",
     }}>
       <div style={{ width: 360, background: '#FFF', borderRadius: 16, border: '1px solid #F0EDE6', padding: '40px 36px' }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#C4725A', marginBottom: 6 }}>Wild Success</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: COLORS.primary, marginBottom: 6 }}>Wild Success</div>
         <div style={{ fontSize: 13, color: '#8A8578', marginBottom: 28 }}>Create your account</div>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
@@ -75,7 +76,7 @@ export default function SignupPage() {
           </div>
           {error && <div style={{ fontSize: 12, color: '#C4504A', marginBottom: 14 }}>{error}</div>}
           <button type="submit" disabled={loading} style={{
-            width: '100%', padding: '10px', background: '#C4725A', color: '#FFF',
+            width: '100%', padding: '10px', background: COLORS.primary, color: '#FFF',
             border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}>
             {loading ? 'Creating account...' : 'Create Account'}
@@ -83,7 +84,7 @@ export default function SignupPage() {
         </form>
         <div style={{ marginTop: 20, fontSize: 12, color: '#8A8578', textAlign: 'center' }}>
           Already have an account?{' '}
-          <Link href="/login" style={{ color: '#C4725A', textDecoration: 'none', fontWeight: 600 }}>Sign in</Link>
+          <Link href="/login" style={{ color: COLORS.primary, textDecoration: 'none', fontWeight: 600 }}>Sign in</Link>
         </div>
       </div>
     </div>

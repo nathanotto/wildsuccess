@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { TimeTemplateBlock } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EC: Record<string, string> = { A: COLORS.primary, B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
 const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection', D: 'Restore', '0': 'Open' }
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -147,7 +148,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {blocks.length === 0 && !loading && (
-              <button onClick={seedDefaults} style={{ padding: '7px 16px', borderRadius: 8, border: '1px solid #C4725A', background: '#C4725A10', color: '#C4725A', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>
+              <button onClick={seedDefaults} style={{ padding: '7px 16px', borderRadius: 8, border: `1px solid ${COLORS.primary}`, background: COLORS.primary + '10', color: COLORS.primary, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>
                 Seed Default Template
               </button>
             )}
@@ -187,8 +188,8 @@ export default function TimeTemplateEditor({ onClose }: Props) {
                             onClick={() => !isEditingThis && openEdit(block)}
                             style={{
                               marginBottom: 5, borderRadius: 8, overflow: 'hidden',
-                              border: '1px solid', borderColor: isEditingThis ? '#C4725A' : '#E8E4DC',
-                              background: isEditingThis ? '#C4725A05' : 'white',
+                              border: '1px solid', borderColor: isEditingThis ? COLORS.primary : '#E8E4DC',
+                              background: isEditingThis ? COLORS.primary + '05' : 'white',
                               cursor: isEditingThis ? 'default' : 'pointer',
                             }}
                           >
@@ -230,7 +231,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
                                 </div>
                                 <div style={{ display: 'flex', gap: 4 }}>
                                   <button onClick={saveEditing} disabled={saving || !editing.label.trim()}
-                                    style={{ flex: 1, padding: '4px 0', borderRadius: 6, border: 'none', background: '#C4725A', color: 'white', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif", opacity: saving || !editing.label.trim() ? 0.6 : 1 }}>Save</button>
+                                    style={{ flex: 1, padding: '4px 0', borderRadius: 6, border: 'none', background: COLORS.primary, color: 'white', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif", opacity: saving || !editing.label.trim() ? 0.6 : 1 }}>Save</button>
                                   <button onClick={() => deleteBlock(block.id)}
                                     style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #D4564E30', background: 'transparent', color: '#D4564E', fontSize: 11, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>Del</button>
                                   <button onClick={() => setEditing(null)}
@@ -244,7 +245,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
 
                       {/* New block form */}
                       {editing && !editing.id && editing.day_of_week === dayIdx ? (
-                        <div style={{ borderRadius: 8, border: '1px solid #C4725A', background: '#C4725A05', padding: '8px 10px' }}>
+                        <div style={{ borderRadius: 8, border: `1px solid ${COLORS.primary}`, background: COLORS.primary + '05', padding: '8px 10px' }}>
                           <input
                             autoFocus
                             value={editing.label}
@@ -272,7 +273,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
                           </div>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button onClick={saveEditing} disabled={saving || !editing.label.trim()}
-                              style={{ flex: 1, padding: '4px 0', borderRadius: 6, border: 'none', background: '#C4725A', color: 'white', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif", opacity: saving || !editing.label.trim() ? 0.6 : 1 }}>Add</button>
+                              style={{ flex: 1, padding: '4px 0', borderRadius: 6, border: 'none', background: COLORS.primary, color: 'white', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif", opacity: saving || !editing.label.trim() ? 0.6 : 1 }}>Add</button>
                             <button onClick={() => setEditing(null)}
                               style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #E8E4DC', background: 'transparent', color: '#8A857D', fontSize: 11, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif" }}>✕</button>
                           </div>
@@ -281,7 +282,7 @@ export default function TimeTemplateEditor({ onClose }: Props) {
                         <button
                           onClick={() => openNew(dayIdx)}
                           style={{ width: '100%', padding: '7px 0', borderRadius: 7, border: '1.5px dashed #D0CBC3', background: 'transparent', color: '#B5B0A8', fontSize: 11, cursor: 'pointer', fontFamily: "'Source Sans 3', sans-serif', transition: 'all 0.12s" }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#C4725A'; (e.currentTarget as HTMLElement).style.color = '#C4725A' }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = COLORS.primary; (e.currentTarget as HTMLElement).style.color = COLORS.primary }}
                           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#D0CBC3'; (e.currentTarget as HTMLElement).style.color = '#B5B0A8' }}
                         >+ Add block</button>
                       )}

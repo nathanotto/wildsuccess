@@ -4,6 +4,7 @@ import { useActionToast } from '@/lib/useActionToast'
 import ActionToast from '@/components/shared/ActionToast'
 import { useRouter } from 'next/navigation'
 import type { Mission } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 const STATUS_COLORS: Record<string, string> = {
   planning: '#4B82AF',
@@ -11,7 +12,7 @@ const STATUS_COLORS: Record<string, string> = {
   completed: '#8A8578',
   abandoned: '#C4504A',
   shelved: '#8A857D',
-  superseded: '#C4725A',
+  superseded: COLORS.primary,
 }
 
 const STATUS_CYCLE = ['planning', 'active'] as const
@@ -98,12 +99,12 @@ export default function PlanListPage() {
       <div key={m.id}>
         <div style={{
           marginLeft: depth * 24,
-          ...(isChild ? { borderLeft: '2px solid #C4725A40', paddingLeft: 12 } : {}),
+          ...(isChild ? { borderLeft: `2px solid ${COLORS.primaryMuted}`, paddingLeft: 12 } : {}),
         }}>
           <div style={{
             padding: '10px 16px', border: '1px solid #E8E4DC', borderRadius: 8,
             background: m.is_pinned ? '#FFFDF8' : '#FFF',
-            borderLeft: m.is_pinned ? '3px solid #C4725A' : undefined,
+            borderLeft: m.is_pinned ? `3px solid ${COLORS.primary}` : undefined,
             display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 6,
             opacity: isClosed ? 0.6 : 1,
           }}>
@@ -112,7 +113,7 @@ export default function PlanListPage() {
               <span
                 onClick={() => togglePin(m.id)}
                 title={m.is_pinned ? 'Unpin' : 'Pin to top'}
-                style={{ cursor: 'pointer', fontSize: 14, color: m.is_pinned ? '#C4725A' : '#E0DDD6', flexShrink: 0, paddingTop: 2 }}
+                style={{ cursor: 'pointer', fontSize: 14, color: m.is_pinned ? COLORS.primary : '#E0DDD6', flexShrink: 0, paddingTop: 2 }}
               >
                 {m.is_pinned ? '★' : '☆'}
               </span>
@@ -121,7 +122,7 @@ export default function PlanListPage() {
             {/* Content */}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                {isChild && <span style={{ color: '#C4725A', fontSize: 12 }}>↳</span>}
+                {isChild && <span style={{ color: COLORS.primary, fontSize: 12 }}>↳</span>}
                 <span
                   onClick={() => router.push(`/plan/${m.id}`)}
                   style={{ fontSize: isChild ? 13 : 15, fontWeight: 600, color: '#2D2A26', cursor: 'pointer' }}
@@ -204,7 +205,7 @@ export default function PlanListPage() {
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <button
             onClick={() => router.push('/plan/new')}
-            style={{ padding: '6px 16px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '6px 16px', background: COLORS.primary, color: '#FFF', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
           >+ New mission</button>
           <ActionToast message={toast?.msg} visible={visible} position="left" />
         </div>

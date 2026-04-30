@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" width="360" height="240">
+  
+  <defs>
+    
+  </defs>
+  
+  <path class="edge" d="M180 120 C 150 90, 110 70, 80 60"></path>
+  <path class="edge" d="M180 120 C 220 95, 260 80, 290 70"></path>
+  <path class="edge" d="M180 120 C 150 160, 120 180, 90 190"></path>
+  <path class="edge" d="M180 120 C 220 160, 250 180, 280 190"></path>
+  <path class="edge" d="M180 120 C 180 80, 180 60, 180 40"></path>
+  
+  <circle class="node-active" cx="180" cy="120" r="32"></circle>
+  <text class="lbl lbl-active" x="180" y="124" text-anchor="middle">Me</text>
+  
+  <circle class="node" cx="80" cy="60" r="22"></circle><text class="lbl" x="80" y="64" text-anchor="middle">Health</text>
+  <circle class="node" cx="290" cy="70" r="22"></circle><text class="lbl" x="290" y="74" text-anchor="middle">Work</text>
+  <circle class="node" cx="90" cy="190" r="22"></circle><text class="lbl" x="90" y="194" text-anchor="middle">Family</text>
+  <circle class="node" cx="280" cy="190" r="22"></circle><text class="lbl" x="280" y="194" text-anchor="middle">Money</text>
+  <circle class="node" cx="180" cy="40" r="20"></circle><text class="lbl" x="180" y="44" text-anchor="middle">Spirit</text>
+</svg>

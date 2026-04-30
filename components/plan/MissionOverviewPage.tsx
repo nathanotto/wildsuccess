@@ -6,9 +6,10 @@ import { useRouter } from 'next/navigation'
 import type { Mission, Factor, FactorKind, COA } from '@/lib/types'
 import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
 import { useRealtimeMission } from '@/lib/useRealtimeMission'
+import { COLORS } from '@/lib/theme'
 
 const FACTOR_KINDS: { kind: FactorKind; label: string; color: string }[] = [
-  { kind: 'success', label: 'Signs and visions of wild success', color: '#C4725A' },
+  { kind: 'success', label: 'Signs and visions of wild success', color: COLORS.primary },
   { kind: 'driver', label: 'Resources and drivers of success', color: '#5A9E6F' },
   { kind: 'constraint', label: 'Constraints and obstacles to success', color: '#C4504A' },
   { kind: 'fact', label: 'Facts', color: '#4B82AF' },
@@ -307,7 +308,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleRename() } if (e.key === 'Escape') setEditingName(false) }}
               onBlur={() => handleRename()}
               autoFocus rows={3}
-              style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: '0 0 8px', border: '1px solid #C4725A', borderRadius: 4, padding: '4px 6px', outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', resize: 'none', lineHeight: 1.3 }}
+              style={{ fontSize: 18, fontWeight: 700, color: '#2D2A26', margin: '0 0 8px', border: `1px solid ${COLORS.primary}`, borderRadius: 4, padding: '4px 6px', outline: 'none', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', resize: 'none', lineHeight: 1.3 }}
             />
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 8px', position: 'relative' }}>
@@ -328,7 +329,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleDescSave() } if (e.key === 'Escape') setEditingDesc(false) }}
               onBlur={() => handleDescSave()}
               autoFocus rows={3}
-              style={{ fontSize: 12, color: '#8A8578', margin: '0 0 12px', lineHeight: 1.5, width: '100%', border: '1px solid #C4725A', borderRadius: 4, padding: '4px 6px', outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+              style={{ fontSize: 12, color: '#8A8578', margin: '0 0 12px', lineHeight: 1.5, width: '100%', border: `1px solid ${COLORS.primary}`, borderRadius: 4, padding: '4px 6px', outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
             />
           ) : (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '0 0 12px', position: 'relative' }}>
@@ -512,7 +513,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  planning: '#4B82AF', active: '#5A9E6F', completed: '#8A8578', abandoned: '#C4504A', shelved: '#8A857D', superseded: '#C4725A',
+  planning: '#4B82AF', active: '#5A9E6F', completed: '#8A8578', abandoned: '#C4504A', shelved: '#8A857D', superseded: COLORS.primary,
 }
 
 const CLOSED_STATUSES = ['completed', 'abandoned', 'shelved', 'superseded']
@@ -524,7 +525,7 @@ const CLOSURE_LABELS: Record<string, string> = {
 
 const navLinkStyle: React.CSSProperties = {
   background: 'none', border: '1px solid #E8E4DC', borderRadius: 6, padding: '6px 12px',
-  fontSize: 11, color: '#C4725A', cursor: 'pointer', fontWeight: 600, textAlign: 'left',
+  fontSize: 11, color: COLORS.primary, cursor: 'pointer', fontWeight: 600, textAlign: 'left',
 }
 
 function FactorCard({

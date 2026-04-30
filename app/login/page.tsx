@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { COLORS } from '@/lib/theme'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -28,7 +29,7 @@ export default function LoginPage() {
       alignItems: 'center', justifyContent: 'center', fontFamily: "'Source Sans 3', sans-serif",
     }}>
       <div style={{ width: 360, background: '#FFF', borderRadius: 16, border: '1px solid #F0EDE6', padding: '40px 36px' }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#C4725A', marginBottom: 6 }}>Wild Success</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: COLORS.primary, marginBottom: 6 }}>Wild Success</div>
         <div style={{ fontSize: 13, color: '#8A8578', marginBottom: 28 }}>Sign in to your account</div>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
@@ -68,7 +69,7 @@ export default function LoginPage() {
           </div>
           {error && <div style={{ fontSize: 12, color: '#C4504A', marginBottom: 14 }}>{error}</div>}
           <button type="submit" disabled={loading} style={{
-            width: '100%', padding: '10px', background: '#C4725A', color: '#FFF',
+            width: '100%', padding: '10px', background: COLORS.primary, color: '#FFF',
             border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}>
             {loading ? 'Signing in...' : 'Sign In'}
@@ -76,7 +77,7 @@ export default function LoginPage() {
         </form>
         <div style={{ marginTop: 20, fontSize: 12, color: '#8A8578', textAlign: 'center' }}>
           No account?{' '}
-          <Link href="/signup" style={{ color: '#C4725A', textDecoration: 'none', fontWeight: 600 }}>Sign up</Link>
+          <Link href="/signup" style={{ color: COLORS.primary, textDecoration: 'none', fontWeight: 600 }}>Sign up</Link>
         </div>
       </div>
     </div>

@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { Activity, UserValue, LifeDomain, BigOutcome, ValueLink, DomainLink } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
-const EC: Record<string, string> = { A: '#C4725A', B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
+const EC: Record<string, string> = { A: COLORS.primary, B: '#4B82AF', C: '#D4564E', D: '#5A9E6F', '0': '#B5B0A8' }
 const EL: Record<string, string> = { A: 'Focus', B: 'Routine', C: 'Connection', D: 'Restore', '0': 'Open' }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -186,7 +187,7 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
   })
   const saveBtn: React.CSSProperties = {
     flex: 1, padding: '7px 0', borderRadius: 8, border: 'none',
-    background: '#C4725A', color: '#FFF', fontSize: 13, fontWeight: 600,
+    background: COLORS.primary, color: '#FFF', fontSize: 13, fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit',
   }
   const cancelBtn: React.CSSProperties = {
@@ -400,7 +401,7 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
         <div style={{ ...rowStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={() => setIsPreventive(!isPreventive)}
-            style={{ width: 32, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer', background: isPreventive ? '#C4725A' : '#E8E4DC', position: 'relative', transition: 'background 0.15s', flexShrink: 0 }}
+            style={{ width: 32, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer', background: isPreventive ? COLORS.primary : '#E8E4DC', position: 'relative', transition: 'background 0.15s', flexShrink: 0 }}
           >
             <span style={{ position: 'absolute', top: 2, left: isPreventive ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#FFF', transition: 'left 0.15s' }} />
           </button>
@@ -501,13 +502,13 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
           <div style={{ borderTop: '1px solid #F0EDE6', paddingTop: 12, marginBottom: 12 }}>
             <div style={{ marginBottom: 10 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
-                <input type="checkbox" checked={clusterable} onChange={e => setClusterable(e.target.checked)} style={{ accentColor: '#C4725A' }} />
+                <input type="checkbox" checked={clusterable} onChange={e => setClusterable(e.target.checked)} style={{ accentColor: COLORS.primary }} />
                 <span><strong>Clusterable</strong> — batch with similar-context tasks</span>
               </label>
             </div>
             <div style={{ marginBottom: prepRequired ? 6 : 10 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
-                <input type="checkbox" checked={prepRequired} onChange={e => setPrepRequired(e.target.checked)} style={{ accentColor: '#C4725A' }} />
+                <input type="checkbox" checked={prepRequired} onChange={e => setPrepRequired(e.target.checked)} style={{ accentColor: COLORS.primary }} />
                 <span><strong>Prep required</strong> before starting</span>
               </label>
             </div>
@@ -518,7 +519,7 @@ export default function EditActivityModal({ activity, values, domains, outcomes,
             )}
             <div style={{ marginBottom: dependsOnOthers ? 6 : 10 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
-                <input type="checkbox" checked={dependsOnOthers} onChange={e => setDependsOnOthers(e.target.checked)} style={{ accentColor: '#C4725A' }} />
+                <input type="checkbox" checked={dependsOnOthers} onChange={e => setDependsOnOthers(e.target.checked)} style={{ accentColor: COLORS.primary }} />
                 <span><strong>Depends on others</strong></span>
               </label>
             </div>

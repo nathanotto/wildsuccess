@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Suspense } from 'react'
+import { COLORS } from '@/lib/theme'
 
 function AcceptContent() {
   const searchParams = useSearchParams()
@@ -97,7 +98,7 @@ function AcceptContent() {
 
   return (
     <div style={{ maxWidth: 420, margin: '60px auto', padding: '0 20px', fontFamily: 'inherit' }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: '#C4725A', marginBottom: 20 }}>Wild Success</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.primary, marginBottom: 20 }}>Wild Success</div>
       <h1 style={{ fontSize: 20, fontWeight: 700, color: '#2D2A26', margin: '0 0 8px' }}>You&apos;re invited to plan</h1>
       <h2 style={{ fontSize: 16, fontWeight: 600, color: '#2D2A26', margin: '0 0 8px' }}>{invitation.mission_name}</h2>
       {invitation.mission_description && <p style={{ fontSize: 13, color: '#8A8578', margin: '0 0 12px' }}>{invitation.mission_description.slice(0, 200)}</p>}
@@ -139,7 +140,7 @@ function AcceptContent() {
 }
 
 const btnStyle: React.CSSProperties = {
-  padding: '10px 24px', background: '#C4725A', color: '#FFF', border: 'none',
+  padding: '10px 24px', background: COLORS.primary, color: '#FFF', border: 'none',
   borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%',
 }
 const inputStyle: React.CSSProperties = {

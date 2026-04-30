@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useActionToast } from '@/lib/useActionToast'
 import ActionToast from '@/components/shared/ActionToast'
+import { COLORS } from '@/lib/theme'
 
 const COMMON_TIMEZONES = [
   'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
@@ -96,7 +97,7 @@ export default function SettingsPage() {
       </div>
 
       <div style={{ position: 'relative', display: 'inline-block', marginTop: 20 }}>
-        <button onClick={save} style={{ padding: '8px 20px', background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={save} style={{ padding: '8px 20px', background: COLORS.primary, color: '#FFF', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
           Save preferences
         </button>
         <ActionToast message={toast?.msg} visible={visible} position="right" />

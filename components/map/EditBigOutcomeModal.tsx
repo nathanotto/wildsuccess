@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { BigOutcome, UserValue, LifeDomain, Activity, ValueLink } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   outcome: BigOutcome | null
@@ -104,7 +105,7 @@ export default function EditBigOutcomeModal({ outcome, values, domains, activiti
               const link = valueLinks.find(l => l.value_id === v.id)
               return (
                 <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <input type="checkbox" checked={!!link} onChange={() => toggleValueLink(v.id)} style={{ accentColor: '#C4725A', width: 14, height: 14, flexShrink: 0 }} />
+                  <input type="checkbox" checked={!!link} onChange={() => toggleValueLink(v.id)} style={{ accentColor: COLORS.primary, width: 14, height: 14, flexShrink: 0 }} />
                   <span style={{ fontSize: 13, flex: 1 }}>{v.name}</span>
                   {link && (
                     <select value={link.contribution_strength} onChange={e => setStrength(v.id, e.target.value as 'weak' | 'moderate' | 'strong')}
@@ -133,15 +134,15 @@ export default function EditBigOutcomeModal({ outcome, values, domains, activiti
         {outcome && (
           <div style={{ marginBottom: 16 }}>
             {hasMission && missionId ? (
-              <a href={`/plan/${missionId}`} style={{ fontSize: 12, color: '#C4725A', fontWeight: 600, textDecoration: 'none' }}>
+              <a href={`/plan/${missionId}`} style={{ fontSize: 12, color: COLORS.primary, fontWeight: 600, textDecoration: 'none' }}>
                 View Plan →
               </a>
             ) : !hasMission && onPlanThis ? (
               <button
                 onClick={() => onPlanThis(outcome.id)}
                 style={{
-                  background: '#F8F7F4', border: '1px solid #C4725A40', borderRadius: 6,
-                  padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#C4725A', cursor: 'pointer',
+                  background: '#F8F7F4', border: `1px solid ${COLORS.primaryMuted}`, borderRadius: 6,
+                  padding: '6px 14px', fontSize: 12, fontWeight: 600, color: COLORS.primary, cursor: 'pointer',
                 }}
               >Plan this</button>
             ) : null}
@@ -151,7 +152,7 @@ export default function EditBigOutcomeModal({ outcome, values, domains, activiti
         {error && <div style={{ fontSize: 12, color: '#C4504A', marginBottom: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={handleSave} disabled={saving} style={{ background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={handleSave} disabled={saving} style={{ background: COLORS.primary, color: '#FFF', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button onClick={onClose} style={{ background: '#F8F7F4', border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 20px', fontSize: 13, cursor: 'pointer', color: '#2D2A26' }}>Cancel</button>

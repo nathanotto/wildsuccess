@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useCallback } from 'react'
+import { COLORS } from '@/lib/theme'
 
 const FONT = '"Source Sans 3", "Source Sans Pro", sans-serif'
 
@@ -17,7 +18,7 @@ interface SearchResult {
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   action_item: { label: 'item', color: '#2D2A26' },
   note: { label: 'note', color: '#4B82AF' },
-  log: { label: 'logged', color: '#C4725A' },
+  log: { label: 'logged', color: COLORS.primary },
 }
 
 function fmtDate(dateStr: string | null): string {
@@ -96,7 +97,7 @@ export default function SearchPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontSize: 14, color: '#2D2A26', lineHeight: 1.5,
-                    ...(r.type === 'log' ? { borderLeft: '3px solid #C4725A40', paddingLeft: 8, background: '#FDF9F7', borderRadius: 2 } : {}),
+                    ...(r.type === 'log' ? { borderLeft: `3px solid ${COLORS.primaryMuted}`, paddingLeft: 8, background: '#FDF9F7', borderRadius: 2 } : {}),
                   }}>
                     {r.text}
                   </div>

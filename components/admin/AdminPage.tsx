@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useActionToast } from '@/lib/useActionToast'
 import ActionToast from '@/components/shared/ActionToast'
+import { COLORS } from '@/lib/theme'
 
 interface AccessRequest {
   id: string; user_name: string; user_email: string; note: string | null; requested_at: string; status: string
@@ -77,7 +78,7 @@ export default function AdminPage({ emailOverride }: { emailOverride?: string })
         {users.map(u => (
           <div key={u.id} style={{ padding: '6px 12px', border: '1px solid #E8E4DC', borderRadius: 6, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
             <span style={{ flex: 1, fontWeight: 600 }}>{u.preferred_name || u.full_name || '?'}</span>
-            <span style={{ fontSize: 10, color: u.app_role === 'admin' ? '#C4725A' : u.app_role === 'full' ? '#5A9E6F' : '#8A8578', fontWeight: 600 }}>{u.app_role}</span>
+            <span style={{ fontSize: 10, color: u.app_role === 'admin' ? COLORS.primary : u.app_role === 'full' ? '#5A9E6F' : '#8A8578', fontWeight: 600 }}>{u.app_role}</span>
           </div>
         ))}
       </div>

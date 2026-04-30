@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email'
 import { writeMissionLog } from '@/lib/mission-log'
+import { COLORS } from '@/lib/theme'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ missionId: string }> }) {
   const supabase = await createClient()
@@ -91,7 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ mis
           <p>${inviterName} wants to collaborate with you on a mission in Wild Success.</p>
           <p><strong>Mission:</strong> ${mission.name}</p>
           ${mission.description ? `<p>${mission.description.slice(0, 200)}</p>` : ''}
-          <p><a href="${acceptLink}" style="display:inline-block;padding:10px 20px;background:#C4725A;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Accept Invitation</a></p>
+          <p><a href="${acceptLink}" style="display:inline-block;padding:10px 20px;background:${COLORS.primary};color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Accept Invitation</a></p>
           <p style="color:#8A8578;font-size:13px;">Wild Success is a planning and commitment tool for people who want to accomplish big things together.</p>
         `,
       })

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import ReviewSubNav from './ReviewSubNav'
+import { COLORS } from '@/lib/theme'
 
 const FONT = "'Source Sans 3', 'Source Sans Pro', sans-serif"
 
@@ -279,7 +280,7 @@ export default function ReviewDaysPage({ displayName }: Props) {
                   {mood && <span style={{ fontSize: 12, color: mood.color }}>{mood.label}</span>}
                 </>
               ) : currentDate < todayStr ? (
-                <a href={`/today/complete?date=${currentDate}`} style={{ fontSize: 13, color: '#C4725A', textDecoration: 'none', cursor: 'pointer' }}>Close this day →</a>
+                <a href={`/today/complete?date=${currentDate}`} style={{ fontSize: 13, color: COLORS.primary, textDecoration: 'none', cursor: 'pointer' }}>Close this day →</a>
               ) : (
                 <span style={{ fontSize: 13, color: '#B5B0A8' }}>Today</span>
               )}
@@ -357,7 +358,7 @@ export default function ReviewDaysPage({ displayName }: Props) {
             {/* Divider between data and reflection */}
             {hasReflection && (
               <div style={{
-                height: 1, background: '#C4725A', opacity: 0.2,
+                height: 1, background: COLORS.primary, opacity: 0.2,
                 marginTop: 12, marginBottom: 12,
               }} />
             )}

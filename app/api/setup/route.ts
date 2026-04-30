@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { COLORS } from '@/lib/theme'
 
 interface SetupPayload {
   preventive_values: string[]
@@ -10,7 +11,7 @@ interface SetupPayload {
 // Preventive values that always belong together semantically
 const PREVENTIVE_COLORS: Record<string, string> = {
   Safety: '#D4564E',
-  'Financial Sufficiency': '#C4725A',
+  'Financial Sufficiency': COLORS.primary,
   Belonging: '#9E6A46',
   'Household Order': '#A0826D',
   'Administrative Compliance': '#8B6E5A',
@@ -22,7 +23,7 @@ const PREVENTIVE_COLORS: Record<string, string> = {
 const DOMAIN_COLORS: Record<string, string> = {
   'Work / Livelihood': '#4B82AF',
   'Health / Body': '#5A9E6F',
-  Finances: '#C4725A',
+  Finances: COLORS.primary,
   'Home / Household': '#9E6A46',
   Family: '#D4A056',
   'Partnership / Romance': '#C4564E',

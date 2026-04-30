@@ -2,12 +2,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ActionItemWithNotes } from '@/lib/types'
 import type { ParsedCapture } from '@/lib/capture-parser'
+import { COLORS } from '@/lib/theme'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDateLabel(iso: string, now: Date = new Date()): string {
+function formatDateLabel(iso: string): string {
   const d = new Date(iso + 'T12:00:00')
-  const today = new Date(now); today.setHours(0, 0, 0, 0)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
   const dDay = new Date(d); dDay.setHours(0, 0, 0, 0)
   if (dDay.getTime() === today.getTime()) return 'Today'
@@ -22,64 +23,9 @@ function formatTime(hhmm: string): string {
   return `${hour}:${String(m).padStart(2, '0')}${ampm}`
 }
 
-function fmtTimeShort(t: string): string {
-  const [hStr, mStr] = t.split(':')
-  const h = parseInt(hStr)
-  const m = mStr ?? '00'
-  const ampm = h >= 12 ? 'pm' : 'am'
-  const hour = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return m === '00' ? `${hour}${ampm}` : `${hour}:${m}${ampm}`
-}
-
-function fmtDateShort(dateStr: string): string {
-  const d = new Date(dateStr + 'T12:00:00')
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const target = new Date(d); target.setHours(0, 0, 0, 0)
-  const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
-  if (diff === 0) return 'today'
-  if (diff === 1) return 'tomorrow'
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-}
-
-function toastMessage(parsed: ParsedCapture): string {
-  const { outcome, cleanedName, date, time, person } = parsed
-  const dateLabel = date ? formatDateLabel(date) : null
-  switch (outcome) {
-    case 'logged': return `Logged: ${cleanedName}`
-    case 'captured': return `Captured: ${cleanedName}`
-    case 'captured_dated': return `${dateLabel}: ${cleanedName}`
-    case 'scheduled_soft':
-      return `Penciled in: ${cleanedName}${dateLabel ? `, ${dateLabel}` : ''}${time ? ` ${formatTime(time)}` : ''}`
-    case 'scheduled_hard':
-      return `Booked: ${cleanedName}${dateLabel ? `, ${dateLabel}` : ''}${time ? ` ${formatTime(time)}` : ''}`
-    case 'tickler': return `Reminder set: ${dateLabel ?? 'future date'}`
-    case 'outside_request': return `From ${person?.name ?? 'someone'}: ${cleanedName}`
-    case 'commitment': return `Committed to ${person?.name ?? 'someone'}: ${cleanedName}`
-    default: return `Captured: ${cleanedName}`
-  }
-}
-
-function cardSummaryLine(parsed: ParsedCapture): string {
-  const parts: string[] = []
-  if (parsed.date) parts.push(formatDateLabel(parsed.date))
-  if (parsed.time) parts.push(formatTime(parsed.time))
-  if (parsed.person) parts.push(parsed.person.name)
-  if (parsed.duration) parts.push(`${parsed.duration < 60 ? parsed.duration + ' min' : parsed.duration / 60 + ' hr'}`)
-  return parts.join(' · ')
-}
-
-function outcomeLabel(parsed: ParsedCapture): string {
-  switch (parsed.outcome) {
-    case 'logged': return '← logged'
-    case 'captured': return '→ to-do'
-    case 'captured_dated': return `→ to-do for ${parsed.date ? formatDateLabel(parsed.date) : ''}`
-    case 'scheduled_soft': return '→ scheduled'
-    case 'scheduled_hard': return '→ booked'
-    case 'tickler': return '→ reminder'
-    case 'outside_request': return `→ request from ${parsed.person?.name ?? 'someone'}`
-    case 'commitment': return `→ committed to ${parsed.person?.name ?? 'someone'}`
-    default: return '→ captured'
-  }
+function todayStr(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -87,7 +33,7 @@ function outcomeLabel(parsed: ParsedCapture): string {
 interface Props {
   source: 'today' | 'organize' | 'map'
   placeholder?: string
-  selectedDate?: string // The date context (e.g. tomorrow on /today tomorrow view)
+  selectedDate?: string
   onItemCreated?: (item: ActionItemWithNotes) => void
   onLogEntry?: () => void
   inputStyle?: React.CSSProperties
@@ -100,60 +46,39 @@ export default function CaptureInput({
   const [input, setInput] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // Picker state: after parsing, show placement options
+  const [parsed, setParsed] = useState<ParsedCapture | null>(null)
+  const [rawText, setRawText] = useState('')
+  const [pickerDate, setPickerDate] = useState('')
+  const [pickerTime, setPickerTime] = useState('')
+  const [placing, setPlacing] = useState(false)
+
   // Toast state
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [toastVisible, setToastVisible] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Card state
-  const [card, setCard] = useState<ParsedCapture | null>(null)
-  const [cardVisible, setCardVisible] = useState(false)
-  const [addingPerson, setAddingPerson] = useState(false)
-  const [personAdded, setPersonAdded] = useState(false)
-  const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Schedule confirmation state
-  const [scheduleConfirm, setScheduleConfirm] = useState<{
-    itemId: string; name: string; date: string; time: string; endTime?: string | null
-  } | null>(null)
-
   const submittingRef = useRef(false)
 
   const clearTimers = useCallback(() => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
-    if (cardTimer.current) clearTimeout(cardTimer.current)
   }, [])
 
   useEffect(() => () => clearTimers(), [clearTimers])
 
-  function showToast(msg: string, parsed: ParsedCapture) {
+  function showToast(msg: string) {
     clearTimers()
     setToastMsg(msg)
     setToastVisible(true)
-    setCard(null)
-    setCardVisible(false)
     toastTimer.current = setTimeout(() => setToastVisible(false), 3500)
-    // Store parsed for if user taps toast
-    toastParsedRef.current = parsed
   }
 
-  function showCard(parsed: ParsedCapture) {
-    clearTimers()
-    setCard(parsed)
-    setCardVisible(true)
-    setToastVisible(false)
-    setPersonAdded(false)
-    cardTimer.current = setTimeout(() => setCardVisible(false), 5000)
+  function dismissPicker() {
+    setParsed(null)
+    setRawText('')
   }
 
-  function dismissCard() {
-    clearTimers()
-    setCardVisible(false)
-    setCard(null)
-  }
-
-  const toastParsedRef = useRef<ParsedCapture | null>(null)
-
+  // Step 1: Parse the input (no DB writes)
   async function handleSubmit() {
     if (!input.trim() || submittingRef.current) return
     submittingRef.current = true
@@ -161,106 +86,93 @@ export default function CaptureInput({
     const text = input.trim()
     setInput('')
     try {
-      // Detect likely scheduled input — strip quoted sections first so literal dates don't trigger
-      const textNoQuotes = text.replace(/["'][^"']*["']/g, '')
-      const isScheduled = /\b\d{1,2}:\d{2}\s*(am|pm)?\b/i.test(textNoQuotes) || /\b\d{1,2}\s*(am|pm)\b/i.test(textNoQuotes) || /\bat\s+\d{1,2}/i.test(textNoQuotes)
-      const res = await fetch('/api/capture', {
+      const res = await fetch('/api/capture/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawInput: text, source, selectedDate, deferScheduling: isScheduled }),
+        body: JSON.stringify({ rawInput: text }),
       })
       if (!res.ok) return
-      const data = await res.json()
-      const parsed: ParsedCapture = data.parsed
-
-      // For scheduled items: show confirmation instead of auto-scheduling
-      if (isScheduled && (parsed.outcome === 'scheduled_soft' || parsed.outcome === 'scheduled_hard') && parsed.time && data.actionItem) {
-        setScheduleConfirm({
-          itemId: data.actionItem.id,
-          name: parsed.cleanedName,
-          date: parsed.date ?? selectedDate ?? new Date().toISOString().split('T')[0],
-          time: parsed.time,
-          endTime: parsed.endTime,
-        })
-        // Don't add to parent yet — user hasn't confirmed
-        return
-      }
-
-      // Add item to parent state
-      if (data.actionItem && onItemCreated) onItemCreated(data.actionItem)
-      if (data.logEntry && onLogEntry) onLogEntry()
-
-      // UI feedback — logged items always get a toast (user narrated something, needs acknowledgment)
-      if (parsed.outcome === 'logged' || parsed.confidence >= 0.6) {
-        showToast(toastMessage(parsed), parsed)
-      } else if (parsed.confidence >= 0.3) {
-        showCard(parsed)
-      }
-      // Below 0.3 (non-logged): silent save
+      const { parsed: p } = await res.json()
+      setRawText(text)
+      setParsed(p)
+      // Pre-fill date/time from parser
+      setPickerDate(p.date ?? selectedDate ?? todayStr())
+      setPickerTime(p.time ?? '')
     } finally {
       submittingRef.current = false
       setSubmitting(false)
     }
   }
 
-  async function handleConfirmSchedule() {
-    if (!scheduleConfirm) return
-    const { itemId, date, time, endTime } = scheduleConfirm
+  // Step 2: Place the item based on user's choice
+  async function handlePlace(placement: 'todo_today' | 'todo_date' | 'book_time' | 'log') {
+    if (!parsed || placing) return
+    setPlacing(true)
+    try {
+      const body: Record<string, unknown> = {
+        placement,
+        rawInput: rawText,
+        cleanedName: parsed.cleanedName,
+        timeType: parsed.timeType,
+        personId: parsed.person?.id ?? null,
+        activityId: parsed.activityMatch?.id ?? null,
+        valueIds: parsed.valueLinks.map(vl => vl.valueId),
+        duration: parsed.duration,
+      }
+      if (placement === 'todo_date') {
+        body.date = pickerDate
+      } else if (placement === 'book_time') {
+        body.date = pickerDate
+        body.time = pickerTime
+        body.endTime = parsed.endTime
+      }
 
-    // Create time_block
-    const blockRes = await fetch('/api/time-blocks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        block_date: date,
-        label: scheduleConfirm.name,
-        start_time: time,
-        end_time: endTime,
-        source: 'manual',
-      }),
-    })
-    const block = blockRes.ok ? await blockRes.json() : null
+      const res = await fetch('/api/capture/place', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) return
+      const data = await res.json()
 
-    // Commit the action item with schedule
-    const patchRes = await fetch(`/api/action-items/${itemId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: 'committed',
-        committed_date: date,
-        scheduled_time: time,
-        scheduled_end_time: endTime,
-        time_block_id: block?.id ?? null,
-      }),
-    })
-    if (patchRes.ok) {
-      const item = await patchRes.json()
-      if (onItemCreated) onItemCreated(item)
+      if (data.actionItem && onItemCreated) onItemCreated(data.actionItem)
+      if (data.logEntry && onLogEntry) onLogEntry()
+
+      // Confirmation toast
+      const confirmMsg =
+        placement === 'log' ? `Logged: ${parsed.cleanedName}` :
+        placement === 'todo_today' ? `To-do: ${parsed.cleanedName}` :
+        placement === 'todo_date' ? `To-do for ${formatDateLabel(pickerDate)}: ${parsed.cleanedName}` :
+        `Booked ${formatDateLabel(pickerDate)} ${formatTime(pickerTime)}: ${parsed.cleanedName}`
+      showToast(confirmMsg)
+      dismissPicker()
+    } finally {
+      setPlacing(false)
     }
-    setScheduleConfirm(null)
   }
 
-  function handleDismissSchedule() {
-    if (!scheduleConfirm) return
-    // Item already exists as candidate — just notify parent and dismiss
-    // Fetch the item to pass to onItemCreated
-    fetch(`/api/action-items/${scheduleConfirm.itemId}`).then(r => r.json()).then(items => {
-      const item = Array.isArray(items) ? items[0] : items
-      if (item && onItemCreated) onItemCreated(item)
-    })
-    setScheduleConfirm(null)
+  // Suggested placement based on parser outcome
+  function suggestedPlacement(): 'todo_today' | 'todo_date' | 'book_time' | 'log' {
+    if (!parsed) return 'todo_today'
+    if (parsed.outcome === 'logged') return 'log'
+    if (parsed.time) return 'book_time'
+    if (parsed.date && parsed.date !== todayStr()) return 'todo_date'
+    return 'todo_today'
   }
 
-  async function handleAddPerson() {
-    if (!card?.unrecognizedName || addingPerson) return
-    setAddingPerson(true)
-    await fetch('/api/known-people', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: card.unrecognizedName }),
-    })
-    setPersonAdded(true)
-    setAddingPerson(false)
+  const suggested = parsed ? suggestedPlacement() : null
+  const hasDate = parsed?.date && parsed.date !== todayStr()
+  const hasTime = !!parsed?.time
+
+  const btnBase: React.CSSProperties = {
+    padding: '5px 10px', borderRadius: 5, fontSize: 12, fontWeight: 600,
+    cursor: placing ? 'default' : 'pointer', border: '1px solid #E8E4DC',
+    background: '#F8F7F4', color: '#2D2A26', fontFamily: 'inherit',
+    opacity: placing ? 0.5 : 1,
+  }
+  const btnHighlight: React.CSSProperties = {
+    ...btnBase,
+    background: COLORS.primary, color: '#FFF', border: `1px solid ${COLORS.primary}`,
   }
 
   return (
@@ -268,8 +180,8 @@ export default function CaptureInput({
       <input
         value={input}
         onChange={e => setInput(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSubmit() } }}
-        placeholder={submitting ? 'Saving…' : placeholder}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSubmit() } if (e.key === 'Escape') dismissPicker() }}
+        placeholder={submitting ? 'Parsing…' : placeholder}
         disabled={submitting}
         style={{
           width: '100%', border: 'none', background: 'transparent',
@@ -279,109 +191,84 @@ export default function CaptureInput({
         }}
       />
 
+      {/* Placement picker */}
+      {parsed && (
+        <div style={{
+          background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 6,
+          boxShadow: '0 0 8px rgba(90,158,111,0.4)',
+          padding: '10px 12px', marginTop: 4, marginBottom: 4,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#2D2A26', marginBottom: 6 }}>
+            {parsed.cleanedName}
+          </div>
+          {(hasDate || hasTime || parsed.person) && (
+            <div style={{ fontSize: 11, color: '#8A8578', marginBottom: 6 }}>
+              {[
+                hasDate ? formatDateLabel(parsed.date!) : null,
+                hasTime ? formatTime(parsed.time!) : null,
+                parsed.person ? parsed.person.name : null,
+              ].filter(Boolean).join(' · ')}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              onClick={() => handlePlace('todo_today')}
+              style={suggested === 'todo_today' ? btnHighlight : btnBase}
+            >To-do</button>
+
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => handlePlace('todo_date')}
+                style={suggested === 'todo_date' ? btnHighlight : btnBase}
+              >To-do for</button>
+              <input
+                type="date"
+                value={pickerDate}
+                onChange={e => setPickerDate(e.target.value)}
+                onClick={e => e.stopPropagation()}
+                style={{ fontSize: 11, border: '1px solid #E8E4DC', borderRadius: 4, padding: '3px 4px', color: '#2D2A26', fontFamily: 'inherit' }}
+              />
+            </span>
+
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => handlePlace('book_time')}
+                style={suggested === 'book_time' ? btnHighlight : btnBase}
+                disabled={!pickerTime}
+              >Book time</button>
+              <input
+                type="time"
+                value={pickerTime}
+                onChange={e => setPickerTime(e.target.value)}
+                onClick={e => e.stopPropagation()}
+                style={{ fontSize: 11, border: '1px solid #E8E4DC', borderRadius: 4, padding: '3px 4px', color: '#2D2A26', fontFamily: 'inherit' }}
+              />
+            </span>
+
+            <button
+              onClick={() => handlePlace('log')}
+              style={suggested === 'log' ? btnHighlight : btnBase}
+            >Log it</button>
+
+            <button
+              onClick={dismissPicker}
+              style={{ ...btnBase, color: '#B5B0A8', border: 'none', background: 'none', fontSize: 11 }}
+            >cancel</button>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toastVisible && toastMsg && (
-        <div
-          onClick={() => {
-            clearTimers()
-            setToastVisible(false)
-            if (toastParsedRef.current) showCard(toastParsedRef.current)
-          }}
-          style={{
-            fontSize: 12, fontWeight: 600, color: '#2E7D32', cursor: 'pointer',
-            padding: '6px 12px', lineHeight: 1.4, marginTop: 4, marginBottom: 4,
-            background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 6,
-            boxShadow: '0 0 8px rgba(90,158,111,0.4)',
-            animation: 'fadeOut 0.5s ease 3s forwards',
-          }}
-        >
-          {toastMsg}
-        </div>
-      )}
-
-      {/* Confirmation card */}
-      {cardVisible && card && (
         <div style={{
-          background: '#FFF',
-          border: '1px solid #5A9E6F',
-          borderRadius: 6,
+          fontSize: 12, fontWeight: 600, color: '#2E7D32',
+          padding: '6px 12px', lineHeight: 1.4, marginTop: 4, marginBottom: 4,
+          background: '#FFF', border: '1px solid #5A9E6F', borderRadius: 6,
           boxShadow: '0 0 8px rgba(90,158,111,0.4)',
-          padding: '10px 12px',
-          marginTop: 4, marginBottom: 4,
+          animation: 'fadeOut 0.5s ease 3s forwards',
         }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#2D2A26', marginBottom: 4 }}>
-            {card.cleanedName}
-          </div>
-          {cardSummaryLine(card) && (
-            <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 2 }}>
-              {cardSummaryLine(card)}
-            </div>
-          )}
-          {card.valueLinks.length > 0 && (
-            <div style={{ fontSize: 11, color: '#B5B0A8', marginBottom: 2 }}>
-              {card.valueLinks.map(v => v.valueName).join(' · ')}
-            </div>
-          )}
-          <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 8 }}>
-            {outcomeLabel(card)}
-          </div>
-          {card.unrecognizedName && !personAdded && (
-            <div style={{ fontSize: 12, color: '#4B6A82', marginBottom: 8 }}>
-              Who is {card.unrecognizedName}?{' '}
-              <span
-                onClick={handleAddPerson}
-                style={{ cursor: 'pointer', textDecoration: 'underline' }}
-              >
-                {addingPerson ? 'Adding…' : 'Add to contacts'}
-              </span>
-            </div>
-          )}
-          {personAdded && (
-            <div style={{ fontSize: 12, color: '#4B6A82', marginBottom: 8 }}>
-              {card.unrecognizedName} added
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 16 }}>
-            <span
-              onClick={dismissCard}
-              style={{ fontSize: 12, color: '#8A8578', cursor: 'pointer' }}
-            >
-              Got it
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Schedule confirmation card */}
-      {scheduleConfirm && (
-        <div style={{
-          background: '#FFF',
-          border: '1px solid #E8E4DC',
-          borderRadius: 4,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-          padding: '10px 12px',
-          marginBottom: 4,
-        }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#2D2A26', marginBottom: 4 }}>
-            {scheduleConfirm.name}
-          </div>
-          <div style={{ fontSize: 12, color: '#8A8578', marginBottom: 8 }}>
-            Schedule at {fmtTimeShort(scheduleConfirm.time)} on {fmtDateShort(scheduleConfirm.date)}?
-          </div>
-          <div style={{ display: 'flex', gap: 16 }}>
-            <span
-              onClick={handleConfirmSchedule}
-              style={{ fontSize: 12, color: '#5A9E6F', cursor: 'pointer', fontWeight: 600 }}
-            >
-              Schedule
-            </span>
-            <span
-              onClick={handleDismissSchedule}
-              style={{ fontSize: 12, color: '#8A8578', cursor: 'pointer' }}
-            >
-              Just capture
-            </span>
-          </div>
+          {toastMsg}
         </div>
       )}
 

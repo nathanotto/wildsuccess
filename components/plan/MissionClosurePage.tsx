@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { COLORS } from '@/lib/theme'
 
 const FONT = '"Source Sans 3", "Source Sans Pro", sans-serif'
 
@@ -34,7 +35,7 @@ const CLOSURE_TYPES = [
   { value: 'accomplished', label: 'Accomplished', description: 'The mission achieved what it set out to do', color: '#5A9E6F' },
   { value: 'partially_accomplished', label: 'Partially accomplished', description: 'Some objectives met, some not', color: '#4B82AF' },
   { value: 'shelved', label: 'Shelved', description: 'Paused indefinitely, may return to it', color: '#8A857D' },
-  { value: 'superseded', label: 'Superseded', description: 'Replaced by a different approach or mission', color: '#C4725A' },
+  { value: 'superseded', label: 'Superseded', description: 'Replaced by a different approach or mission', color: COLORS.primary },
   { value: 'abandoned', label: 'Abandoned', description: 'Decided not to pursue', color: '#C4504A' },
 ]
 
@@ -156,7 +157,7 @@ export default function MissionClosurePage() {
                 {s.factors.byType.driver > 0 && <span style={{ color: '#5A9E6F' }}>{s.factors.byType.driver} drivers</span>}
                 {s.factors.byType.constraint > 0 && <span style={{ color: '#C4504A' }}>{s.factors.byType.constraint} constraints</span>}
                 {s.factors.byType.fact > 0 && <span style={{ color: '#4B82AF' }}>{s.factors.byType.fact} facts</span>}
-                {s.factors.byType.assumption > 0 && <span style={{ color: '#C4725A' }}>{s.factors.byType.assumption} assumptions</span>}
+                {s.factors.byType.assumption > 0 && <span style={{ color: COLORS.primary }}>{s.factors.byType.assumption} assumptions</span>}
               </div>
               <div style={{ fontSize: 12, color: '#8A8578', marginTop: 4 }}>
                 {s.factors.resolved} resolved · {s.factors.active} active · {s.factors.invalidated} invalidated
@@ -182,7 +183,7 @@ export default function MissionClosurePage() {
                 <div style={{ fontSize: 13, display: 'flex', gap: 16 }}>
                   <span>{s.commitments.total} total</span>
                   <span style={{ color: '#5A9E6F' }}>{s.commitments.completed} completed</span>
-                  {s.commitments.active > 0 && <span style={{ color: '#C4725A' }}>{s.commitments.active} still active</span>}
+                  {s.commitments.active > 0 && <span style={{ color: COLORS.primary }}>{s.commitments.active} still active</span>}
                   {s.commitments.abandoned > 0 && <span style={{ color: '#C4504A' }}>{s.commitments.abandoned} abandoned</span>}
                 </div>
               </div>

@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { UserValue, Activity, BigOutcome } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   value: UserValue | null
@@ -61,7 +62,7 @@ export default function EditValueModal({ value, activities, outcomes, onSave, on
           <div style={{ display: 'flex', gap: 12 }}>
             {(['preventive', 'promotional'] as const).map(t => (
               <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
-                <input type="radio" checked={valueType === t} onChange={() => setValueType(t)} style={{ accentColor: '#C4725A' }} />
+                <input type="radio" checked={valueType === t} onChange={() => setValueType(t)} style={{ accentColor: COLORS.primary }} />
                 {t === 'preventive' ? 'Protect (Preventive)' : 'Expand (Promotional)'}
               </label>
             ))}
@@ -72,12 +73,12 @@ export default function EditValueModal({ value, activities, outcomes, onSave, on
           <div>
             <label style={labelStyle}>Score (1–10)</label>
             <input type="number" min={1} max={10} style={inputStyle} value={score} onChange={e => setScore(Number(e.target.value))} />
-            <input type="range" min={1} max={10} value={score} onChange={e => setScore(Number(e.target.value))} style={{ width: '100%', marginTop: 6, accentColor: '#C4725A' }} />
+            <input type="range" min={1} max={10} value={score} onChange={e => setScore(Number(e.target.value))} style={{ width: '100%', marginTop: 6, accentColor: COLORS.primary }} />
           </div>
           <div>
             <label style={labelStyle}>Sufficiency Mark (1–10)</label>
             <input type="number" min={1} max={10} style={inputStyle} value={sufficiencyMark} onChange={e => setSufficiencyMark(Number(e.target.value))} />
-            <input type="range" min={1} max={10} value={sufficiencyMark} onChange={e => setSufficiencyMark(Number(e.target.value))} style={{ width: '100%', marginTop: 6, accentColor: '#C4725A' }} />
+            <input type="range" min={1} max={10} value={sufficiencyMark} onChange={e => setSufficiencyMark(Number(e.target.value))} style={{ width: '100%', marginTop: 6, accentColor: COLORS.primary }} />
           </div>
         </div>
 
@@ -113,7 +114,7 @@ export default function EditValueModal({ value, activities, outcomes, onSave, on
         {error && <div style={{ fontSize: 12, color: '#C4504A', marginBottom: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={handleSave} disabled={saving} style={{ background: '#C4725A', color: '#FFF', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={handleSave} disabled={saving} style={{ background: COLORS.primary, color: '#FFF', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button onClick={onClose} style={{ background: '#F8F7F4', border: '1px solid #E8E4DC', borderRadius: 8, padding: '10px 20px', fontSize: 13, cursor: 'pointer', color: '#2D2A26' }}>Cancel</button>

@@ -1,0 +1,218 @@
+/* ============================================================================
+   Wild Success — Design Tokens
+   Source of truth: nathanotto/wildsuccess CODEBASE-SNAPSHOT.md + globals.css
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* ── Brand ──────────────────────────────────────────────────────────────── */
+  --ws-primary:        #B8552E;   /* burnt terracotta — buttons, links, active tab */
+  --ws-primary-soft:   #B8552E40; /* 25% — focused borders */
+  --ws-primary-faint:  #B8552E20; /* 12.5% — avatar bubble background */
+  --ws-primary-wash:   #B8552E08; /* 3% — active tab background */
+  --ws-primary-deep:   #8C3D1F;   /* shadow / accent */
+  --ws-ink:            #1F1B17;   /* near-black, paired with primary in wordmark */
+  --ws-secondary:      #4B82AF;   /* muted blue — calendar, confirm-schedule */
+  --ws-secondary-info: #4B6A82;   /* slate-blue — Today badge */
+
+  /* ── Semantic ───────────────────────────────────────────────────────────── */
+  --ws-danger:         #C4504A;
+  --ws-danger-soft:    #C4504A40;
+  --ws-danger-bg:      #FDF5F4;
+  --ws-success:        #5A9E6F;
+  --ws-success-soft:   #5A9E6F40;
+  --ws-success-bg:     #F4FDF7;
+  --ws-success-text:   #4A8B5E;
+  --ws-success-strong: #2E7D32;
+  --ws-selected-bg:    #FDF6F3;
+
+  /* ── Text ───────────────────────────────────────────────────────────────── */
+  --ws-fg-1:           #2D2A26;   /* body text, headings */
+  --ws-fg-2:           #8A8578;   /* secondary, placeholder, muted labels */
+  --ws-fg-3:           #B5B0A8;   /* timestamps, "saving…", parked checkbox */
+  --ws-fg-4:           #C4BFB4;   /* "None" empty state, very faint hints */
+  --ws-fg-warm-grey:   #8A857D;   /* completed checkbox bg, eyebrow heads */
+
+  /* ── Surfaces ───────────────────────────────────────────────────────────── */
+  --ws-bg-page:        #FAFAF7;   /* app background */
+  --ws-bg-card:        #FFFFFF;   /* modals, cards, navbar */
+  --ws-bg-surface-1:   #F8F7F4;   /* secondary surface, cancel button */
+  --ws-bg-surface-2:   #F0EDE6;   /* chips, dividers, hairline borders */
+  --ws-border:         #E8E4DC;   /* input borders, modal borders */
+  --ws-border-faint:   #F0EDE6;   /* dividers, separators */
+
+  /* ── Overlays ───────────────────────────────────────────────────────────── */
+  --ws-modal-backdrop: rgba(45, 42, 38, 0.25);
+  --ws-modal-blur:     blur(2px);
+
+  /* ── Typography ─────────────────────────────────────────────────────────── */
+  --ws-font-sans:      'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
+  --ws-font-mono:      ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* base sizes — design assumes body { zoom: 1.2 } per app/layout.tsx */
+  --ws-fs-micro:       10px;   /* nav buttons, badges, eyebrow labels */
+  --ws-fs-mini:        11px;   /* timestamps, secondary labels, hints */
+  --ws-fs-label:       12px;   /* field labels, toast, secondary copy */
+  --ws-fs-body:        13px;   /* body text, buttons, most UI */
+  --ws-fs-medium:      14px;   /* sub-headers, list items */
+  --ws-fs-modal:       15px;
+  --ws-fs-modal-head:  16px;   /* modal titles */
+  --ws-fs-mood-label:  18px;
+  --ws-fs-title:       20px;   /* page/brand titles */
+
+  --ws-fw-light:       300;
+  --ws-fw-regular:     400;
+  --ws-fw-medium:      500;
+  --ws-fw-semibold:    600;   /* labels, buttons, eyebrow */
+  --ws-fw-bold:        700;   /* headings, brand */
+
+  --ws-lh-tight:       1.3;
+  --ws-lh-normal:      1.5;
+  --ws-lh-loose:       1.6;
+
+  --ws-tracking-eyebrow: 1px;     /* uppercase eyebrows */
+  --ws-tracking-mini:    0.5px;
+
+  /* ── Radii ──────────────────────────────────────────────────────────────── */
+  --ws-radius-pill-sm: 4px;
+  --ws-radius-tab:     5px;
+  --ws-radius-sm:      6px;
+  --ws-radius-md:      8px;
+  --ws-radius-input:   8px;
+  --ws-radius-toast:   12px;
+  --ws-radius-modal:   16px;
+  --ws-radius-pill:    20px;
+  --ws-radius-capture: 28px;
+  --ws-radius-circle:  50%;
+
+  /* ── Shadows ────────────────────────────────────────────────────────────── */
+  --ws-shadow-modal:        0 8px 32px rgba(45, 42, 38, 0.12);
+  --ws-shadow-menu:         0 4px 16px rgba(45, 42, 38, 0.10);
+  --ws-shadow-capture:      0 2px 12px rgba(45, 42, 38, 0.10);
+  --ws-shadow-capture-focus:0 4px 24px rgba(196, 114, 90, 0.18);
+  --ws-shadow-success-glow: 0 0 8px rgba(90, 158, 111, 0.40);
+
+  /* ── Spacing rhythm ─────────────────────────────────────────────────────── */
+  --ws-sp-1: 4px;
+  --ws-sp-2: 6px;
+  --ws-sp-3: 8px;
+  --ws-sp-4: 10px;
+  --ws-sp-5: 12px;
+  --ws-sp-6: 16px;
+  --ws-sp-7: 20px;
+  --ws-sp-8: 24px;
+  --ws-sp-9: 28px;
+  --ws-sp-10: 32px;
+  --ws-sp-11: 36px;
+
+  /* ── Time-Type colors (used in Today screen for A/B/C/D classification) ─── */
+  --ws-tt-focus:      #C4725A; /* A — Focus */
+  --ws-tt-routine:    #8A857D; /* B — Routine */
+  --ws-tt-connection: #5A9E6F; /* C — Connection */
+  --ws-tt-restore:    #4B82AF; /* D — Restore */
+  --ws-tt-open:       #B5B0A8; /* 0 — Open */
+
+  /* ── Mood scale (Day Completion) ────────────────────────────────────────── */
+  --ws-mood-1: #C4504A; /* Drained */
+  --ws-mood-2: #D4885A; /* Tough */
+  --ws-mood-3: #B5B0A8; /* Okay */
+  --ws-mood-4: #6BA07A; /* Good */
+  --ws-mood-5: #4A8B5E; /* Great */
+}
+
+/* ============================================================================
+   Semantic element styles
+   Apply this stylesheet + add class="ws" on a root to get base typography.
+   ========================================================================== */
+
+.ws,
+.ws * {
+  box-sizing: border-box;
+}
+
+.ws {
+  font-family: var(--ws-font-sans);
+  color: var(--ws-fg-1);
+  background: var(--ws-bg-page);
+  font-size: var(--ws-fs-body);
+  line-height: var(--ws-lh-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.ws h1, .ws .h1 {
+  font-size: var(--ws-fs-title);
+  font-weight: var(--ws-fw-bold);
+  color: var(--ws-fg-1);
+  margin: 0;
+  letter-spacing: -0.005em;
+}
+
+.ws h2, .ws .h2 {
+  font-size: var(--ws-fs-modal-head);
+  font-weight: var(--ws-fw-bold);
+  color: var(--ws-fg-1);
+  margin: 0;
+}
+
+.ws h3, .ws .h3 {
+  font-size: var(--ws-fs-medium);
+  font-weight: var(--ws-fw-semibold);
+  color: var(--ws-fg-1);
+  margin: 0;
+}
+
+.ws .label {
+  font-size: var(--ws-fs-label);
+  font-weight: var(--ws-fw-semibold);
+  color: var(--ws-fg-1);
+}
+
+.ws .eyebrow {
+  font-size: var(--ws-fs-micro);
+  font-weight: var(--ws-fw-bold);
+  color: var(--ws-fg-2);
+  text-transform: uppercase;
+  letter-spacing: var(--ws-tracking-eyebrow);
+}
+
+.ws .muted {
+  color: var(--ws-fg-2);
+}
+
+.ws .timestamp {
+  font-size: var(--ws-fs-mini);
+  color: var(--ws-fg-3);
+}
+
+.ws p, .ws .body {
+  font-size: var(--ws-fs-body);
+  color: var(--ws-fg-1);
+  line-height: var(--ws-lh-loose);
+  margin: 0;
+}
+
+.ws code, .ws .code {
+  font-family: var(--ws-font-mono);
+  font-size: 0.92em;
+  background: var(--ws-bg-surface-1);
+  border: 1px solid var(--ws-border-faint);
+  border-radius: var(--ws-radius-pill-sm);
+  padding: 1px 5px;
+  color: var(--ws-fg-1);
+}
+
+.ws .brand {
+  font-size: var(--ws-fs-medium);
+  font-weight: var(--ws-fw-bold);
+  color: var(--ws-primary);
+  letter-spacing: 0;
+}
+
+.ws a {
+  color: var(--ws-primary);
+  text-decoration: none;
+  font-weight: var(--ws-fw-semibold);
+}
+.ws a:hover { text-decoration: underline; }

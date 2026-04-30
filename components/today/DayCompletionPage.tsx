@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { UserValue } from '@/lib/types'
 import { computeDisplayStatus } from '@/lib/snapshot'
 import ValueTagger from '@/components/shared/ValueTagger'
+import { COLORS } from '@/lib/theme'
 
 const FONT = "'Source Sans 3', 'Source Sans Pro', sans-serif"
 
@@ -263,7 +264,7 @@ export default function DayCompletionPage({ displayName }: Props) {
             onClick={() => router.push('/map')}
             style={{
               padding: '10px 24px', borderRadius: 10, border: 'none',
-              background: '#C4725A', color: '#FFF', fontSize: 14, fontWeight: 600,
+              background: COLORS.primary, color: '#FFF', fontSize: 14, fontWeight: 600,
               cursor: 'pointer', fontFamily: FONT,
             }}
           >View Map</button>
@@ -367,9 +368,9 @@ export default function DayCompletionPage({ displayName }: Props) {
                       <button
                         onClick={() => handleMarkComplete(item.id)}
                         title="I did it"
-                        style={{ background: 'none', border: '1.5px solid #C4725A', borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                        style={{ background: 'none', border: `1.5px solid ${COLORS.primary}`, borderRadius: 2, cursor: 'pointer', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                       >
-                        <span style={{ width: 6, height: 6, background: '#C4725A', borderRadius: 1 }} />
+                        <span style={{ width: 6, height: 6, background: COLORS.primary, borderRadius: 1 }} />
                       </button>
                     )}
                     {isIncomplete && !isInProgress && (
@@ -508,7 +509,7 @@ export default function DayCompletionPage({ displayName }: Props) {
         disabled={saving}
         style={{
           width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
-          background: saving ? '#B5B0A8' : '#C4725A', color: '#FFF',
+          background: saving ? '#B5B0A8' : COLORS.primary, color: '#FFF',
           fontSize: 16, fontWeight: 700, cursor: saving ? 'default' : 'pointer',
           fontFamily: FONT, marginBottom: 16,
         }}

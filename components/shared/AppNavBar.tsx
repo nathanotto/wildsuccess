@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   displayName: string
@@ -15,7 +16,7 @@ interface Props {
 const TABS = [
   { name: 'Map', path: '/map' },
   { name: 'Today', path: '/today', badgeKey: 'todayCount' as const, badgeColor: '#4B6A82' },
-  { name: 'Organize', path: '/organize', badgeKey: 'hopperCount' as const, badgeColor: '#C4725A' },
+  { name: 'Organize', path: '/organize', badgeKey: 'hopperCount' as const, badgeColor: COLORS.primary },
   { name: 'Plan', path: '/plan' },
   { name: 'Communicate', path: null },
   { name: 'Review', path: '/review' },
@@ -102,7 +103,7 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
       }}>
         <div
           onClick={() => router.push('/map')}
-          style={{ fontSize: 14, fontWeight: 700, color: '#C4725A', marginRight: 10, cursor: 'pointer' }}
+          style={{ fontSize: 14, fontWeight: 700, color: COLORS.primary, marginRight: 10, cursor: 'pointer' }}
         >Wild Success</div>
 
         {/* Desktop: full tab bar */}
@@ -122,21 +123,21 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
                 }}
                 style={{
                   padding: '3px 9px', borderRadius: 5,
-                  border: active ? '1px solid #C4725A40' : '1px solid #F0EDE6',
+                  border: active ? `1px solid ${COLORS.primaryMuted}` : '1px solid #F0EDE6',
                   fontSize: 10, fontWeight: 600,
-                  color: active ? '#C4725A' : '#2D2A26',
+                  color: active ? COLORS.primary : '#2D2A26',
                   cursor: 'pointer',
-                  background: active ? '#C4725A08' : 'transparent',
+                  background: active ? COLORS.primaryFaint : 'transparent',
                   position: 'relative',
                 }}
-                onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = '#F8F7F4'; (e.currentTarget as HTMLElement).style.borderColor = '#C4725A40' } }}
+                onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = '#F8F7F4'; (e.currentTarget as HTMLElement).style.borderColor = COLORS.primaryMuted } }}
                 onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.borderColor = '#F0EDE6' } }}
               >
                 {tab.name}
                 {badgeCount > 0 && (
                   <span style={{
                     position: 'absolute', top: -4, right: -4, minWidth: 14, height: 14, borderRadius: 7,
-                    background: tab.badgeColor ?? '#C4725A', color: 'white', fontSize: 8, fontWeight: 700,
+                    background: tab.badgeColor ?? COLORS.primary, color: 'white', fontSize: 8, fontWeight: 700,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
                   }}>{badgeCount}</span>
                 )}
@@ -148,7 +149,7 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
           )}
           {appRole === 'admin' && (
             <button onClick={() => router.push('/admin')}
-              style={{ fontSize: 10, color: '#C4725A', cursor: 'pointer', marginLeft: 4, background: 'none', border: 'none', fontWeight: 600 }}>
+              style={{ fontSize: 10, color: COLORS.primary, cursor: 'pointer', marginLeft: 4, background: 'none', border: 'none', fontWeight: 600 }}>
               Admin
             </button>
           )}
@@ -162,9 +163,9 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
               <button key={tab.name} onClick={() => router.push(tab.path)}
                 style={{
                   padding: '3px 8px', borderRadius: 5, fontSize: 10, fontWeight: 600,
-                  border: active ? '1px solid #C4725A40' : '1px solid #F0EDE6',
-                  color: active ? '#C4725A' : '#2D2A26',
-                  background: active ? '#C4725A08' : 'transparent',
+                  border: active ? `1px solid ${COLORS.primaryMuted}` : '1px solid #F0EDE6',
+                  color: active ? COLORS.primary : '#2D2A26',
+                  background: active ? COLORS.primaryFaint : 'transparent',
                   cursor: 'pointer',
                 }}>
                 {tab.name}
@@ -202,9 +203,9 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
           <div
             onClick={() => setShowUserMenu(!showUserMenu)}
             style={{
-              width: 24, height: 24, borderRadius: '50%', background: '#C4725A20',
+              width: 24, height: 24, borderRadius: '50%', background: COLORS.primaryLight,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 10, fontWeight: 700, color: '#C4725A', cursor: 'pointer',
+              fontSize: 10, fontWeight: 700, color: COLORS.primary, cursor: 'pointer',
             }}>{userInitial}</div>
           {showUserMenu && (
             <div style={{
@@ -247,7 +248,7 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
             {TABS.map(tab => (
               <button key={tab.name} onClick={() => { if (tab.path) { router.push(tab.path); setMobileMenuOpen(false) } }}
                 style={{
-                  padding: '8px 12px', fontSize: 13, color: isActive(tab.path) ? '#C4725A' : '#2D2A26',
+                  padding: '8px 12px', fontSize: 13, color: isActive(tab.path) ? COLORS.primary : '#2D2A26',
                   fontWeight: isActive(tab.path) ? 600 : 400, background: 'none', border: 'none',
                   cursor: tab.path ? 'pointer' : 'default', textAlign: 'left',
                   opacity: tab.path ? 1 : 0.4,
@@ -279,7 +280,7 @@ export default function AppNavBar({ displayName, appRole, hopperCount = 0, today
           }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#2D2A26', marginBottom: 10 }}>{comingSoon.name}</div>
             <div style={{ fontSize: 13, color: '#8A8578', lineHeight: 1.6, marginBottom: 20 }}>{comingSoon.description}</div>
-            <div style={{ fontSize: 12, color: '#C4725A', fontWeight: 600 }}>Coming soon</div>
+            <div style={{ fontSize: 12, color: COLORS.primary, fontWeight: 600 }}>Coming soon</div>
             <button onClick={() => setComingSoon(null)} style={{
               marginTop: 20, padding: '8px 20px', background: '#F8F7F4', border: '1px solid #E8E4DC',
               borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#2D2A26',

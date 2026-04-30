@@ -1,13 +1,14 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { COLORS } from '@/lib/theme'
 
 const FONT = "'Source Sans 3', sans-serif"
 const BG = '#FAFAF7'
 const CARD = '#FFFFFF'
 const TEXT = '#2D2A26'
 const MUTED = '#8A8578'
-const ACCENT = '#C4725A'
+const ACCENT = COLORS.primary
 const BORDER = '#E8E4DC'
 const LOCKED = '#F5F2EC'
 

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { BigOutcome, UserValue } from '@/lib/types'
+import { COLORS } from '@/lib/theme'
 
 export default function PlanNewPage() {
   const router = useRouter()
@@ -142,7 +143,7 @@ export default function PlanNewPage() {
         onClick={handleSave}
         disabled={!name.trim() || saving}
         style={{
-          padding: '8px 24px', background: name.trim() ? '#C4725A' : '#E8E4DC',
+          padding: '8px 24px', background: name.trim() ? COLORS.primary : '#E8E4DC',
           color: '#FFF', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
         }}
       >{saving ? 'Saving…' : 'Save and start planning'}</button>

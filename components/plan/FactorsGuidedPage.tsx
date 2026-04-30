@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import type { Factor, FactorKind } from '@/lib/types'
 import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
 import { useRealtimeMission } from '@/lib/useRealtimeMission'
+import { COLORS } from '@/lib/theme'
 
 const KIND_ORDER: FactorKind[] = ['success', 'driver', 'constraint', 'fact', 'assumption']
 
@@ -24,7 +25,7 @@ const INFO_POPUPS: Record<string, string> = {
 }
 
 const KIND_COLORS: Record<string, string> = {
-  success: '#C4725A', driver: '#5A9E6F', constraint: '#C4504A', fact: '#4B82AF', assumption: '#9B7EC8',
+  success: COLORS.primary, driver: '#5A9E6F', constraint: '#C4504A', fact: '#4B82AF', assumption: '#9B7EC8',
 }
 
 interface Props {
@@ -115,7 +116,7 @@ export default function FactorsGuidedPage({ missionId }: Props) {
   const kindIdx = KIND_ORDER.indexOf(kind)
   const prevKind = kindIdx > 0 ? KIND_ORDER[kindIdx - 1] : null
   const nextKind = kindIdx < KIND_ORDER.length - 1 ? KIND_ORDER[kindIdx + 1] : null
-  const color = KIND_COLORS[kind] ?? '#C4725A'
+  const color = KIND_COLORS[kind] ?? COLORS.primary
 
   function goRetreat() {
     if (prevKind) router.push(`/plan/${missionId}/factors?kind=${prevKind}`)
