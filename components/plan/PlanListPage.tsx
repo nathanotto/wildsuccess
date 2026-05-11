@@ -167,9 +167,6 @@ export default function PlanListPage() {
                   <button onClick={() => { router.push(`/plan/${m.id}/coas`); setMenuOpen(null) }} style={menuItemStyle}>COAs</button>
                   <button onClick={() => { router.push(`/plan/${m.id}/arrange`); setMenuOpen(null) }} style={menuItemStyle}>Arrange</button>
                   <button onClick={() => { router.push(`/plan/${m.id}/commitments`); setMenuOpen(null) }} style={menuItemStyle}>Commitments</button>
-                  {!isClosed && (
-                    <button onClick={() => { router.push(`/plan/${m.id}?edit=true`); setMenuOpen(null) }} style={menuItemStyle}>Edit mission</button>
-                  )}
                   <div style={{ height: 1, background: '#F0EDE6', margin: '2px 0' }} />
                   {!isClosed && (
                     <button onClick={() => { router.push(`/plan/${m.id}/close`); setMenuOpen(null) }} style={menuItemStyle}>Close mission</button>

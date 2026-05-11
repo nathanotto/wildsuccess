@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useActionToast } from '@/lib/useActionToast'
 import ActionToast from '@/components/shared/ActionToast'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import type { Mission, Factor, FactorKind, COA } from '@/lib/types'
 import { getAuthorColor, formatAuthorTag } from '@/lib/author-colors'
 import { useRealtimeMission } from '@/lib/useRealtimeMission'
@@ -30,7 +30,6 @@ interface Props {
 
 export default function MissionOverviewPage({ missionId }: Props) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [mission, setMission] = useState<Mission | null>(null)
   const [allMissions, setAllMissions] = useState<Mission[]>([])
   const [factors, setFactors] = useState<Factor[]>([])
@@ -97,45 +96,32 @@ export default function MissionOverviewPage({ missionId }: Props) {
       }
 
       // Fetch invitations to get all accepted collaborators with emails
-      try {
-        const invRes = await fetch(`/api/missions/${missionId}/invitations`)
-        const invitations = invRes.ok ? await invRes.json() : []
-        for (const inv of (Array.isArray(invitations) ? invitations : [])) {
-          if (inv.status === 'accepted' && inv.email) {
-            if (!authorMap.has(inv.email)) {
-              // We don't have user_id from invitations, so just note the email
-            }
+      const invRes = await fetch(`/api/missions/${missionId}/invitations`)
+      const invitations = invRes.ok ? await invRes.json() : []
+      for (const inv of (Array.isArray(invitations) ? invitations : [])) {
+        if (inv.status === 'accepted' && inv.email) {
+          // Use email as fallback name if we don't have them from factors
+          if (!authorMap.has(inv.email)) {
+            // We don't have user_id from invitations, so just note the email
           }
         }
-      } catch { /* invitations fetch failed — non-critical */ }
+      }
 
       // Also get names from the factors API for any participants who contributed
       // For participants who haven't added factors, use a direct lookup
-      try {
-        const participantRes = await fetch(`/api/missions/${missionId}/commitments`)
-        const commitments = participantRes.ok ? await participantRes.json() : []
-        for (const c of (Array.isArray(commitments) ? commitments : [])) {
-          if (c.user_id && c.user_name && !authorMap.has(c.user_id)) {
-            authorMap.set(c.user_id, c.user_name)
-          }
+      const participantRes = await fetch(`/api/missions/${missionId}/commitments`)
+      const commitments = participantRes.ok ? await participantRes.json() : []
+      for (const c of (Array.isArray(commitments) ? commitments : [])) {
+        if (c.user_id && c.user_name && !authorMap.has(c.user_id)) {
+          authorMap.set(c.user_id, c.user_name)
         }
-      } catch { /* commitments fetch failed — non-critical */ }
+      }
 
       const collabs = [...authorMap.entries()].map(([uid, name]) => ({ user_id: uid, role: 'collaborator', name }))
       setCollaborators(collabs)
       setLoading(false)
-    }).catch(() => {
-      setLoading(false)
     })
   }, [missionId])
-
-  // Auto-enter edit mode when linked from "Edit mission" menu
-  useEffect(() => {
-    if (searchParams.get('edit') === 'true' && mission && !editingName) {
-      setEditingName(true)
-      setNameDraft(mission.name)
-    }
-  }, [mission, searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Real-time: other users' factor changes appear live
   useRealtimeMission(missionId, {
@@ -146,7 +132,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
       } else {
         fetch(`/api/missions/${missionId}/factors`).then(r => r.json()).then(data => {
           if (Array.isArray(data)) setFactors(data)
-        }).catch(() => {})
+        })
       }
     },
     onCoaChange: (eventType, payload) => {
@@ -156,7 +142,7 @@ export default function MissionOverviewPage({ missionId }: Props) {
       } else {
         fetch(`/api/missions/${missionId}/coas`).then(r => r.json()).then(data => {
           if (Array.isArray(data)) setCoas(data)
-        }).catch(() => {})
+        })
       }
     },
   })
